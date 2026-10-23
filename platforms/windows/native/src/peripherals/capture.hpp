@@ -2,7 +2,7 @@
 #include <functional>
 #include <memory>
 
-#include "store.hpp"
+#include "media.hpp"
 
 namespace rimes::windows::peripherals {
 struct CaptureImage {
@@ -16,8 +16,8 @@ CaptureImage LoadCapture(const std::filesystem::path&);
 std::string EncodeCapture(const CaptureImage&);
 // Both PNG and DIB are published so editors and chat applications receive
 // pixels.
-bool CopyCapture(HWND, const CaptureImage&);
-bool CopyCapsuleAsset(HWND, Store&, const Json&);
+ClipboardWriteResult CopyCapture(HWND, const CaptureImage&);
+ClipboardWriteResult CopyCapsuleAsset(HWND, Store&, const Json&);
 CaptureImage RenderCapture(const CaptureImage&, const Json& operations);
 
 class CaptureWindows {

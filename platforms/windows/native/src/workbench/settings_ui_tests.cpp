@@ -1,6 +1,7 @@
 ﻿#include "settings_ui.hpp"
 #include "buffer_hotkey.hpp"
 #include "window.hpp"
+#include "user_lexicon.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -441,7 +442,7 @@ void TestBufferHotkeyRegistrationLifecycle() {
     HWND contender = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0,
                                       HWND_MESSAGE, nullptr, nullptr, nullptr);
     ~Fixture() {
-      for (int id : {100, 101, 102, 200})
+      for (int id : {100, 101, 102, 103, 104, 200})
         UnregisterHotKey(contender, id);
       if (owner) DestroyWindow(owner);
       if (contender) DestroyWindow(contender);
@@ -451,15 +452,15 @@ void TestBufferHotkeyRegistrationLifecycle() {
   if (!fixture.owner || !fixture.contender) return;
   struct Chord { unsigned modifiers, key; };
   std::vector<Chord> chords;
-  for (unsigned key = 'A'; key <= 'Z' && chords.size() < 3; ++key) {
+  for (unsigned key = 'A'; key <= 'Z' && chords.size() < 5; ++key) {
     const unsigned modifiers = chords.empty() ? MOD_CONTROL | MOD_ALT
         : chords.size() == 1 ? MOD_CONTROL | MOD_SHIFT : MOD_ALT | MOD_SHIFT;
     const int id = 100 + static_cast<int>(chords.size());
     if (RegisterHotKey(fixture.contender, id, modifiers | MOD_NOREPEAT, key))
       chords.push_back({modifiers, key});
   }
-  Check(chords.size() == 3, "three real letter chords available in the build session");
-  if (chords.size() != 3) return;
+  Check(chords.size() == 5, "five real letter chords available in the build session");
+  if (chords.size() != 5) return;
   const auto old = chords[0], busy = chords[1], next = chords[2];
   auto can_claim = [&](Chord chord) {
     const bool claimed = RegisterHotKey(fixture.contender, 200,
@@ -539,7 +540,29 @@ void TestBufferHotkeyRegistrationLifecycle() {
   Check(previous_plugin.Sync(true, old.modifiers, old.key) && !can_claim(old),
         "new exact input lease can reserve its configured plugin chord again");
   previous_plugin.Reset();
-
+  UnregisterHotKey(fixture.contender, 103); UnregisterHotKey(fixture.contender, 104);
+  workbench::BufferHotkeyRegistration first_global(fixture.owner, 19), second_global(fixture.owner, 23);
+  Check(first_global.RegisterInitial(old.modifiers, old.key) && second_global.RegisterInitial(next.modifiers, next.key), "global group starts with both old bindings");
+  std::array<workbench::GlobalHotkeyBinding, 2> bindings{{{&first_global, chords[3].modifiers, chords[3].key}, {&second_global, busy.modifiers, busy.key}}};
+  std::size_t failed_index = 0; int group_saves = 0;
+  Check(workbench::UpdateGlobalHotkeys(bindings, [&] { ++group_saves; return true; }, &failed_index) == workbench::HotkeyUpdate::kUnavailable && failed_index == 1 && group_saves == 0 &&
+        !can_claim(old) && !can_claim(next) && can_claim(chords[3]), "later global conflict rolls back earlier candidate and retains every old binding");
+  bindings[1] = {&second_global, chords[4].modifiers, chords[4].key};
+  Check(workbench::UpdateGlobalHotkeys(bindings, [] { return false; }) == workbench::HotkeyUpdate::kSaveFailed &&
+        !can_claim(old) && !can_claim(next) && can_claim(chords[3]) && can_claim(chords[4]), "failed configuration write rolls back all global candidates");
+  Check(workbench::UpdateGlobalHotkeys(bindings, [&] { ++group_saves; return true; }) == workbench::HotkeyUpdate::kSaved && group_saves == 1 &&
+        can_claim(old) && can_claim(next) && !can_claim(chords[3]) && !can_claim(chords[4]), "successful global group saves once and activates every new binding");
+  workbench::BufferHotkeyRegistration startup_conflict(fixture.owner, 29);
+  Check(!startup_conflict.RegisterInitial(busy.modifiers, busy.key), "fixture keeps its startup chord unavailable");
+  std::array<workbench::GlobalHotkeyBinding, 1> unchanged{{{&startup_conflict, busy.modifiers, busy.key, false}}};
+  Check(workbench::UpdateGlobalHotkeys(unchanged, [&] { ++group_saves; return true; }) == workbench::HotkeyUpdate::kSaved &&
+      group_saves == 2 && !startup_conflict.Registered() && !can_claim(busy),
+      "unrelated setting saves without changing or stealing an unavailable startup binding");
+  unchanged[0] = {&startup_conflict, old.modifiers, old.key, true};
+  Check(workbench::UpdateGlobalHotkeys(unchanged, [] { return false; }) == workbench::HotkeyUpdate::kSaveFailed &&
+      !startup_conflict.Registered() && can_claim(old), "explicit correction rolls back its reservation if persistence fails");
+  Check(workbench::UpdateGlobalHotkeys(unchanged, [] { return true; }) == workbench::HotkeyUpdate::kSaved &&
+      startup_conflict.Registered() && !can_claim(old), "explicit correction of an unavailable binding activates the chosen chord");
 }
 
 void TestBufferHotkeyModifierControl() {
@@ -1000,6 +1023,25 @@ void TestSettingsPreserveRuntimeAndStreaming() {
       ++completed;
       return accepted.load();
     });
+    // The daily Broker may own the production defaults on a developer desktop.
+    // Give this isolated fixture available global bindings of its own.
+    auto fixture_shortcuts = runtime.Configuration();
+    unsigned* fixture_global_keys[] = {&fixture_shortcuts.settings_key, &fixture_shortcuts.capsule_key, &fixture_shortcuts.capture_key};
+    unsigned* fixture_global_modifiers[] = {&fixture_shortcuts.settings_modifiers, &fixture_shortcuts.capsule_modifiers, &fixture_shortcuts.capture_modifiers};
+    unsigned candidate_key = VK_F13;
+    for (int i = 0; i < 3; ++i) {
+      bool available = false;
+      while (candidate_key <= VK_F24) {
+        const auto key = candidate_key++;
+        if (!RegisterHotKey(nullptr, 731, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, key)) continue;
+        UnregisterHotKey(nullptr, 731);
+        *fixture_global_keys[i] = key; *fixture_global_modifiers[i] = MOD_CONTROL | MOD_ALT | MOD_SHIFT;
+        available = true; break;
+      }
+      Check(available, "production UI fixture has an available isolated global shortcut");
+    }
+    std::string fixture_error;
+    Check(runtime.Configure(fixture_shortcuts, L"", false, &fixture_error), "production UI fixture saves its own global shortcuts");
     workbench::UiCommands commands;
     Check(commands.RequestSettings(), "one cold-start settings request is accepted before the window exists");
     // Posted request pointers remain valid until the UI thread is joined,
@@ -1029,10 +1071,10 @@ void TestSettingsPreserveRuntimeAndStreaming() {
     const auto initial_buffer = windows().buffer;
     // Real WM_HOTKEY is queued, never a cross-thread sent message that can
     // interrupt Open() while it is still presenting the initial native children.
-    PostMessageW(initial_buffer, WM_HOTKEY, 20, MAKELPARAM(MOD_ALT | MOD_SHIFT, 'S'));
+    PostMessageW(initial_buffer, WM_HOTKEY, 20, MAKELPARAM(fixture_shortcuts.settings_modifiers, fixture_shortcuts.settings_key));
     WaitUntil([&] { return !IsWindowVisible(initial_settings); }, "queued settings shortcut finishes");
     Check(windows().settings == initial_settings && !IsWindowVisible(initial_settings),
-          "Alt Shift S hides settings without destroying its draft");
+          "configured settings shortcut hides settings without destroying its draft");
     SendMessageW(initial_buffer, WM_APP + 81, 0, WM_LBUTTONUP);
     Check(windows().settings == initial_settings && IsWindowVisible(initial_settings) &&
           !runtime.Snapshot().value("visible", true),
@@ -1645,6 +1687,116 @@ void TestCapsuleRecordingSettings() {
   host.OpenPage(nullptr, ui::SettingsPage::kMailbox);
   Check(!IsVisibleWithinFixture(GetDlgItem(host.hwnd(), 424), host.hwnd()), "recording belongs only to Capsule settings");
 }
+void TestGlobalShortcutsAndWindowPreferences() {
+  workbench::Settings current; int saves = 0, moves = 0, restarts = 0, lexicons = 0;
+  std::vector<unsigned> locations;
+  workbench::SettingsUiCallbacks callbacks;
+  callbacks.load = [&] { return current; };
+  callbacks.save = [&](workbench::Settings value, const std::wstring&, bool, std::string*) { current = value; ++saves; return true; };
+  callbacks.move_buffer_to_screen = [&] { ++moves; };
+  callbacks.restart_broker = [&](std::string* error) { ++restarts; *error = "fixture restart unavailable"; return false; };
+  callbacks.open_maintenance_location = [&](unsigned action) { locations.push_back(action); return true; };
+  callbacks.open_lexicon = [&](HWND owner, ui::ThemeId) { Check(IsWindow(owner), "lexicon callback receives its settings owner"); ++lexicons; };
+  workbench::SettingsUiHost host(callbacks);
+  host.OpenPage(nullptr, ui::SettingsPage::kBuffer, 2);
+  for (int id = 430; id <= 441; ++id) Check(IsVisibleWithinFixture(GetDlgItem(host.hwnd(), id), host.hwnd()), "global shortcuts and window controls are visible");
+  SendMessageW(GetDlgItem(host.hwnd(), 436), BM_CLICK, 0, 0);
+  host.RecordShortcut('V', MOD_ALT | MOD_SHIFT);
+  Check(host.RecordingShortcut() && saves == 0, "settings shortcut cannot duplicate Capsule");
+  host.RecordShortcut('M', MOD_ALT | MOD_SHIFT);
+  Check(host.RecordingShortcut() && saves == 0, "Mailbox binding remains reserved");
+  host.RecordShortcut(VK_F9, MOD_CONTROL | MOD_SHIFT);
+  Check(!host.RecordingShortcut() && saves == 1 && current.settings_key == VK_F9, "settings shortcut applies immediately");
+  SendMessageW(GetDlgItem(host.hwnd(), 437), BM_CLICK, 0, 0); host.RecordShortcut(VK_F10, MOD_ALT | MOD_SHIFT);
+  SendMessageW(GetDlgItem(host.hwnd(), 438), BM_CLICK, 0, 0); host.RecordShortcut(VK_F11, MOD_ALT | MOD_SHIFT);
+  Check(saves == 3 && current.capsule_key == VK_F10 && current.capture_key == VK_F11, "Capsule and screenshot record independently");
+  SendMessageW(GetDlgItem(host.hwnd(), 439), BM_CLICK, 0, 0);
+  SendMessageW(GetDlgItem(host.hwnd(), 440), BM_CLICK, 0, 0);
+  SendMessageW(GetDlgItem(host.hwnd(), 441), BM_CLICK, 0, 0);
+  Check(!current.align_to_input_box && current.reset_on_app_switch && saves == 5 && moves == 1, "window preferences apply immediately and move action is distinct from saving");
+  host.Close(); host.OpenPage(nullptr, ui::SettingsPage::kBuffer, 2);
+  wchar_t text[32]{}; GetWindowTextW(GetDlgItem(host.hwnd(), 430), text, 32);
+  Check(std::wstring(text) == L"F9" && saves == 5, "global shortcut survives reopening");
+  SendMessageW(GetDlgItem(host.hwnd(), 438), BM_CLICK, 0, 0); host.RecordShortcut(VK_DELETE, 0);
+  Check(current.capture_key == '4' && current.settings_key == VK_F9 && saves == 6, "reset one global action preserves other choices");
+  host.OpenPage(nullptr, ui::SettingsPage::kCapsule, 1);
+  Check(ui::SettingsTabCount(ui::SettingsPage::kCapsule) == 1 && ui::SettingsTabCount(ui::SettingsPage::kMailbox) == 2,
+        "Capsule duplicate route removed while Mailbox remains unchanged");
+  host.OpenPage(nullptr, ui::SettingsPage::kAbout, 0);
+  Check(IsVisibleWithinFixture(GetDlgItem(host.hwnd(), 453), host.hwnd()) && !IsWindowEnabled(GetDlgItem(host.hwnd(), 454)), "maintenance exposes restart and explicitly disables reinstall");
+  SendMessageW(GetDlgItem(host.hwnd(), 453), BM_CLICK, 0, 0);
+  Check(restarts == 1 && host.IsOpen(), "failed restart keeps the existing settings process open");
+  host.OpenPage(nullptr, ui::SettingsPage::kAbout, 1);
+  for (int id = 450; id <= 452; ++id) {
+    Check(IsVisibleWithinFixture(GetDlgItem(host.hwnd(), id), host.hwnd()), "maintenance exposes local log and data locations");
+    SendMessageW(GetDlgItem(host.hwnd(), id), BM_CLICK, 0, 0);
+  }
+  Check(locations == std::vector<unsigned>({0, 1, 2}), "maintenance resolves each actual configured location through its host");
+  host.OpenPage(nullptr, ui::SettingsPage::kInput, 0);
+  Check(IsWindowEnabled(GetDlgItem(host.hwnd(), 455)), "learning lexicon entry is enabled when its service exists");
+  SendMessageW(GetDlgItem(host.hwnd(), 455), BM_CLICK, 0, 0);
+  Check(lexicons == 1, "learning lexicon entry invokes service once");
+  host.Close();
+}
+
+void TestUserLexiconWindowLifecycle() {
+  const auto directory = std::filesystem::temp_directory_path() / (L"rimes-lexicon-ui-" + std::to_wstring(GetCurrentProcessId()));
+  std::atomic<bool> release{false}, unavailable{false};
+  std::atomic<unsigned> calls{0};
+  workbench::UserLexiconBackend backend;
+  backend.dictionaries = [&](std::vector<std::string>* names, std::string* error) {
+    ++calls;
+    while (!release) Sleep(2);
+    if (unavailable) { *error = "fixture engine unavailable"; return false; }
+    *names = {"rime_ice", "english"}; return true;
+  };
+  auto service = std::make_shared<workbench::UserLexiconService>(std::move(backend), directory);
+  workbench::SettingsUiCallbacks callbacks; callbacks.load = [] { return workbench::Settings{}; };
+  workbench::SettingsUiHost host(callbacks); host.Open(nullptr);
+  workbench::ShowUserLexicon(host.hwnd(), service, ui::ThemeId::kNight);
+  HWND window = FindWindowW(L"Rimes.UserLexicon", nullptr);
+  Check(window && GetWindow(window, GW_OWNER) == host.hwnd(), "learning lexicon is owned by settings");
+  if (!window) { release = true; return; }
+  WaitUntil([&] { return calls == 1; }, "lexicon status runs off the UI thread");
+  Check(!IsWindowEnabled(GetDlgItem(window, 7120)) && !IsWindowEnabled(GetDlgItem(window, 7121)) &&
+        !IsWindowEnabled(GetDlgItem(window, 7122)), "pending status cannot export import or start another query");
+  SendMessageW(window, WM_COMMAND, MAKEWPARAM(7122, BN_CLICKED), 0);
+  SendMessageW(window, WM_COMMAND, MAKEWPARAM(7121, BN_CLICKED), 0);
+  SendMessageW(window, WM_CLOSE, 0, 0);
+  Check(IsWindow(window) && !IsWindowVisible(window), "close returns promptly and defers disposal of an active lexicon task");
+  workbench::ShowUserLexicon(host.hwnd(), service, ui::ThemeId::kDay);
+  Check(FindWindowW(L"Rimes.UserLexicon", nullptr) == window && calls == 1, "reopening reuses the same pending task");
+  const auto pump = [] {
+    MSG message{};
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&message); DispatchMessageW(&message); }
+  };
+  release = true;
+  WaitUntil([&] { pump(); return IsWindowEnabled(GetDlgItem(window, 7122)) != FALSE; }, "async status returns to the native UI");
+  Check(IsWindowEnabled(GetDlgItem(window, 7120)) && IsWindowEnabled(GetDlgItem(window, 7121)), "existing Chinese database permits export and import");
+  SendMessageW(GetDlgItem(window, 7102), BM_CLICK, 0, 0);
+  Check(!IsWindowEnabled(GetDlgItem(window, 7120)) && IsWindowEnabled(GetDlgItem(window, 7121)), "missing Wubi database can import but cannot pretend to export");
+  SendMessageW(GetDlgItem(window, 7103), BM_CLICK, 0, 0);
+  Check(IsWindowEnabled(GetDlgItem(window, 7120)), "English has independent real database status");
+  HDC dc = GetDC(window);
+  SendMessageW(window, WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(GetDlgItem(window, 7110)));
+  Check(GetTextColor(dc) == ui::ToColorRef(ui::Palette(ui::ThemeId::kDay).text_primary), "reopened lexicon inherits the current settings theme");
+  ReleaseDC(window, dc);
+  RECT rect{}; GetWindowRect(window, &rect); rect.right = rect.left + 960; rect.bottom = rect.top + 675;
+  SendMessageW(window, WM_DPICHANGED, MAKEWPARAM(144, 144), reinterpret_cast<LPARAM>(&rect));
+  LOGFONTW font{}; GetObjectW(reinterpret_cast<HFONT>(SendMessageW(GetDlgItem(window, 7120), WM_GETFONT, 0, 0)), sizeof(font), &font);
+  Check(font.lfHeight == -MulDiv(13, 144, 96), "lexicon buttons follow monitor DPI");
+  unavailable = true;
+  SendMessageW(GetDlgItem(window, 7122), BM_CLICK, 0, 0);
+  WaitUntil([&] { pump(); return IsWindowEnabled(GetDlgItem(window, 7122)) != FALSE; }, "unavailable status completes without blocking UI");
+  Check(!IsWindowEnabled(GetDlgItem(window, 7120)) && !IsWindowEnabled(GetDlgItem(window, 7121)), "unavailable engine disables both mutations");
+  release = false;
+  SendMessageW(GetDlgItem(window, 7122), BM_CLICK, 0, 0);
+  WaitUntil([&] { return calls == 3; }, "final lexicon refresh runs");
+  SendMessageW(window, WM_CLOSE, 0, 0); release = true;
+  WaitUntil([&] { pump(); return !IsWindow(window); }, "closed lexicon retires itself after worker completion");
+  host.Close();
+}
+
 int main(int argc, char** argv) {
   if (argc == 2 && std::string(argv[1]) == "--first-show") {
     workbench::SettingsUiCallbacks callbacks;
@@ -1695,6 +1847,8 @@ int main(int argc, char** argv) {
   TestOwnedClicksAndTransientDetails();
   TestCandidateSettingsControls();
   TestCapsuleRecordingSettings();
+  TestGlobalShortcutsAndWindowPreferences();
+  TestUserLexiconWindowLifecycle();
   TestBufferHotkeyRegistrationLifecycle();
   TestBufferHotkeyModifierControl();
   TestPluginShortcutControls();

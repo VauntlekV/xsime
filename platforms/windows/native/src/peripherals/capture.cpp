@@ -250,7 +250,7 @@ std::string EncodeCapture(const CaptureImage& image) {
   GlobalUnlock(memory);
   return result;
 }
-bool CopyCapture(HWND owner, const CaptureImage& image) {
+ClipboardWriteResult CopyCapture(HWND owner, const CaptureImage& image) {
   auto png = EncodeCapture(image);
   BITMAPINFOHEADER header{sizeof(BITMAPINFOHEADER),
                           image.width,
@@ -264,25 +264,26 @@ bool CopyCapture(HWND owner, const CaptureImage& image) {
              image.pixels.size() * 4);
   auto pngMemory = Memory(png.data(), png.size()),
        dibMemory = Memory(dib.data(), dib.size());
-  bool copied = false;
+  ClipboardWriteResult copied;
   if (pngMemory && dibMemory && OpenClipboard(owner)) {
     if (EmptyClipboard()) {
       if (SetClipboardData(RegisterClipboardFormatW(L"PNG"), pngMemory)) {
-        copied = true;
+        copied.success = true;
         pngMemory = nullptr;
       }
       if (SetClipboardData(CF_DIB, dibMemory)) {
-        copied = true;
+        copied.success = true;
         dibMemory = nullptr;
       }
     }
+    if (copied) copied.sequence = GetClipboardSequenceNumber();
     CloseClipboard();
   }
   if (pngMemory) GlobalFree(pngMemory);
   if (dibMemory) GlobalFree(dibMemory);
   return copied;
 }
-bool CopyCapsuleAsset(HWND owner, Store& store, const Json& item) {
+ClipboardWriteResult CopyCapsuleAsset(HWND owner, Store& store, const Json& item) {
   if (item.value("kind", "") == "image")
     return CopyCapture(owner, LoadCapture(store.Asset(item)));
   const auto path = store.Asset(item).wstring();
@@ -294,13 +295,14 @@ bool CopyCapsuleAsset(HWND owner, Store& store, const Json& item) {
                (path.size() + 1) * sizeof(wchar_t));
   bytes.append(sizeof(wchar_t), '\0');
   auto memory = Memory(bytes.data(), bytes.size());
-  bool ok = false;
+  ClipboardWriteResult result;
   if (memory && OpenClipboard(owner)) {
-    ok = EmptyClipboard() && SetClipboardData(CF_HDROP, memory);
+    result.success = EmptyClipboard() && SetClipboardData(CF_HDROP, memory);
+    if (result) result.sequence = GetClipboardSequenceNumber();
     CloseClipboard();
   }
-  if (!ok && memory) GlobalFree(memory);
-  return ok;
+  if (!result && memory) GlobalFree(memory);
+  return result;
 }
 CaptureImage RenderCapture(const CaptureImage& base, const Json& operations) {
   Require(base.Valid() && operations.is_array() && operations.size() <= 500);

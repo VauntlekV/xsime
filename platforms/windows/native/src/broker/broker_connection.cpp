@@ -255,11 +255,13 @@ ClientAction BrokerConnection::HandleHello(const core::Frame& request,
   broker_hello.process_id = GetCurrentProcessId();
   broker_hello.session_id = broker_session_id_;
   broker_hello.capabilities = (runtime_ ? 1ULL : 0ULL) |
-      core::kModifierSnapshotsCapability | core::kKeyRoutingCapability | core::kPendingChordCapability;
+      core::kModifierSnapshotsCapability | core::kKeyRoutingCapability | core::kPendingChordCapability |
+      core::kCandidatePagingCapability;
   modifier_snapshots_ =
       (hello.capabilities & core::kModifierSnapshotsCapability) != 0;
   key_routing_ = (hello.capabilities & core::kKeyRoutingCapability) != 0;
   pending_chord_ = (hello.capabilities & core::kPendingChordCapability) != 0;
+  candidate_paging_ = (hello.capabilities & core::kCandidatePagingCapability) != 0;
   peer_process_ = verified_client_process_id;
   broker_hello.broker_version = std::string(kBrokerVersion);
   std::vector<std::byte> payload;
@@ -681,6 +683,8 @@ ClientAction BrokerConnection::HandleKeyEvent(const core::Frame& request,
 ClientAction BrokerConnection::RespondWithInputState(const core::Frame& request,
                                                      core::InputState state,
                                                      core::Frame* response) {
+  if (!candidate_paging_)
+    state.state_flags &= ~core::kCandidatePagingStateFlags;
   if (pending_chord_) {
     const auto session = sessions_.find(state.session_id);
     if (session != sessions_.end() && session->second.chord.Pending())
