@@ -1235,9 +1235,11 @@ void Windows::Impl::Pane::HoverCard(int index) {
   GetClientRect(C(Cards), &client);
   for (const auto card : {previous, index}) {
     if (card < card_offset || card >= static_cast<int>(rows.size())) continue;
+    // Hover changes only the copy glyph. Keep the preview/text/background
+    // outside the damage region, including across rapid enter/leave cycles.
     const auto rect = p.R((card - card_offset) *
-                             (appearance::kCardWidth + appearance::kCardGap),
-                         0, appearance::kCardWidth, appearance::kCardHeight);
+                             (appearance::kCardWidth + appearance::kCardGap) + 174,
+                         98, 26, 26);
     RECT damage{};
     if (IntersectRect(&damage, &rect, &client))
       InvalidateRect(C(Cards), &damage, FALSE);
@@ -3816,13 +3818,7 @@ void Windows::PreviewTheme(std::optional<ui::ThemeId> theme) {
   for (auto* pane : {impl_->capsule.get(), impl_->mailbox.get()})
     if (pane && pane->hwnd && pane->theme != impl_->CurrentTheme())
       pane->Theme();
-  if (impl_->capture) {
-    for (const auto window :
-         {impl_->capture->StackWindow(), impl_->capture->EditorWindow()})
-      if (window)
-        RedrawWindow(window, nullptr, nullptr,
-                     RDW_INVALIDATE | RDW_ALLCHILDREN);
-  }
+  if (impl_->capture) impl_->capture->RefreshTheme();
 }
 void Windows::ClipboardChanged() { impl_->ClipboardChanged(); }
 bool Windows::CollectClipboard() const { return impl_->store.CollectClipboard(); }

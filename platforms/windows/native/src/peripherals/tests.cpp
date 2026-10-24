@@ -1642,11 +1642,17 @@ void CardHover(const std::filesystem::path& root,
     ValidateRect(cards, nullptr);
     SendMessageW(cards, WM_MOUSEMOVE, 0, point(20, 60));
     RECT damage{};
-    Check(GetUpdateRect(cards, &damage, FALSE) && damage.left == 0 &&
-              damage.right <= MulDiv(206, dpi, 96),
-          "entering a card invalidates only that card");
+    Check(GetUpdateRect(cards, &damage, FALSE) && damage.left == MulDiv(174, dpi, 96) &&
+              damage.top == MulDiv(98, dpi, 96) && damage.right <= MulDiv(200, dpi, 96),
+          "entering a card invalidates only its action glyph, never the thumbnail or text");
     const auto hover = render();
     Check(hover != normal, "hover presents the Fluent copy affordance");
+    for (int y = 0; y < bounds.bottom; ++y) for (int x = 0; x < bounds.right; ++x) {
+      if (x >= MulDiv(174, dpi, 96) && x < MulDiv(200, dpi, 96) &&
+          y >= MulDiv(98, dpi, 96) && y < MulDiv(124, dpi, 96)) continue;
+      Check(normal[y * bounds.right + x] == hover[y * bounds.right + x],
+          "hover never changes pixels outside the copy action");
+    }
     canvas.Save(output / workbench::Wide(std::string(ui::ThemeIdString(theme)) +
                                          "-card-hover.png"), imaging.Get());
     ValidateRect(cards, nullptr);
@@ -2107,6 +2113,91 @@ void UI(const std::filesystem::path& root,
 }
 }  // namespace
 
+void PumpCaptureUntil(CaptureWindows& ui, const std::function<bool()>& done) {
+  const auto deadline = GetTickCount64() + 10000;
+  while (!done() && GetTickCount64() < deadline) {
+    MSG message{};
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+      if (!ui.HandleMessage(&message)) {
+        TranslateMessage(&message); DispatchMessageW(&message);
+      }
+    }
+    MsgWaitForMultipleObjects(0, nullptr, FALSE, 5, QS_ALLINPUT);
+  }
+  Check(done(), "capture background preparation completes within its bounded deadline");
+}
+
+void CapturePerformance(const std::filesystem::path& root) {
+  Store store(root);
+  CaptureImage image{3840, 2160, {}};
+  image.pixels.resize(3840 * 2160);
+  for (std::size_t i = 0; i < image.pixels.size(); ++i)
+    image.pixels[i] = 0xff000000U | static_cast<std::uint32_t>(i * 101);
+  CaptureWindows ui(store, {}, [] { return "night"; },
+      [&] { return std::make_pair(image, RECT{0, 0, 3840, 2160}); });
+  ui.Start();
+  const auto window = ui.SelectionWindow();
+  Canvas frame(3840, 2160);
+  const auto resources = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+  LARGE_INTEGER frequency{}, before{}, after{};
+  QueryPerformanceFrequency(&frequency); QueryPerformanceCounter(&before);
+  SendMessageW(window, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(100, 100));
+  for (int i = 0; i < 60; ++i) {
+    SendMessageW(window, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(2000 + i, 1500));
+    SendMessageW(window, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(frame.dc), PRF_CLIENT);
+  }
+  GdiFlush(); QueryPerformanceCounter(&after);
+  const auto pixels = frame.Pixels();
+  Check(pixels[200 * 3840 + 200] == image.pixels[200 * 3840 + 200],
+      "4K selection preview retains exact unscaled selected pixels");
+  Check((pixels[50 * 3840 + 50] & 0xffffff) != (image.pixels[50 * 3840 + 50] & 0xffffff),
+      "outside selection is dimmed from the frozen desktop");
+  Check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) <= resources + 4,
+      "repeated 4K selection frames do not accumulate GDI resources");
+  std::cout << "Capture 4K full-frame paint mean_ms="
+      << (after.QuadPart - before.QuadPart) * 1000.0 / frequency.QuadPart / 60 << std::endl;
+  QueryPerformanceCounter(&before);
+  SendMessageW(window, WM_LBUTTONUP, 0, MAKELPARAM(3800, 2100));
+  QueryPerformanceCounter(&after);
+  Check(ui.Preparing() && !IsWindowVisible(window),
+      "large capture encoding runs after selection releases the desktop");
+  std::cout << "Capture 4K selection-release_ms="
+      << (after.QuadPart - before.QuadPart) * 1000.0 / frequency.QuadPart << std::endl;
+  ui.Protect();
+  PumpCaptureUntil(ui, [&] { return !ui.Preparing(); });
+  Check(store.List(Module::Capture).empty(), "shielded 4K worker cannot publish or reopen its capture");
+}
+
+void CapturePreview(const std::filesystem::path& root) {
+  Store store(root);
+  CaptureImage image{640, 400, {}};
+  image.pixels.resize(640 * 400);
+  for (int y = 0; y < 400; ++y) for (int x = 0; x < 640; ++x)
+    image.pixels[y * 640 + x] = 0xff000000U | ((40 + x / 4) << 16) |
+        ((50 + y / 3) << 8) | 110;
+  CaptureWindows ui(store, {}, [] { return "night"; },
+      [&] { return std::make_pair(image, RECT{0, 0, 640, 400}); },
+      [](HWND, Store&, const Json&) { return ClipboardWriteResult{true, 1}; });
+  for (int i = 0; i < 3; ++i) {
+    ui.Start();
+    auto select = ui.SelectionWindow();
+    SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(5, 5));
+    SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(635 - i * 150, 395));
+    PumpCaptureUntil(ui, [&] { return !ui.Preparing(); });
+    SetWindowTextW(ui.StackWindow(), (L"截图堆栈 · 测试 " + std::to_wstring(i + 1)).c_str());
+  }
+  std::cout << "READY: isolated capture preview; synthetic copy leaves the system clipboard untouched" << std::endl;
+  const auto until = GetTickCount64() + 180000;
+  while (!ui.ActiveRecords().empty() && GetTickCount64() < until) {
+    MSG message{};
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+      if (!ui.HandleMessage(&message)) { TranslateMessage(&message); DispatchMessageW(&message); }
+    }
+    MsgWaitForMultipleObjects(0, nullptr, FALSE, 20, QS_ALLINPUT);
+  }
+  ui.Protect();
+}
+
 void CaptureFeatures(const std::filesystem::path& root,
                      const std::filesystem::path& output) {
   Store store(root);
@@ -2146,9 +2237,14 @@ void CaptureFeatures(const std::filesystem::path& root,
       },
       "invalid project coordinates rejected");
   int notifications = 0;
+  bool copy_available = false;
+  std::string copied_id, capture_theme = "night";
   CaptureWindows ui(
-      store, [&] { ++notifications; }, [] { return "night"; },
-      [&] { return std::make_pair(base, RECT{40, 40, 680, 440}); });
+      store, [&] { ++notifications; }, [&] { return capture_theme; },
+      [&] { return std::make_pair(base, RECT{40, 40, 680, 440}); },
+      [&](HWND, Store&, const Json& card) {
+        copied_id = card.at("id"); return ClipboardWriteResult{copy_available, 1};
+      });
   ui.Start();
   auto select = ui.SelectionWindow();
   Check(select && IsWindowVisible(select),
@@ -2156,6 +2252,8 @@ void CaptureFeatures(const std::filesystem::path& root,
   SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 20));
   SendMessageW(select, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM(600, 360));
   SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(600, 360));
+  Check(!IsWindowVisible(select), "selection releases the desktop before PNG encoding completes");
+  PumpCaptureUntil(ui, [&] { return notifications == 1; });
   Check(!IsWindowVisible(select) && IsWindowVisible(ui.StackWindow()) &&
             notifications == 1,
         "selection stores automatically and presents stack");
@@ -2165,6 +2263,25 @@ void CaptureFeatures(const std::filesystem::path& root,
   auto captureImage = LoadCapture(store.Asset(captured));
   Check(captureImage.width == 580 && captureImage.height == 340,
         "selection is saved at physical resolution");
+  const auto first_card = ui.StackWindow();
+  RECT first_bounds{}; GetWindowRect(first_card, &first_bounds);
+  const auto dpi = GetDpiForWindow(first_card);
+  Check(first_bounds.right - first_bounds.left == MulDiv(208, dpi, 96) &&
+      first_bounds.bottom - first_bounds.top == MulDiv(148, dpi, 96),
+      "stack uses macOS 208 x 148 point thumbnail dimensions");
+  Check(!IsWindowVisible(GetDlgItem(first_card, 200)) &&
+      !GetDlgItem(first_card, 220) && !IsWindowEnabled(GetDlgItem(first_card, 204)),
+      "resting thumbnail has no permanent button row or pagination; pin stays disabled");
+  const auto prior_focus = GetForegroundWindow();
+  SendMessageW(first_card, WM_MOUSEMOVE, 0, MAKELPARAM(40, 40));
+  Check(IsWindowVisible(GetDlgItem(first_card, 200)) &&
+      IsWindowVisible(GetDlgItem(first_card, 201)) &&
+      SendMessageW(first_card, WM_MOUSEACTIVATE, 0, 0) == MA_NOACTIVATE &&
+      GetForegroundWindow() == prior_focus,
+      "hover reveals real controls without activating the input method");
+  SendMessageW(first_card, WM_COMMAND, 200, 0);
+  Check(IsWindow(first_card) && copied_id == captured.at("id").get<std::string>(),
+      "clipboard failure preserves the exact original card for retry");
   ui.Start();
   SendMessageW(ui.SelectionWindow(), WM_KEYDOWN, VK_ESCAPE, 0);
   Check(store.List(Module::Capture).size() == 2 &&
@@ -2209,11 +2326,51 @@ void CaptureFeatures(const std::filesystem::path& root,
           "capture fixture imaging");
     CaptureUI(editor, output / L"capture-editor.png", imaging.Get());
     CaptureUI(ui.StackWindow(), output / L"capture-stack.png", imaging.Get());
+    for (const auto& theme : {"night", "day", "rasta", "quiet"}) {
+      capture_theme = theme;
+      SendMessageW(first_card, WM_MOUSEMOVE, 0, MAKELPARAM(40, 40));
+      CaptureUI(first_card, output / (workbench::Wide(theme) + L"-capture-stack-hover.png"), imaging.Get());
+    }
   }
-  SendMessageW(ui.StackWindow(), WM_COMMAND, 203, 0);
-  Check(store.List(Module::Capture).size() == 2,
-        "closing stack card never deletes history");
+  SendMessageW(editor, WM_CLOSE, 0, 0);
+  Check(ui.StackWindow() == first_card, "editing updates the same window and stack slot");
+  for (int i = 0; i < 6; ++i) {
+    ui.Start();
+    SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 20));
+    SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(180 + i, 150));
+    const auto expected = notifications + 1;
+    PumpCaptureUntil(ui, [&] { return notifications == expected; });
+  }
+  const auto newest_card = ui.StackWindow();
+  RECT newest_bounds{}; GetWindowRect(newest_card, &newest_bounds);
+  MONITORINFO info{sizeof(info)};
+  GetMonitorInfoW(MonitorFromWindow(newest_card, MONITOR_DEFAULTTONEAREST), &info);
+  Check(newest_bounds.bottom == info.rcWork.bottom - MulDiv(18, dpi, 96) &&
+      ui.ActiveRecords().size() == 7,
+      "newest capture is nearest bottom corner; overflow retains every live asset lease");
+  RECT older_bounds{}; GetWindowRect(first_card, &older_bounds);
+  Check(!IsWindowVisible(first_card) || older_bounds.bottom < newest_bounds.top,
+      "older cards ascend without overlap; screen overflow is hidden");
+  const auto history_count = store.List(Module::Capture).size();
+  copy_available = true;
+  SendMessageW(newest_card, WM_COMMAND, 200, 0);
+  Check(!IsWindow(newest_card) && ui.ActiveRecords().size() == 6 &&
+      store.List(Module::Capture).size() == history_count,
+      "successful copy removes only its overlay, retaining capture history");
+  while (ui.StackWindow() && ui.StackWindow() != first_card)
+    SendMessageW(ui.StackWindow(), WM_COMMAND, 203, 0);
+  RECT restored_bounds{}; GetWindowRect(first_card, &restored_bounds);
+  Check(IsWindowVisible(first_card) && EqualRect(&first_bounds, &restored_bounds),
+      "dismissal reveals overflow and restores the original card to the corner");
+  ui.Start();
+  SendMessageW(select, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(20, 20));
+  SendMessageW(select, WM_LBUTTONUP, 0, MAKELPARAM(600, 360));
   ui.Protect();
+  // Pump the queued completion after shielding: it must never reopen a card
+  // or publish the captured pixels into persistent history.
+  PumpCaptureUntil(ui, [&] { return !ui.Preparing(); });
+  Check(store.List(Module::Capture).size() == history_count && ui.ActiveRecords().empty(),
+      "protection discards in-flight preparation and all overlay leases");
   Check(!IsWindowVisible(editor) && !IsWindowVisible(ui.StackWindow()),
         "lock hides all capture surfaces");
   store.Enable(Module::Capture, false);
@@ -2231,6 +2388,18 @@ int wmain(int argc, wchar_t** argv) {
                 (L"xsime-peripheral-test-" + workbench::Wide(NewId()));
     std::filesystem::create_directories(root);
     SetEnvironmentVariableW(L"LOCALAPPDATA", root.c_str());
+    if (argc == 2 && std::wstring(argv[1]) == L"--capture-preview") {
+      CapturePreview(root / L"capture-preview");
+      std::filesystem::remove_all(root);
+      CoUninitialize(); return 0;
+    }
+    if (argc >= 2 && std::wstring(argv[1]) == L"--capture-ui") {
+      CaptureFeatures(root / L"capture", argc == 3 ? std::filesystem::path(argv[2]) : std::filesystem::path{});
+      CapturePerformance(root / L"capture-performance");
+      std::cout << "PASS: capture stack parity, hover, editing, overflow, copy and protection" << std::endl;
+      std::filesystem::remove_all(root);
+      CoUninitialize(); return 0;
+    }
     if (argc == 2 && (std::wstring(argv[1]) == L"--capsule-navigation" ||
                       std::wstring(argv[1]) == L"--capsule-navigation-native")) {
       CapsuleNavigation(root / L"capsule-navigation", std::wstring(argv[1]) == L"--capsule-navigation-native");

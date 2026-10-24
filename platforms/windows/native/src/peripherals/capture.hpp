@@ -23,8 +23,9 @@ CaptureImage RenderCapture(const CaptureImage&, const Json& operations);
 class CaptureWindows {
  public:
   using Screenshot = std::function<std::pair<CaptureImage, RECT>()>;
+  using Copy = std::function<ClipboardWriteResult(HWND, Store&, const Json&)>;
   CaptureWindows(Store&, std::function<void()> changed,
-                 std::function<std::string()> theme, Screenshot = {});
+                 std::function<std::string()> theme, Screenshot = {}, Copy = {});
   ~CaptureWindows();
   void Start();
   void Edit(const Json&);
@@ -33,6 +34,8 @@ class CaptureWindows {
   HWND SelectionWindow() const;
   HWND StackWindow() const;
   HWND EditorWindow() const;
+  bool Preparing() const;
+  void RefreshTheme();
   std::set<std::string> ActiveRecords() const;
 
  private:
