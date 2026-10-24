@@ -995,6 +995,7 @@ void TestPluginManagementAndChordSelection() {
 }
 
 void TestSettingsPreserveRuntimeAndStreaming() {
+  std::cerr << "Runtime UI: begin\n";
   const DWORD original_size = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
   std::wstring original(original_size, L'\0');
   if (original_size) {
@@ -1065,7 +1066,9 @@ void TestSettingsPreserveRuntimeAndStreaming() {
       const HWND driver = CreateWindowExW(0, driver_class.lpszClassName, L"", 0,
           0, 0, 0, 0, HWND_MESSAGE, nullptr, driver_class.hInstance, nullptr);
       position_driver = driver;
+      std::cerr << "Runtime UI: native dispatcher starting\n";
       workbench::RunWindow(runtime, [] {}, [] {}, &commands);
+      std::cerr << "Runtime UI: native dispatcher stopped\n";
       position_driver = nullptr;
       if (driver) DestroyWindow(driver);
       UnregisterClassW(driver_class.lpszClassName, driver_class.hInstance);
@@ -1075,15 +1078,18 @@ void TestSettingsPreserveRuntimeAndStreaming() {
     // 15-second startup allowance; no hotkey is posted before that first open.
     WaitUntil([&] { const auto h = windows().settings; return h && IsWindowVisible(h); },
               "settings command opens the production settings host", 15000);
+    std::cerr << "Runtime UI: cold open checked\n";
     const auto initial_settings = windows().settings;
     const auto initial_buffer = windows().buffer;
     // Real WM_HOTKEY is queued, never a cross-thread sent message that can
     // interrupt Open() while it is still presenting the initial native children.
     PostMessageW(initial_buffer, WM_HOTKEY, 20, MAKELPARAM(fixture_shortcuts.settings_modifiers, fixture_shortcuts.settings_key));
     WaitUntil([&] { return !IsWindowVisible(initial_settings); }, "queued settings shortcut finishes");
+    std::cerr << "Runtime UI: shortcut hide checked\n";
     Check(windows().settings == initial_settings && !IsWindowVisible(initial_settings),
           "configured settings shortcut hides settings without destroying its draft");
     SendMessageW(initial_buffer, WM_APP + 81, 0, WM_LBUTTONUP);
+    std::cerr << "Runtime UI: tray request returned\n";
     Check(windows().settings == initial_settings && IsWindowVisible(initial_settings) &&
           !runtime.Snapshot().value("visible", true),
           "tray left click opens settings without opening Buffer");
@@ -1104,6 +1110,7 @@ void TestSettingsPreserveRuntimeAndStreaming() {
               "closing Buffer while settings is open preserves its hidden state");
     CloseSettingsAtUiBarrier(position_driver.load(), windows(), commands,
                              close_requests[0], false);
+    std::cerr << "Runtime UI: first close barrier returned\n";
     WaitUntil([&] { return windows().settings == nullptr; }, "closing settings retires its own window");
     CheckBufferRestored(windows(), false);
 
@@ -1806,6 +1813,11 @@ void TestUserLexiconWindowLifecycle() {
 }
 
 int main(int argc, char** argv) {
+  std::cerr << "Settings UI fixture start\n";
+  if (argc == 2 && std::string(argv[1]) == "--runtime-lifecycle") {
+    TestSettingsPreserveRuntimeAndStreaming();
+    return failures ? EXIT_FAILURE : EXIT_SUCCESS;
+  }
   if (argc == 2 && std::string(argv[1]) == "--first-show") {
     workbench::SettingsUiCallbacks callbacks;
     callbacks.load = [] { return workbench::Settings{}; };
@@ -1843,28 +1855,34 @@ int main(int argc, char** argv) {
     Check(waited == WAIT_OBJECT_0 && code == 0, "hidden-start settings fixture passes");
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
   }
-  TestImmediateSettingsAndIcons();
-  TestBrandHome();
-  TestPeerHostsAndPluginKinds();
-  TestConnectorInteractions();
-  TestPageControlBounds();
-  TestNativeControlBackgrounds();
-  TestParityDraftsAndConnections();
-  TestBufferBehaviorControls();
-  TestNestedHitTargets();
-  TestOwnedClicksAndTransientDetails();
-  TestCandidateSettingsControls();
-  TestCapsuleRecordingSettings();
-  TestGlobalShortcutsAndWindowPreferences();
-  TestUserLexiconWindowLifecycle();
-  TestBufferHotkeyRegistrationLifecycle();
-  TestBufferHotkeyModifierControl();
-  TestPluginShortcutControls();
-  TestSendShortcutRecorder();
-  TestCodexConnectorSelector();
-  TestHoverRepaintScopeAndResources();
-  TestPluginManagementAndChordSelection();
-  TestSettingsPreserveRuntimeAndStreaming();
+  const auto run = [](const char* name, auto test) {
+    const auto started = GetTickCount64();
+    std::cerr << "RUN " << name << '\n';
+    test();
+    std::cerr << "DONE " << name << " ms=" << GetTickCount64() - started << '\n';
+  };
+  run("immediate settings/icons", TestImmediateSettingsAndIcons);
+  run("home", TestBrandHome);
+  run("peer hosts/plugins", TestPeerHostsAndPluginKinds);
+  run("connectors", TestConnectorInteractions);
+  run("page control bounds", TestPageControlBounds);
+  run("native backgrounds", TestNativeControlBackgrounds);
+  run("parity drafts", TestParityDraftsAndConnections);
+  run("Buffer controls", TestBufferBehaviorControls);
+  run("nested hit targets", TestNestedHitTargets);
+  run("owned clicks", TestOwnedClicksAndTransientDetails);
+  run("candidate controls", TestCandidateSettingsControls);
+  run("Capsule recording", TestCapsuleRecordingSettings);
+  run("global shortcuts", TestGlobalShortcutsAndWindowPreferences);
+  run("lexicon lifecycle", TestUserLexiconWindowLifecycle);
+  run("hotkey registration", TestBufferHotkeyRegistrationLifecycle);
+  run("hotkey modifiers", TestBufferHotkeyModifierControl);
+  run("plugin shortcuts", TestPluginShortcutControls);
+  run("send recorder", TestSendShortcutRecorder);
+  run("Codex selector", TestCodexConnectorSelector);
+  run("hover/resources", TestHoverRepaintScopeAndResources);
+  run("plugin management/chords", TestPluginManagementAndChordSelection);
+  run("runtime/streaming", TestSettingsPreserveRuntimeAndStreaming);
   if (failures) return EXIT_FAILURE;
   std::cout << "Settings details, mouse ownership and Runtime preservation tests passed\n";
   return EXIT_SUCCESS;

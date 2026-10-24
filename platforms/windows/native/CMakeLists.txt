@@ -537,7 +537,10 @@ if(RIMES_BUILD_TESTS)
     target_link_libraries(RimesSettingsUiTests PRIVATE RimesWorkbench)
     rimes_harden_target(RimesSettingsUiTests)
     add_test(NAME RimesSettingsUi COMMAND RimesSettingsUiTests)
-    set_tests_properties(RimesSettingsUi PROPERTIES TIMEOUT 45)
+    # The suite creates many native hosts across pages, themes and DPI modes.
+    # Individual interaction waits stay bounded inside the fixture; allow the
+    # complete collection to finish on software-rendered developer desktops.
+    set_tests_properties(RimesSettingsUi PROPERTIES TIMEOUT 120)
 
     add_test(NAME RimesBrokerHelp COMMAND RimesBroker --help)
     set_tests_properties(RimesBrokerHelp PROPERTIES

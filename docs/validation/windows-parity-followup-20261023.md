@@ -100,6 +100,11 @@ phase timings distinguish segmentation from aggregation without logging text.
 The product chord fixture explicitly opts into chord input, and the native UI
 cold-start fixture uses the production settings-command startup allowance.
 These corrections require fresh validation and a fresh source-identified package.
+The expanded native settings collection exceeded its previous 45-second aggregate
+budget on the local desktop. A full instrumented run completed without assertion
+failures; stage timings and a focused lifecycle mode now make failures diagnosable.
+The aggregate allowance is 120 seconds, while individual interaction deadlines
+remain bounded. Cross-thread native activation messages are serviced during waits.
 
 Final source identity, remote CI, peripheral UI and installed-version results
 are recorded separately in `validation/windows-parity-followup-20261023/`.
