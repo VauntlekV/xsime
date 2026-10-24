@@ -307,6 +307,10 @@ void CandidateWindow::LayoutAndShow(
     layout = compact_;
   }
   hit_pills_ = layout.pills;
+  snapshot_.visible_indices.clear();
+  for (std::size_t i = 0; i < hit_pills_.size(); ++i)
+    if (hit_pills_[i].width() > 0 && hit_pills_[i].height() > 0)
+      snapshot_.visible_indices.push_back(i);
   matrix_labels_.assign(snapshot.items.size(), L"");
   std::size_t offset = 0;
   for (const auto count : snapshot.matrix_rows) {

@@ -90,6 +90,17 @@ The final shortcut/runtime/restart targeted reruns pass on both architectures.
 Mock installer maintenance checks (14), uninstall boundary checks and installer
 static checks pass; no real registration is changed by those fixtures.
 
+The first remote run passed both Release/CTest jobs and the macOS/tooling checks,
+but typing failed an old assertion that compared entire engine pages after a
+visible subpage move. The probe now compares the actual native viewport and
+checks backward restoration. The x86 run also recorded 234 ms in first-commit
+statistics before disconnecting at the existing 200 ms response ceiling. Unicode
+statistics initialization now happens during Broker startup; additional isolated
+phase timings distinguish segmentation from aggregation without logging text.
+The product chord fixture explicitly opts into chord input, and the native UI
+cold-start fixture uses the production settings-command startup allowance.
+These corrections require fresh validation and a fresh source-identified package.
+
 Final source identity, remote CI, peripheral UI and installed-version results
 are recorded separately in `validation/windows-parity-followup-20261023/`.
 Local synthetic targets do not establish acceptance in every desktop app or

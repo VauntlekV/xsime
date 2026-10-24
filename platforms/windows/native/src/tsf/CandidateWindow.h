@@ -32,6 +32,9 @@ struct CandidateSnapshot {
   RECT caret_rect{};
   std::wstring composition;
   std::vector<CandidateItem> items;
+  // Indices actually painted in the current viewport, after native measurement.
+  // Engine-page items remain intact for TSF accessibility and selection guards.
+  std::vector<std::size_t> visible_indices;
   std::vector<std::size_t> matrix_rows;
 };
 

@@ -16,6 +16,9 @@ Runtime::Runtime(APIGenerator generate, TranslationResources resources,
                  ReadinessProbe readiness)
     : translation_resources_(std::move(resources)), generate_(std::move(generate)),
       readiness_probe_(std::move(readiness)), foreground_(std::move(foreground)), clock_(std::move(clock)) {
+  // Warm ICU/NLS while the Broker starts, before the first commit enters its
+  // bounded synchronous key-response path. Statistics remain best effort.
+  try { (void)metrics::Characters("a"); } catch (...) {}
   using NativeGenerator = bool (*)(const Settings&, const Generation&,
       const std::function<bool(const std::string&)>&, const std::function<bool()>&, std::string*);
   const auto native = generate_.target<NativeGenerator>();

@@ -49,10 +49,15 @@ bool IsVisibleWithinFixture(HWND control, HWND fixture) {
 }
 
 template <typename Predicate>
-bool WaitUntil(Predicate predicate, const char* message) {
+bool WaitUntil(Predicate predicate, const char* message, ULONGLONG timeout = 3000) {
   const auto start = GetTickCount64();
   bool ready = predicate();
-  while (!ready && GetTickCount64() - start < 3000) {
+  while (!ready && GetTickCount64() - start < timeout) {
+    // Focus/activation on the production UI thread can synchronously contact
+    // a fixture window owned by this thread. Service those sent messages;
+    // preserve posted input for the fixture's explicit dispatch barriers.
+    MSG pending{};
+    PeekMessageW(&pending, nullptr, 0, 0, PM_NOREMOVE);
     Sleep(2);
     ready = predicate();
   }
@@ -1066,7 +1071,10 @@ void TestSettingsPreserveRuntimeAndStreaming() {
       UnregisterClassW(driver_class.lpszClassName, driver_class.hInstance);
     });
     const auto windows = [&] { return WindowsOnFixtureThread(ui_thread.load()); };
-    WaitUntil([&] { const auto h = windows().settings; return h && IsWindowVisible(h); }, "settings command opens the production settings host");
+    // Cold native/tray initialization shares the production command's bounded
+    // 15-second startup allowance; no hotkey is posted before that first open.
+    WaitUntil([&] { const auto h = windows().settings; return h && IsWindowVisible(h); },
+              "settings command opens the production settings host", 15000);
     const auto initial_settings = windows().settings;
     const auto initial_buffer = windows().buffer;
     // Real WM_HOTKEY is queued, never a cross-thread sent message that can

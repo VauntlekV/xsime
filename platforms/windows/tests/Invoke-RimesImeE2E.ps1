@@ -227,6 +227,7 @@ New-Item -ItemType Directory -Path (Join-Path $testLocalAppData 'RIMES') -Force 
 Write-RimesJson -Path (Join-Path $testLocalAppData 'RIMES/settings.json') -Object ([ordered]@{
     schema = $(if ($Chord) { 'my_combo' } else { 'rime_ice' })
     ascii = $false
+    chord_enabled = [bool]$Chord
     chord_interval_ms = 300
 })
 

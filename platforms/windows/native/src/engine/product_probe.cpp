@@ -50,6 +50,7 @@ bool TestNativeIsaac2026(RimeEngine& engine, const std::filesystem::path& log_di
   RuntimePreferences preferences(log_dir);
   if (!preferences.active()) return false;
   workbench::Settings initial; initial.schema = "my_combo";
+  initial.chord_enabled = true;  // This fixture explicitly exercises opt-in chord input.
   initial.close_after_send = false;
   if (!workbench::SaveSettings(initial, nullptr)) return false;
   workbench::Runtime runtime;
