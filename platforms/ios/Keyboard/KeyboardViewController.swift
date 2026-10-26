@@ -1562,6 +1562,7 @@ final class KeyboardViewController: UIInputViewController {
         case .last: highlightStart = candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1
         case .middle:
             highlightStart = candidateStrip.middleVisibleIndex ?? candidateStrip.count / 2
+            if !expanded { candidateStrip.beginWheel(at: highlightStart) }
             let visible = max(1, (candidateStrip.lastVisibleIndex ?? highlightStart) - (candidateStrip.firstVisibleIndex ?? highlightStart) + 1)
             spaceKey.machine.selectorStep = max(10, spaceKey.bounds.width / 2 / CGFloat(visible))
         }
@@ -1572,13 +1573,15 @@ final class KeyboardViewController: UIInputViewController {
     private func moveCandidateHighlight(_ steps: Int) {
         guard candidateStrip.count > 0 else { return }
         highlightSteps = steps
-        let index = min(max(0, highlightStart + steps), candidateStrip.count - 1)
+        var index = min(max(0, highlightStart + steps), candidateStrip.count - 1)
+        // On the drum a word stays on its own line; turning lines is the vertical slide.
+        if let range = candidateStrip.wheelRange { index = min(max(range.lowerBound, index), range.upperBound) }
         guard index != highlightIndex else { return }
         highlightIndex = index; candidateStrip.setHighlight(index)
         caretSteps += 1; surface.feedback.send(.selection, combination: "highlight-\(caretSteps)")
     }
     private func endCandidateHighlight(commit: Bool) {
-        let index = highlightIndex; highlightIndex = nil; candidateStrip.setHighlight(nil)
+        let index = highlightIndex; highlightIndex = nil; candidateStrip.endWheel(); candidateStrip.setHighlight(nil)
         guard commit, let index, candidateStrip.buttons.indices.contains(index) else { return }
         candidateStrip.onSelect?(index)
     }
@@ -1592,8 +1595,10 @@ final class KeyboardViewController: UIInputViewController {
             highlightStart = index - highlightSteps; highlightIndex = index; candidateStrip.setHighlight(index)
         }
         if !expanded {
-            guard candidateStrip.turnPage(direction > 0 ? 1 : -1) else { return }
-            if let middle = candidateStrip.middleVisibleIndex { moveHighlight(to: middle) }
+            let middle = candidateStrip.isWheelActive ? candidateStrip.turnWheel(direction > 0 ? 1 : -1)
+                : (candidateStrip.turnPage(direction > 0 ? 1 : -1) ? candidateStrip.middleVisibleIndex : nil)
+            guard let middle else { return }
+            moveHighlight(to: middle)
         } else if direction > 0 {
             if let current = highlightIndex, let next = candidateStrip.index(inRowOffset: 1, from: current) { moveHighlight(to: next) }
             else if highlightIndex == nil { candidateStrip.scrollRows(1) }

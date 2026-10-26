@@ -81,6 +81,52 @@ final class CandidateStrip: UIView {
     }
     required init?(coder: NSCoder) { fatalError() }
     // MARK: Space-bar control
+    private var wheel: CandidateWheel?
+    private var wheelPages: [[CandidateWheel.Item]] = []
+    var isWheelActive: Bool { wheel != nil }
+    /// The words of the line the wheel is on.
+    var wheelRange: ClosedRange<Int>? {
+        guard let wheel, wheelPages.indices.contains(wheel.current), let first = wheelPages[wheel.current].first?.index,
+              let last = wheelPages[wheel.current].last?.index else { return nil }
+        return first...last
+    }
+    private func pageItems() -> [[CandidateWheel.Item]] {
+        guard !texts.isEmpty else { return [] }
+        let layout = CandidateLayout.measure(texts, comments: comments, width: max(1, scroll.bounds.width), expanded: true, landscape: landscape)
+        var result: [[CandidateWheel.Item]] = [], line: [CandidateWheel.Item] = []
+        for (index, frame) in layout.frames.enumerated() {
+            if let last = line.last, last.frame.minY != frame.minY { result.append(line); line = [] }
+            line.append((index, texts[index], frame))
+        }
+        if !line.isEmpty { result.append(line) }
+        return result
+    }
+    /// Shows the candidates as a drum on the line holding `index`; the plain row stays underneath, hidden.
+    func beginWheel(at index: Int) {
+        endWheel()
+        wheelPages = pageItems()
+        let page = wheelPages.firstIndex { $0.contains { $0.index == index } } ?? 0
+        let view = CandidateWheel(frame: scroll.frame)
+        view.tintColor = tintColor
+        view.configure(pages: wheelPages, current: page, highlight: index,
+                       font: .systemFont(ofSize: landscape ? 17 : 19))
+        insertSubview(view, aboveSubview: scroll); wheel = view; scroll.alpha = 0
+    }
+    /// Rolls the drum one line and scrolls the plain row to match; returns the middle word of the new line.
+    @discardableResult func turnWheel(_ delta: Int) -> Int? {
+        guard let wheel, wheelPages.indices.contains(wheel.current + delta) else { return nil }
+        let line = wheelPages[wheel.current + delta]
+        let middle = line[line.count / 2].index
+        wheel.roll(by: delta, highlight: middle)
+        if buttons.indices.contains(line[0].index) {
+            let limit = max(0, scroll.contentSize.width - scroll.bounds.width)
+            scroll.setContentOffset(CGPoint(x: min(limit, buttons[line[0].index].frame.minX), y: 0), animated: false)
+        }
+        return middle
+    }
+    func endWheel() {
+        wheel?.removeFromSuperview(); wheel = nil; wheelPages = []; scroll.alpha = 1
+    }
     private(set) var highlightedIndex: Int?
     var count: Int { buttons.count }
     var isAtTop: Bool { scroll.contentOffset.y <= 0.5 }
@@ -126,6 +172,7 @@ final class CandidateStrip: UIView {
     func setHighlight(_ index: Int?) {
         if let old = highlightedIndex, buttons.indices.contains(old) { buttons[old].isSweepTarget = false }
         highlightedIndex = index.flatMap { buttons.indices.contains($0) ? $0 : nil }
+        wheel?.setHighlight(highlightedIndex)
         guard let index = highlightedIndex else { return }
         buttons[index].isSweepTarget = true
         scroll.scrollRectToVisible(buttons[index].frame.insetBy(dx: -12, dy: 0), animated: false)
@@ -148,7 +195,7 @@ final class CandidateStrip: UIView {
         let sameContext = context == self.context
         if !sameContext { self.context = context }
         guard values != texts || comments != self.comments else { return }
-        setHighlight(nil)
+        endWheel(); setHighlight(nil)
         let appending = expanded && sameContext && !texts.isEmpty && values.count >= texts.count
             && Array(values.prefix(texts.count)) == texts
             && texts.indices.allSatisfy { (comments.indices.contains($0) ? comments[$0] : "") == (self.comments.indices.contains($0) ? self.comments[$0] : "") }
@@ -227,6 +274,92 @@ final class CandidateStrip: UIView {
 }
 
 /// Candidates read as text, with a transient touch highlight and no keycap base.
+/// A drum of candidate lines: the line in focus sits in the middle and the lines before and after show as
+/// tilted slivers at the upper and lower edges, so turning a line feels like rolling a watch crown.
+final class CandidateWheel: UIView {
+    typealias Item = (index: Int, text: String, frame: CGRect)
+    private var rows: [UIView] = []
+    private let pill = UIView()
+    private(set) var current = 0
+    private var pages: [[Item]] = []
+    private var font = UIFont.systemFont(ofSize: 19)
+    /// How much of the neighbouring lines shows above and below.
+    static let peek: CGFloat = 6
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true; isUserInteractionEnabled = false; backgroundColor = .clear
+        var perspective = CATransform3DIdentity; perspective.m34 = -1 / 260
+        layer.sublayerTransform = perspective
+        pill.layer.cornerRadius = 7; pill.layer.cornerCurve = .continuous
+        pill.backgroundColor = (tintColor ?? .systemBlue).withAlphaComponent(0.3)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func tintColorDidChange() { super.tintColorDidChange(); pill.backgroundColor = (tintColor ?? .systemBlue).withAlphaComponent(0.3) }
+    private var rowHeight: CGFloat { max(16, bounds.height - 2 * Self.peek) }
+    /// Rotation about the edge nearest the focused line, tilting the neighbour away like the side of a drum.
+    private func tilt(_ angle: CGFloat, pivot: CGFloat) -> CATransform3D {
+        var t = CATransform3DIdentity
+        t = CATransform3DTranslate(t, 0, pivot, 0); t = CATransform3DRotate(t, angle, 1, 0, 0); t = CATransform3DTranslate(t, 0, -pivot, 0)
+        return t
+    }
+    private func makeRow(page: Int, slot: Int, highlight: Int?) -> UIView {
+        let height = rowHeight
+        let y = slot < 0 ? Self.peek - height : slot > 0 ? bounds.height - Self.peek : Self.peek
+        let row = UIView(frame: CGRect(x: 0, y: y, width: bounds.width, height: height))
+        row.isUserInteractionEnabled = false
+        guard pages.indices.contains(page) else { return row }
+        for item in pages[page] {
+            let label = UILabel(frame: CGRect(x: item.frame.minX, y: 0, width: item.frame.width, height: height))
+            label.text = item.text; label.font = font; label.textAlignment = .center; label.textColor = .label
+            label.lineBreakMode = .byTruncatingTail
+            if slot == 0, item.index == highlight {
+                pill.frame = CGRect(x: item.frame.minX + 2, y: 1, width: item.frame.width - 4, height: height - 2)
+                row.addSubview(pill)
+            }
+            row.addSubview(label)
+        }
+        if slot != 0 {
+            row.alpha = 0.55
+            row.layer.transform = tilt(slot < 0 ? 0.95 : -0.95, pivot: slot < 0 ? height / 2 : -height / 2)
+        }
+        return row
+    }
+    private func build(highlight: Int?) {
+        rows.forEach { $0.removeFromSuperview() }
+        rows = [-1, 0, 1].map { makeRow(page: current + $0, slot: $0, highlight: highlight) }
+        rows.forEach(addSubview)
+    }
+    func configure(pages: [[Item]], current: Int, highlight: Int?, font: UIFont) {
+        self.pages = pages; self.current = min(max(0, current), max(0, pages.count - 1)); self.font = font
+        build(highlight: highlight)
+    }
+    func setHighlight(_ index: Int?) {
+        guard pages.indices.contains(current) else { return }
+        let height = rowHeight
+        if let index, let item = pages[current].first(where: { $0.index == index }), rows.indices.contains(1) {
+            pill.frame = CGRect(x: item.frame.minX + 2, y: 1, width: item.frame.width - 4, height: height - 2)
+            if pill.superview !== rows[1] { rows[1].insertSubview(pill, at: 0) }
+            pill.isHidden = false
+        } else { pill.isHidden = true }
+    }
+    /// Rolls to the previous (-1) or next (+1) line.
+    func roll(by delta: Int, highlight: Int?) {
+        guard pages.indices.contains(current + delta) else { return }
+        current += delta
+        build(highlight: highlight)
+        // New rows start where the old ones were and roll into place.
+        let pitch = rowHeight - Self.peek
+        for row in rows {
+            let final = row.layer.transform, alpha = row.alpha
+            row.transform = row.transform.concatenating(CGAffineTransform(translationX: 0, y: CGFloat(delta) * pitch))
+            row.alpha = alpha * 0.4
+            UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+                row.layer.transform = final; row.alpha = alpha
+            }
+        }
+    }
+}
+
 final class CandidateButton: UIButton {
     let commentLabel = UILabel()
     private let highlight = UIView()

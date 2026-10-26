@@ -892,6 +892,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertGreaterThan(strip.count, 20); XCTAssertFalse(strip.expanded)
         m.down(1, half: .left, at: CGPoint(x: 40, y: 20)); m.holdElapsed(1)
         m.down(2, half: .right, at: CGPoint(x: 150, y: 20))
+        XCTAssertTrue(strip.isWheelActive, "Holding the left half shows the candidate drum")
         // The highlight starts on the middle of the visible words, and the row stays a single row.
         let middle = try! XCTUnwrap(strip.middleVisibleIndex)
         XCTAssertEqual(strip.highlightedIndex, middle)
@@ -919,6 +920,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         let expected = try! XCTUnwrap(strip.buttons[to].currentTitle)
         m.up(2); m.up(1)
         XCTAssertEqual(controller.layoutProxy.native.text, expected)
+        XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(strip.scroll.alpha, 1)
     }
 
     func testChordModeSwapsLanguageToggleAndDelete() throws {

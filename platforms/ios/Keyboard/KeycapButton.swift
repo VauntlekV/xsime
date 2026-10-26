@@ -68,7 +68,7 @@ enum KeycapStyle {
 }
 
 extension KeycapStyle {
-    /// Space is one ordinary cap. Pressing it tints only the half under the finger.
+    /// Space is one ordinary cap; where it is pressed shows as a ripple (see `SpaceCursorButton`), never a hard split.
     static func drawSplitSpace(in rect: CGRect, pressed: Set<SpaceHalf>, enabled: Bool = true, compact: Bool = false,
                                theme: StatusSkin, legacy: Bool) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
@@ -84,15 +84,6 @@ extension KeycapStyle {
         }
         let cap = UIBezierPath(roundedRect: legacy ? box.offsetBy(dx: 0, dy: -0.5) : box, cornerRadius: radius)
         (system && !legacy ? palette.key.withAlphaComponent(translucentKeyAlpha) : palette.key).setFill(); cap.fill()
-        if !pressed.isEmpty {
-            context.saveGState(); cap.addClip()
-            let half = box.width / 2
-            for side in pressed {
-                palette.accent.setFill()
-                UIBezierPath(rect: CGRect(x: side == .left ? box.minX : box.midX, y: box.minY - 2, width: half, height: box.height + 4)).fill()
-            }
-            context.restoreGState()
-        }
         if !system {
             UIColor.label.withAlphaComponent(pressed.isEmpty ? 0.10 : 0.15).setStroke()
             cap.lineWidth = 0.7; cap.stroke()
@@ -367,6 +358,10 @@ final class SpaceCursorButton: KeycapButton {
     var onHighlightEnded: ((Bool) -> Void)?
     var onSlide: ((Int) -> Void)?
     let machine = SplitSpaceMachine()
+    /// Ripples spread from each finger inside the cap, so the pressed side is felt without a seam.
+    private let rippleHost = CALayer()
+    private let rippleMask = CAShapeLayer()
+    private var glows: [Int: CAGradientLayer] = [:]
     /// The current input mode, in small grey letters at the lower right, as on Apple's Space bar.
     var modeLabel = "" { didSet { if oldValue != modeLabel { setNeedsDisplay() } } }
     private var touchIDs: [ObjectIdentifier: Int] = [:]
@@ -375,6 +370,8 @@ final class SpaceCursorButton: KeycapButton {
     override init(frame: CGRect) {
         super.init(frame: frame)
         isMultipleTouchEnabled = true
+        rippleHost.mask = rippleMask; rippleHost.masksToBounds = true
+        layer.addSublayer(rippleHost)
         machine.onTap = { [weak self] in self?.sendActions(for: .touchUpInside) }
         machine.onCaretBegan = { [weak self] in self?.onCursorBegan?() ?? false }
         machine.onCaretMove = { [weak self] in self?.onCursorMove?($0) }
@@ -391,24 +388,70 @@ final class SpaceCursorButton: KeycapButton {
     private func reset() {
         timers.values.forEach { $0.invalidate() }; timers = [:]; touchIDs = [:]
         machine.cancelAll()
+        for id in Array(glows.keys) { endRipple(id: id) }
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        rippleHost.frame = bounds
+        rippleMask.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 0.5), cornerRadius: KeycapStyle.cornerRadius).cgPath
+    }
+    private var rippleRadius: CGFloat { max(40, bounds.width * 0.3) }
+    private func startRipple(id: Int, at point: CGPoint) {
+        let color = theme.palette.accent
+        // A ring that spreads and fades once...
+        let ring = CAShapeLayer(); ring.fillColor = color.withAlphaComponent(0.22).cgColor
+        ring.strokeColor = color.withAlphaComponent(0.45).cgColor; ring.lineWidth = 1.5
+        ring.frame = rippleHost.bounds
+        let start = UIBezierPath(arcCenter: point, radius: 2, startAngle: 0, endAngle: .pi * 2, clockwise: true).cgPath
+        let end = UIBezierPath(arcCenter: point, radius: rippleRadius * 1.5, startAngle: 0, endAngle: .pi * 2, clockwise: true).cgPath
+        ring.path = end; rippleHost.addSublayer(ring)
+        let grow = CABasicAnimation(keyPath: "path"); grow.fromValue = start; grow.toValue = end
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+        let group = CAAnimationGroup(); group.animations = [grow, fade]; group.duration = 0.7
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        CATransaction.begin(); CATransaction.setCompletionBlock { ring.removeFromSuperlayer() }
+        ring.add(group, forKey: "ripple"); ring.opacity = 0
+        CATransaction.commit()
+        // ...and a soft glow that follows the finger while it stays down.
+        let glow = CAGradientLayer(); glow.type = .radial
+        glow.colors = [color.withAlphaComponent(0.34).cgColor, color.withAlphaComponent(0).cgColor]
+        glow.startPoint = CGPoint(x: 0.5, y: 0.5); glow.endPoint = CGPoint(x: 1, y: 1)
+        glow.bounds = CGRect(x: 0, y: 0, width: rippleRadius * 2, height: rippleRadius * 2); glow.position = point
+        glow.opacity = 0; rippleHost.addSublayer(glow); glows[id] = glow
+        let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 0; appear.toValue = 1; appear.duration = 0.15
+        glow.opacity = 1; glow.add(appear, forKey: "appear")
+    }
+    private func moveRipple(id: Int, to point: CGPoint) {
+        guard let glow = glows[id] else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true); glow.position = point; CATransaction.commit()
+    }
+    private func endRipple(id: Int) {
+        guard let glow = glows.removeValue(forKey: id) else { return }
+        CATransaction.begin(); CATransaction.setCompletionBlock { glow.removeFromSuperlayer() }
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = glow.presentation()?.opacity ?? 1; fade.toValue = 0; fade.duration = 0.3
+        glow.opacity = 0; glow.add(fade, forKey: "fade")
+        CATransaction.commit()
     }
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let point = touch.location(in: self)
             if machine.presses.isEmpty { sendActions(for: .touchDown) }
             nextID += 1; let id = nextID; touchIDs[ObjectIdentifier(touch)] = id
-            machine.down(id, half: point.x < bounds.midX ? .left : .right, at: point)
+            machine.down(id, half: point.x < bounds.midX ? .left : .right, at: point); startRipple(id: id, at: point)
             let timer = Timer(timeInterval: SplitSpaceMachine.holdDuration, repeats: false) { [weak self] _ in self?.machine.holdElapsed(id) }
             timers[id] = timer; RunLoop.main.add(timer, forMode: .common)
         }
     }
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for touch in touches { if let id = touchIDs[ObjectIdentifier(touch)] { machine.move(id, to: touch.location(in: self)) } }
+        for touch in touches {
+            guard let id = touchIDs[ObjectIdentifier(touch)] else { continue }
+            machine.move(id, to: touch.location(in: self)); moveRipple(id: id, to: touch.location(in: self))
+        }
     }
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             guard let id = touchIDs.removeValue(forKey: ObjectIdentifier(touch)) else { continue }
-            timers.removeValue(forKey: id)?.invalidate(); machine.up(id)
+            timers.removeValue(forKey: id)?.invalidate(); machine.up(id); endRipple(id: id)
         }
     }
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { reset() }
