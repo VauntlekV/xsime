@@ -400,4 +400,24 @@ import RimesCore
         parent.view.layoutIfNeeded(); keyboard.view.layoutIfNeeded()
         return (window, keyboard)
     }
+
+    func testReturnStaysDisabledInAnEmptyFieldThatAsksForItAndSpaceShowsTheInputMode() {
+        let (window, keyboard) = host(.qwerty); defer { window.isHidden = true }
+        keyboard.layoutProxy.returnKeyType = .search; keyboard.layoutProxy.enablesReturnKeyAutomatically = true
+        keyboard.layoutProxy.native.text = ""
+        keyboard.developmentContent(); window.layoutIfNeeded()
+        let enter = keyboard.developmentStandardFunctions[.enter] as! KeycapButton
+        XCTAssertFalse(enter.isEnabled, "An empty Search field disables Return, as on Apple's keyboard")
+        keyboard.layoutProxy.native.text = "a"
+        keyboard.developmentContent(); window.layoutIfNeeded()
+        XCTAssertTrue(enter.isEnabled)
+        keyboard.layoutProxy.native.text = ""; keyboard.layoutProxy.enablesReturnKeyAutomatically = false
+        keyboard.developmentContent(); window.layoutIfNeeded()
+        XCTAssertTrue(enter.isEnabled, "Fields that do not ask for it keep Return enabled")
+        keyboard.developmentChoose(.pinyin); window.layoutIfNeeded()
+        XCTAssertEqual(keyboard.developmentSpaceKey.modeLabel, L("全拼", "Pinyin"))
+        XCTAssertNil(keyboard.developmentSpaceKey.title(for: .normal)); XCTAssertNil(keyboard.developmentSpaceKey.image(for: .normal))
+        keyboard.developmentChoose(.english); window.layoutIfNeeded()
+        XCTAssertEqual(keyboard.developmentSpaceKey.modeLabel, "EN")
+    }
 }

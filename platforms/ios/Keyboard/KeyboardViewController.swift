@@ -480,7 +480,7 @@ final class KeyboardViewController: UIInputViewController {
                 guard let self else { return }
                 self.noteTypingKey(); self.space()
             }
-            key.symbol("space", label: L("空格", "Space"))
+            key.accessibilityLabel = L("空格", "Space")
             key.accessibilityHint = L("点按输入空格；按住右半，在左半滑动移动光标；按住左半，在右半滑动展开候选或选词；单独滑动一半可选词", "Tap for space. Hold the right half and slide the left to move the cursor. Hold the left half and slide the right to open candidates or pick a word. Slide one half alone to sweep the candidates.")
             key.onCursorBegan = { [weak self] in self?.beginCaretDrag(selecting: false) ?? false }
             key.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
@@ -1085,6 +1085,20 @@ final class KeyboardViewController: UIInputViewController {
         default: nil
         }
     }
+    /// Short name of the active input scheme, shown on the Space bar.
+    private var inputModeName: String {
+        if directEnglish { return "EN" }
+        if let selection = importedSchemeSelection {
+            return importedSchemeLibrary.packages.first { $0.id == selection.packageID }?.schemas.first { $0.id == selection.schemaID }?.name ?? selection.schemaID
+        }
+        switch scheme {
+        case .pinyin, .chord: return usesNineKey ? L("九宫格", "9-key") : L("全拼", "Pinyin")
+        case .ziranma: return L("自然码", "Ziranma")
+        case .wubi86: return L("五笔 86", "Wubi 86")
+        case .lingxiWubi: return L("犀术五笔", "XSIME Wubi")
+        case .english: return "EN"
+        }
+    }
     private func refreshReturnKey() {
         let title: String, hint: String?
         let selected: Bool, enabled: Bool
@@ -1104,7 +1118,10 @@ final class KeyboardViewController: UIInputViewController {
         case .host:
             title = hostReturnTitle ?? L("换行", "return")
             hint = L("使用当前输入框的回车操作", "Use the current field's Return action")
-            selected = bufferEnabled || hostReturnTitle != nil; enabled = true
+            selected = bufferEnabled || hostReturnTitle != nil
+            // Like Apple's keyboard: a field that asks for it keeps Return (Search, Go…) disabled while empty.
+            enabled = !(onscreen && textDocumentProxy.enablesReturnKeyAutomatically == true && !textDocumentProxy.hasText
+                        && snapshot.preedit.isEmpty && (!bufferEnabled || bufferIsEmpty))
         }
         returnKey.setImage(nil, for: .normal); returnKey.setTitle(title, for: .normal)
         returnKey.accessibilityLabel = title; returnKey.accessibilityHint = hint
@@ -1249,13 +1266,10 @@ final class KeyboardViewController: UIInputViewController {
         }
         symbolsKey.setTitle(symbolPage ? "123" : "#+=", for: .normal)
         numbers.setTitle(surface.numeric ? (usesNineKeyEngine && !directEnglish ? "拼音" : "ABC") : "123", for: .normal)
-        if surface.usesStandardLayout && skin == .system {
-            spaceKey.setImage(nil, for: .normal)
-            spaceKey.setTitle(usesNineKey && !snapshot.candidates.isEmpty ? "选定" : directEnglish ? "space" : "空格", for: .normal)
-            spaceKey.titleLabel?.font = .systemFont(ofSize: 16)
-        } else if spaceKey.image(for: .normal) == nil {
-            spaceKey.symbol("space", label: compactTypingKeys ? L("左空格", "Left space") : L("空格", "Space"))
-        }
+        // The Space bar carries no word; it shows the input mode in grey at its lower right.
+        spaceKey.setImage(nil, for: .normal); spaceKey.setTitle(nil, for: .normal)
+        spaceKey.accessibilityLabel = L("空格", "Space")
+        spaceKey.modeLabel = inputModeName
     }
     private func renderHandPreview() {
         let preview = surface.handPreview

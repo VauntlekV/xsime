@@ -100,6 +100,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
     let native = UITextView()
     var keyboardAppearance: UIKeyboardAppearance = .default
     var returnKeyType: UIReturnKeyType = .default
+    var enablesReturnKeyAutomatically = false
     var documentIdentifier = UUID()
     var identityAvailable = true
     override func responds(to selector: Selector!) -> Bool {

@@ -75,21 +75,14 @@ extension KeycapStyle {
         let palette = theme.palette, system = theme.keyboardStyle == .system
         let snapped = pixelSnapped(rect)
         let box = system ? snapped.insetBy(dx: 0, dy: 0.5) : capRect(in: snapped, pressed: false, compact: compact)
-        let seam: CGFloat = 1.5, cut: CGFloat = compact ? 3 : 7
+        // Outer corners round like every other key; the ends at the seam stay square.
+        let seam: CGFloat = 1.5, radius: CGFloat = system ? cornerRadius : (compact ? 3 : cornerRadius)
         func path(_ half: SpaceHalf, dy: CGFloat = 0) -> UIBezierPath {
-            let top = box.minY + dy, bottom = box.maxY + dy, p = UIBezierPath()
-            if half == .left {
-                let edge = box.midX - seam / 2
-                p.move(to: CGPoint(x: box.minX + cut, y: top)); p.addLine(to: CGPoint(x: edge, y: top))
-                p.addLine(to: CGPoint(x: edge, y: bottom)); p.addLine(to: CGPoint(x: box.minX + cut, y: bottom))
-                p.addLine(to: CGPoint(x: box.minX, y: bottom - cut)); p.addLine(to: CGPoint(x: box.minX, y: top + cut))
-            } else {
-                let edge = box.midX + seam / 2
-                p.move(to: CGPoint(x: edge, y: top)); p.addLine(to: CGPoint(x: box.maxX - cut, y: top))
-                p.addLine(to: CGPoint(x: box.maxX, y: top + cut)); p.addLine(to: CGPoint(x: box.maxX, y: bottom - cut))
-                p.addLine(to: CGPoint(x: box.maxX - cut, y: bottom)); p.addLine(to: CGPoint(x: edge, y: bottom))
-            }
-            p.close(); return p
+            let edge = half == .left ? box.midX - seam / 2 : box.midX + seam / 2
+            let frame = half == .left ? CGRect(x: box.minX, y: box.minY + dy, width: edge - box.minX, height: box.height)
+                : CGRect(x: edge, y: box.minY + dy, width: box.maxX - edge, height: box.height)
+            return UIBezierPath(roundedRect: frame, byRoundingCorners: half == .left ? [.topLeft, .bottomLeft] : [.topRight, .bottomRight],
+                                cornerRadii: CGSize(width: radius, height: radius))
         }
         context.saveGState()
         if !enabled { context.setAlpha(0.4) }
@@ -371,6 +364,8 @@ final class SpaceCursorButton: KeycapButton {
     var onHighlightEnded: ((Bool) -> Void)?
     var onSlide: ((Int) -> Void)?
     let machine = SplitSpaceMachine()
+    /// The current input mode, in small grey letters at the lower right, as on Apple's Space bar.
+    var modeLabel = "" { didSet { if oldValue != modeLabel { setNeedsDisplay() } } }
     private var touchIDs: [ObjectIdentifier: Int] = [:]
     private var nextID = 0
     private var timers: [Int: Timer] = [:]
@@ -417,6 +412,10 @@ final class SpaceCursorButton: KeycapButton {
     override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { reset() } }
     override func draw(_ rect: CGRect) {
         KeycapStyle.drawSplitSpace(in: bounds, pressed: machine.pressedHalves, enabled: isEnabled, compact: compactCap, theme: theme, legacy: legacyKey)
+        guard !modeLabel.isEmpty else { return }
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: UIColor.secondaryLabel]
+        let size = modeLabel.size(withAttributes: attributes)
+        modeLabel.draw(at: CGPoint(x: bounds.maxX - size.width - 9, y: bounds.maxY - size.height - 5), withAttributes: attributes)
     }
 }
 
