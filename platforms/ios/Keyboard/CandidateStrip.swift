@@ -39,6 +39,26 @@ struct CandidateLayout {
     }
 }
 
+/// The expand control is a full key square: its touch area reaches above the row into the keyboard's top margin
+/// and down into the gap above the keys, but only over the control, never over the words.
+protocol ExpandReach: UIView {
+    var expandReachWidth: CGFloat { get }
+}
+enum ExpandReachMetrics { static let above: CGFloat = 7, below: CGFloat = 4 }
+extension ExpandReach {
+    func pointInsideOrInExpandReach(_ point: CGPoint, default base: Bool) -> Bool {
+        if base { return true }
+        return point.x >= bounds.width - expandReachWidth && point.y >= -ExpandReachMetrics.above && point.y <= bounds.height + ExpandReachMetrics.below
+    }
+}
+/// Holds the candidate strip; see `ExpandReach`.
+final class CandidatePanelView: UIView, ExpandReach {
+    var expandReachWidth: CGFloat = 0
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        pointInsideOrInExpandReach(point, default: super.point(inside: point, with: event))
+    }
+}
+
 private final class CandidateScrollView: UIScrollView {
     override func touchesShouldCancel(in view: UIView) -> Bool { true }
 }
@@ -52,7 +72,11 @@ private final class CandidateContentView: UIView {
     }
 }
 
-final class CandidateStrip: UIView {
+final class CandidateStrip: UIView, ExpandReach {
+    var expandReachWidth: CGFloat { texts.isEmpty ? 0 : CandidateLayout.controlWidth + 12 }
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        pointInsideOrInExpandReach(point, default: super.point(inside: point, with: event))
+    }
     let scroll: UIScrollView = CandidateScrollView()
     let expandButton = CandidateButton()
     private let content = CandidateContentView()
@@ -77,7 +101,7 @@ final class CandidateStrip: UIView {
         scroll.showsHorizontalScrollIndicator = false; scroll.showsVerticalScrollIndicator = false; scroll.hideEdgeEffects()
         expandButton.accessibilityIdentifier = "keyboard.candidates.expand"
         // A full key wide plus reach to its left: it sits at the screen edge, where touches are hardest to land.
-        expandButton.hitSlop = UIEdgeInsets(top: 4, left: 12, bottom: 4, right: 0)
+        expandButton.hitSlop = UIEdgeInsets(top: ExpandReachMetrics.above, left: 12, bottom: ExpandReachMetrics.below, right: 0)
         expandButton.setPreferredSymbolConfiguration(.init(pointSize: 19, weight: .semibold), forImageIn: .normal)
         expandButton.addAction(UIAction { [weak self] _ in self?.onPress?() }, for: .touchDown)
         expandButton.addAction(UIAction { [weak self] _ in self?.onExpand?() }, for: .touchUpInside)

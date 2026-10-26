@@ -183,7 +183,7 @@ final class KeyboardViewController: UIInputViewController {
     /// them as shown. Chord keeps its own number page; imported schemes own their punctuation.
     private var chineseNumberPages: Bool { !directEnglish && importedSchemeSelection == nil && !usesChordLayout }
     private let status = UILabel(), source = SingleLineTextView(), result = SingleLineTextView(), surface = KeySurface()
-    private let bufferPanel = UIView(), insertionSlot = UIView(), candidatePanel = UIView()
+    private let bufferPanel = UIView(), insertionSlot = UIView(), candidatePanel = CandidatePanelView()
     private let bufferButton = KeycapButton(), aiButton = KeycapButton(), moreButton = KeycapButton()
     private let deleteButton = RepeatKeycapButton()
     /// Chord mode swaps Delete into the right-hand 中/EN cell and 中/EN into Delete's slot.
@@ -1491,6 +1491,7 @@ final class KeyboardViewController: UIInputViewController {
         }
         bufferButton.frame = CGRect(x: candidatePanel.bounds.width - 32, y: 0, width: 32, height: 32)
         candidateStrip.frame = candidatePanel.bounds
+        (candidatePanel as? CandidatePanelView)?.expandReachWidth = candidateStrip.expandReachWidth
         moreButton.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
         handPreview.frame = CGRect(x: 36, y: 0, width: max(0, candidatePanel.bounds.width - 72), height: 32)
         shortcuts.frame = handPreview.frame

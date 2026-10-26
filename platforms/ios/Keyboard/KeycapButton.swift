@@ -252,10 +252,18 @@ final class SplitSpaceMachine {
     /// Points of travel per highlighted candidate, per caret step, per matrix row.
     static let highlightStep: CGFloat = 22, caretStep: CGFloat = 10, slideStep: CGFloat = 24
     enum Role { case undecided, holder, caret, sweep, selector, dead }
+    /// While the other half is held, sideways and vertical travel never mix: one axis is chosen from the
+    /// first clear movement and kept until the finger pauses or clearly turns the other way.
+    enum Axis { case none, horizontal, vertical }
+    static let pause: TimeInterval = 0.22, axisSlop: CGFloat = 8, axisSwitch: CGFloat = 40
     struct Press {
         var half: SpaceHalf
         var start: CGPoint
         var anchor: CGPoint
+        var axis = Axis.none
+        var origin = CGPoint.zero
+        var lastMove: TimeInterval = 0
+        var baseSteps = 0
         var role = Role.undecided
         var steps = 0
         var served = false, slid = false, highlighting = false
@@ -272,7 +280,7 @@ final class SplitSpaceMachine {
     /// Signed candidate steps from where the highlight began.
     var onHighlightMove: (Int) -> Void = { _ in }
     var onHighlightEnded: (Bool) -> Void = { _ in }
-    /// One matrix row per call: +1 down, -1 up.
+    /// One line per call: +1 turns to the next line (finger moving up, as in a scrolled list), -1 to the previous.
     var onSlide: (Int) -> Void = { _ in }
     var onChange: () -> Void = {}
     var pressedHalves: Set<SpaceHalf> { Set(presses.values.map(\.half)) }
@@ -280,6 +288,7 @@ final class SplitSpaceMachine {
 
     func down(_ id: Int, half: SpaceHalf, at point: CGPoint) {
         var press = Press(half: half, start: point, anchor: point)
+        press.origin = point
         if let holder = presses.first(where: { $0.value.role == .holder && $0.value.half != half }) {
             presses[holder.key]?.served = true
             if holder.value.half == .right { press.role = onCaretBegan() ? .caret : .dead }
@@ -291,7 +300,7 @@ final class SplitSpaceMachine {
         guard var press = presses[id], press.role == .undecided, !press.slid else { return }
         press.role = .holder; presses[id] = press; onChange()
     }
-    func move(_ id: Int, to point: CGPoint) {
+    func move(_ id: Int, to point: CGPoint, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         guard var press = presses[id] else { return }
         func horizontalSteps(_ step: CGFloat = SplitSpaceMachine.highlightStep) -> Int { Int(((point.x - press.start.x) / step).rounded(.towardZero)) }
         switch press.role {
@@ -306,12 +315,34 @@ final class SplitSpaceMachine {
             let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
             if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCaretMove(count) }
         case .selector:
-            let steps = horizontalSteps(selectorStep)
-            if press.highlighting, steps != press.steps { press.steps = steps; onHighlightMove(steps) }
-            let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
-            if rows != 0 {
-                press.anchor.y += CGFloat(rows) * Self.slideStep
-                for _ in 0..<abs(rows) { onSlide(rows > 0 ? 1 : -1) }
+            if press.axis != .none && time - press.lastMove > Self.pause { press.axis = .none; press.origin = point }
+            press.lastMove = time
+            func lock(_ axis: Axis) {
+                press.axis = axis; press.origin = point
+                if axis == .horizontal { press.baseSteps = press.steps; press.anchor.x = point.x } else { press.anchor.y = point.y }
+            }
+            let dx = point.x - press.origin.x, dy = point.y - press.origin.y
+            switch press.axis {
+            case .none:
+                guard hypot(dx, dy) > Self.axisSlop else { break }
+                // The axis is decided from where this movement began, so the slop travel still counts.
+                let from = press.origin
+                lock(abs(dx) >= abs(dy) ? .horizontal : .vertical)
+                if press.axis == .horizontal { press.anchor.x = from.x } else { press.anchor.y = from.y }
+            case .horizontal where abs(dy) > Self.axisSwitch && abs(dy) > 2 * abs(dx): lock(.vertical)
+            case .vertical where abs(dx) > Self.axisSwitch && abs(dx) > 2 * abs(dy): lock(.horizontal)
+            default: break
+            }
+            if press.axis == .horizontal, press.highlighting {
+                let steps = press.baseSteps + Int(((point.x - press.anchor.x) / selectorStep).rounded(.towardZero))
+                if steps != press.steps { press.steps = steps; onHighlightMove(steps) }
+            } else if press.axis == .vertical {
+                let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
+                if rows != 0 {
+                    press.anchor.y += CGFloat(rows) * Self.slideStep
+                    // Finger up turns to the next line, as dragging a list up does.
+                    for _ in 0..<abs(rows) { onSlide(rows < 0 ? 1 : -1) }
+                }
             }
         case .holder, .dead: break
         }

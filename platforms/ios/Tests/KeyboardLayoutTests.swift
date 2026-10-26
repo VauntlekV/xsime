@@ -898,23 +898,29 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(strip.highlightedIndex, middle)
         XCTAssertGreaterThan(middle, 0)
         XCTAssertGreaterThan(m.selectorStep, 0)
-        // Down turns to the next line of words: the row scrolls and the highlight lands mid-line.
-        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
+        // Finger up turns to the next line of words (as dragging a list up does): the row scrolls and the highlight lands mid-line.
+        var t: TimeInterval = 10
+        m.move(2, to: CGPoint(x: 150, y: 20), at: t)
+        t += 0.05; m.move(2, to: CGPoint(x: 150, y: 20 - SplitSpaceMachine.slideStep), at: t); window.layoutIfNeeded()
         XCTAssertFalse(strip.expanded)
         XCTAssertGreaterThan(strip.scroll.contentOffset.x, 0)
         let page2 = try! XCTUnwrap(strip.highlightedIndex)
         XCTAssertGreaterThan(page2, middle)
         XCTAssertEqual(page2, strip.middleVisibleIndex)
-        // Up returns to the first line; up again does nothing (no matrix to close).
-        m.move(2, to: CGPoint(x: 150, y: 20)); window.layoutIfNeeded()
+        // Finger down returns to the previous line; at the first line it does nothing further.
+        t += 0.05; m.move(2, to: CGPoint(x: 150, y: 20), at: t); window.layoutIfNeeded()
         XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
         XCTAssertEqual(strip.highlightedIndex, strip.middleVisibleIndex)
-        m.move(2, to: CGPoint(x: 150, y: 20 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
+        t += 0.05; m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep), at: t); window.layoutIfNeeded()
         XCTAssertFalse(strip.expanded); XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
-        // Sideways travel is scaled so a sweep of the half covers the line; releasing commits.
+        // Sideways and vertical travel are decoupled: while sliding sideways, vertical wobble turns no lines.
         controller.layoutProxy.native.text = ""
+        t += 0.6 // a pause frees the axis
         let from = try! XCTUnwrap(strip.highlightedIndex)
-        m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20 - SplitSpaceMachine.slideStep))
+        m.move(2, to: CGPoint(x: 150, y: 20), at: t)
+        t += 0.05; m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20 + 2), at: t)
+        t += 0.05; m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20 - SplitSpaceMachine.slideStep * 1.5), at: t)
+        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5, "Wobble during a sideways slide does not flip the line")
         let to = try! XCTUnwrap(strip.highlightedIndex)
         XCTAssertEqual(to, from + 2)
         let expected = try! XCTUnwrap(strip.buttons[to].currentTitle)
@@ -923,6 +929,55 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(strip.scroll.alpha, 1)
     }
 
+    func testExpandControlIsAFullSquareTouchTargetThroughTheWholeKeyboard() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin)
+        controller.developmentType("shi"); window.layoutIfNeeded()
+        let strip = controller.layoutViews.candidates
+        let frame = strip.expandButton.convert(strip.expandButton.bounds, to: controller.view)
+        // From the keyboard's top margin down into the gap above the keys, across the control and a little left of it.
+        var misses = 0, total = 0
+        for y in stride(from: max(1, frame.minY - 6), through: frame.maxY + 3, by: 2) {
+            for x in stride(from: frame.minX - 10, to: frame.maxX - 1, by: 4) {
+                total += 1
+                if controller.view.hitTest(CGPoint(x: x, y: y), with: nil) !== strip.expandButton { misses += 1 }
+            }
+        }
+        XCTAssertEqual(misses, 0, "\(misses) of \(total) points missed the control")
+        XCTAssertGreaterThanOrEqual(frame.height + 6 + 3, 38, "The reachable area is close to a key square")
+        // The words next to it keep their own touches.
+        let word = strip.buttons[0].convert(strip.buttons[0].bounds, to: controller.view)
+        XCTAssertTrue(controller.view.hitTest(CGPoint(x: word.midX, y: word.midY), with: nil) === strip.buttons[0])
+    }
+    func testHeldHalfAxesLockPauseAndSwitchLikeIntermittentThumbSliding() {
+        let m = SplitSpaceMachine()
+        var slides: [Int] = [], moves: [Int] = []
+        m.onHighlightBegan = { _ in true }; m.onSlide = { slides.append($0) }; m.onHighlightMove = { moves.append($0) }
+        m.selectorStep = 20
+        m.down(1, half: .left, at: .zero); m.holdElapsed(1)
+        m.down(2, half: .right, at: CGPoint(x: 100, y: 50))
+        var t: TimeInterval = 1
+        // Finger up is the next line (+1); finger down the previous (-1).
+        m.move(2, to: CGPoint(x: 100, y: 50), at: t)
+        t += 0.05; m.move(2, to: CGPoint(x: 100, y: 50 - 24), at: t)
+        XCTAssertEqual(slides, [1])
+        t += 0.05; m.move(2, to: CGPoint(x: 100, y: 50), at: t)
+        XCTAssertEqual(slides, [1, -1])
+        // Locked vertical: sideways jitter selects nothing.
+        t += 0.05; m.move(2, to: CGPoint(x: 120, y: 50), at: t)
+        XCTAssertTrue(moves.isEmpty)
+        // After a pause the sideways slide takes over, and vertical wobble then does nothing.
+        t += 0.5; m.move(2, to: CGPoint(x: 120, y: 50), at: t)
+        t += 0.05; m.move(2, to: CGPoint(x: 160, y: 52), at: t)
+        XCTAssertEqual(moves.last, 2)
+        t += 0.05; m.move(2, to: CGPoint(x: 160, y: 30), at: t)
+        XCTAssertEqual(slides, [1, -1])
+        // A pause, then vertical again, resumes line turning.
+        t += 0.5; m.move(2, to: CGPoint(x: 160, y: 30), at: t)
+        t += 0.05; m.move(2, to: CGPoint(x: 160, y: 30 - 24), at: t)
+        XCTAssertEqual(slides, [1, -1, 1])
+        m.up(2); m.up(1)
+    }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         let v = controller.layoutViews
