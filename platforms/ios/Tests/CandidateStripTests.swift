@@ -177,7 +177,7 @@ import UIKit
             for x in stride(from: CGFloat(1), to: strip.bounds.width, by: 3) {
                 let point = CGPoint(x: x, y: y)
                 guard !strip.buttons.contains(where: { $0.convert($0.bounds, to: strip).contains(point) }),
-                      !strip.expandButton.frame.contains(point) else { continue }
+                      !strip.expandButton.frame.insetBy(dx: -12, dy: -4).contains(point) else { continue }
                 XCTAssertTrue(strip.hitTest(point, with: nil) === strip.scroll, "\(point)"); checked += 1
             }
         }

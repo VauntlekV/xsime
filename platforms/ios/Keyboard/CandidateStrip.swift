@@ -16,7 +16,7 @@ struct CandidateLayout {
     static let padding: CGFloat = 16
     /// Width of the expand/collapse control. Collapsed it sits beside the words; expanded it
     /// overlays the end of the first row only, so the other rows keep the full width.
-    static let controlWidth: CGFloat = 44
+    static let controlWidth: CGFloat = 52
     static func measure(_ texts: [String], comments: [String] = [], width: CGFloat, expanded: Bool, landscape: Bool, firstRowReserve: CGFloat = 0) -> CandidateLayout {
         let font = UIFont.systemFont(ofSize: landscape ? 18 : 20)
         let rowHeight = rowHeight(landscape: landscape)
@@ -76,6 +76,9 @@ final class CandidateStrip: UIView {
         scroll.delaysContentTouches = false
         scroll.showsHorizontalScrollIndicator = false; scroll.showsVerticalScrollIndicator = false; scroll.hideEdgeEffects()
         expandButton.accessibilityIdentifier = "keyboard.candidates.expand"
+        // A full key wide plus reach to its left: it sits at the screen edge, where touches are hardest to land.
+        expandButton.hitSlop = UIEdgeInsets(top: 4, left: 12, bottom: 4, right: 0)
+        expandButton.setPreferredSymbolConfiguration(.init(pointSize: 19, weight: .semibold), forImageIn: .normal)
         expandButton.addAction(UIAction { [weak self] _ in self?.onPress?() }, for: .touchDown)
         expandButton.addAction(UIAction { [weak self] _ in self?.onExpand?() }, for: .touchUpInside)
     }
@@ -363,6 +366,11 @@ final class CandidateWheel: UIView {
 final class CandidateButton: UIButton {
     let commentLabel = UILabel()
     private let highlight = UIView()
+    /// Extra reach beyond the visible button, so a thumb that lands near it still counts.
+    var hitSlop = UIEdgeInsets.zero
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.inset(by: UIEdgeInsets(top: -hitSlop.top, left: -hitSlop.left, bottom: -hitSlop.bottom, right: -hitSlop.right)).contains(point)
+    }
     /// Chosen by the Space-bar sweep, not touched: shows in the accent colour.
     var isSweepTarget = false { didSet { if oldValue != isSweepTarget { updateHighlight() } } }
     var comment = "" {
