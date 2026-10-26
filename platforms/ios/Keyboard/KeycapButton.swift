@@ -248,13 +248,13 @@ enum SpaceZone { case left, center, right }
 /// - Slide up or down with one finger: the candidate lines roll (finger up is the next line) with no word
 ///   selected; lifting leaves the row on that line.
 /// - Hold the middle for 1 s: cursor mode; sliding sideways moves the caret.
-/// - Two fingers pinching to the middle: pull the field's text into the Buffer. Two fingers spreading from the
-///   middle to the sides: put everything in the Buffer on screen and close it.
+/// - Two fingers pinching from the sides to the middle: put the field's text straight into the Buffer, replacing
+///   whatever it holds.
 final class SplitSpaceMachine {
     static let cursorHold: TimeInterval = 1.0
     static let slop: CGFloat = 8
     static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, pairSlop: CGFloat = 16
-    enum Role { case undecided, sweep, roller, cursor, pinch, spread, dead }
+    enum Role { case undecided, sweep, roller, cursor, pinch, dead }
     struct Press {
         var start: CGPoint
         var last: CGPoint
@@ -278,7 +278,6 @@ final class SplitSpaceMachine {
     var onCursorMove: (Int) -> Void = { _ in }
     var onCursorEnded: () -> Void = {}
     var onPinch: () -> Void = {}
-    var onSpread: () -> Void = {}
     var onChange: () -> Void = {}
     var isActive: Bool { !presses.isEmpty }
     func zone(at x: CGFloat) -> SpaceZone { x < width / 3 ? .left : x > width * 2 / 3 ? .right : .center }
@@ -327,32 +326,28 @@ final class SplitSpaceMachine {
         case .cursor:
             let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
             if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCursorMove(count) }
-        case .pinch, .spread, .dead: break
+        case .pinch, .dead: break
         }
         presses[id] = press; onChange()
     }
-    /// Two undecided fingers moving toward each other pinch (the Buffer pulls the field's text in); moving apart
-    /// they spread (the Buffer goes on screen and closes). Each fires once.
+    /// Two undecided fingers moving toward each other pinch; the Buffer takes the field's text, once.
     private func evaluatePair(_ a: Int, _ b: Int) {
         guard let p = presses[a], let q = presses[b] else { return }
         let before = abs(p.start.x - q.start.x), now = abs(p.last.x - q.last.x)
         if before - now > Self.pairSlop {
             presses[a]?.role = .pinch; presses[b]?.role = .pinch; presses[a]?.slid = true; presses[b]?.slid = true
             onPinch()
-        } else if now - before > Self.pairSlop {
-            presses[a]?.role = .spread; presses[b]?.role = .spread; presses[a]?.slid = true; presses[b]?.slid = true
-            onSpread()
         }
         onChange()
     }
     func up(_ id: Int) {
         guard let press = presses.removeValue(forKey: id) else { return }
         switch press.role {
-        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .pinch && $0.role != .spread }) { onTap() }
+        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .pinch }) { onTap() }
         case .sweep: onSweepEnded(true)
         case .roller: onRollerEnded()
         case .cursor: onCursorEnded()
-        case .pinch, .spread, .dead: break
+        case .pinch, .dead: break
         }
         onChange()
     }

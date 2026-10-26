@@ -845,12 +845,6 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         m.move(1, to: CGPoint(x: 80, y: 20)); m.move(2, to: CGPoint(x: 220, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
         m.up(1); m.up(2)
         XCTAssertEqual(events, ["pinch"])
-        // Two fingers spreading from the middle to the sides: once, and no space.
-        events = []; m.onSpread = { events.append("spread") }
-        m.down(1, at: CGPoint(x: 140, y: 20)); m.down(2, at: CGPoint(x: 160, y: 20))
-        m.move(1, to: CGPoint(x: 100, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20)); m.move(2, to: CGPoint(x: 230, y: 20))
-        m.up(1); m.up(2)
-        XCTAssertEqual(events, ["spread"])
         // A slide with no candidates types no space.
         events = []; m.onSweepBegan = { false }
         m.down(1, at: CGPoint(x: 40, y: 20)); m.move(1, to: CGPoint(x: 120, y: 20)); m.up(1)
@@ -892,25 +886,30 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         m.up(1)
         XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "", "Rolling commits no word")
     }
-    func testSpreadingTwoFingersPutsTheWholeBufferOnScreenAndClosesIt() throws {
+    func testPinchingPutsTheFieldTextStraightIntoTheBufferAndCoversWhatItHolds() async throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         let (_, m) = space(controller)
-        controller.layoutProxy.native.text = ""
-        controller.developmentBuffer("甲。乙。丙。"); window.layoutIfNeeded()
+        func pinch(_ a: Int) {
+            m.down(a, at: CGPoint(x: 10, y: 20)); m.down(a + 1, at: CGPoint(x: m.width - 10, y: 20))
+            m.move(a, to: CGPoint(x: m.width / 2 - 10, y: 20)); m.move(a + 1, to: CGPoint(x: m.width / 2 + 10, y: 20))
+            m.up(a); m.up(a + 1)
+        }
+        func waitForBuffer(_ text: String) async throws {
+            for _ in 0..<100 where controller.developmentBufferSource.text != text { try await Task.sleep(nanoseconds: 20_000_000) }
+        }
+        // Closed Buffer: it opens and takes the field's text, with no second confirmation.
+        controller.layoutProxy.native.text = "输入框里的字"; controller.layoutProxy.native.selectedRange = NSRange(location: 6, length: 0)
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden)
+        pinch(1)
+        try await waitForBuffer("输入框里的字"); await controller.developmentWaitForBufferImport()
+        XCTAssertEqual(controller.developmentBufferSource.text, "输入框里的字")
         XCTAssertFalse(controller.layoutViews.buffer.isHidden)
-        m.down(1, at: CGPoint(x: m.width / 2 - 10, y: 20)); m.down(2, at: CGPoint(x: m.width / 2 + 10, y: 20))
-        m.move(1, to: CGPoint(x: 10, y: 20)); m.move(2, to: CGPoint(x: m.width - 10, y: 20))
-        m.up(1); m.up(2)
-        let deadline = Date().addingTimeInterval(1)
-        while controller.layoutProxy.native.text.isEmpty && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
-        window.layoutIfNeeded()
-        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。丙。")
-        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "The Buffer closes")
-        // With the Buffer closed, spreading does nothing.
-        controller.layoutProxy.native.text = "留"
-        m.down(3, at: CGPoint(x: m.width / 2 - 10, y: 20)); m.down(4, at: CGPoint(x: m.width / 2 + 10, y: 20))
-        m.move(3, to: CGPoint(x: 10, y: 20)); m.move(4, to: CGPoint(x: m.width - 10, y: 20)); m.up(3); m.up(4)
-        XCTAssertEqual(controller.layoutProxy.native.text, "留")
+        // A Buffer that already holds text is covered by the next field text, again with no question.
+        controller.layoutProxy.native.text = "新的字"; controller.layoutProxy.native.selectedRange = NSRange(location: 3, length: 0)
+        controller.textDidChange(nil)
+        pinch(5)
+        try await waitForBuffer("新的字"); await controller.developmentWaitForBufferImport()
+        XCTAssertEqual(controller.developmentBufferSource.text, "新的字")
     }
     func testHoldingTheMiddleOfSpaceMovesTheCaretInHostAndBufferWithoutTypingSpace() {
         for buffered in [false, true] {
