@@ -227,7 +227,8 @@ final class KeyboardViewController: UIInputViewController {
     private var lastHostTextChange: TimeInterval = -.infinity
     private var directEnglish: Bool { importedSchemeSelection != nil ? importedSchemeEnglish : (scheme == .english || preferences.englishInput) }
     private let globe = KeycapButton(), numbers = KeycapButton(), shiftButton = KeycapButton(), spaceKey = SpaceCursorButton()
-    private let spaceKeys = UIStackView(), chordSpaceKey = SpaceCursorButton()
+    private let spaceKeys = UIStackView()
+    private var highlightStart = 0, highlightIndex: Int?
     private var caretSteps = 0
     /// Set while the left Space is extending a Buffer selection on hold.
     private var selectingText = false
@@ -472,22 +473,23 @@ final class KeyboardViewController: UIInputViewController {
         shiftButton.addGestureRecognizer(lockCapitals)
         spaceKeys.axis = .horizontal; spaceKeys.distribution = .fillEqually; spaceKeys.spacing = bottom.spacing
         spaceKeys.accessibilityIdentifier = "keyboard.spaces"
-        for key in [spaceKey, chordSpaceKey] {
-            configure(key, "") { [weak self, weak key] in
-                guard let self, let key, key.consumeTap() else { return }
+        do {
+            // One Space in two halves (see SplitSpaceMachine): tap types, holds turn the other half into a control.
+            let key = spaceKey
+            configure(key, "") { [weak self] in
+                guard let self else { return }
                 self.noteTypingKey(); self.space()
             }
-            key.symbol("space", label: key === spaceKey ? L("空格", "Space") : L("右空格", "Right space"))
-            key.onCursorBegan = { [weak self, weak key] in
-                guard let self, let key else { return false }
-                for other in [self.spaceKey, self.chordSpaceKey] where other !== key { other.cancelTracking(with: nil) }
-                return self.beginCaretDrag(selecting: key === self.spaceKey && self.compactTypingKeys)
-            }
+            key.symbol("space", label: L("空格", "Space"))
+            key.accessibilityHint = L("点按输入空格；按住右半，在左半滑动移动光标；按住左半，在右半滑动展开候选或选词；单独滑动一半可选词", "Tap for space. Hold the right half and slide the left to move the cursor. Hold the left half and slide the right to open candidates or pick a word. Slide one half alone to sweep the candidates.")
+            key.onCursorBegan = { [weak self] in self?.beginCaretDrag(selecting: false) ?? false }
             key.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
+            key.onHighlightBegan = { [weak self] half in self?.beginCandidateHighlight(half) ?? false }
+            key.onHighlightMove = { [weak self] steps in self?.moveCandidateHighlight(steps) }
+            key.onHighlightEnded = { [weak self] commit in self?.endCandidateHighlight(commit: commit) }
+            key.onSlide = { [weak self] direction in self?.slideCandidateMatrix(direction) }
             spaceKeys.addArrangedSubview(key)
         }
-        chordSpaceKey.isHidden = true
-        chordSpaceKey.accessibilityIdentifier = "keyboard.space.right"
         for delete in [deleteButton, chordDelete] {
             delete.symbol("delete.left", label: L("删除", "Delete"))
             delete.onPressBegan = { [weak self, weak delete] in
@@ -1155,7 +1157,7 @@ final class KeyboardViewController: UIInputViewController {
         guard desired != surface.customLayout || standard != surface.standardMode else { return }
         syncingCustomLayout = true
         defer { syncingCustomLayout = false }
-        cancelDeletes(); spaceKey.cancelTracking(with: nil); chordSpaceKey.cancelTracking(with: nil)
+        cancelDeletes(); spaceKey.cancelTracking(with: nil)
         NSLayoutConstraint.deactivate(bottomKeyWidths); spaceMinimumWidth?.isActive = false
         if desired != nil || standard != nil {
             spaceKeys.removeArrangedSubview(spaceKey)
@@ -1243,7 +1245,6 @@ final class KeyboardViewController: UIInputViewController {
                 button.titleLabel?.minimumScaleFactor = 0.7
             }
             for button in [moreButton, bufferButton, aiButton, settingsButton, insertButton, stopButton, runButton, globe, chordDelete] { button.legacyKey = legacy; button.theme = theme }
-            chordSpaceKey.theme = theme
             bufferButton.accentCap = true; insertButton.accentCap = true
         }
         symbolsKey.setTitle(symbolPage ? "123" : "#+=", for: .normal)
@@ -1363,7 +1364,7 @@ final class KeyboardViewController: UIInputViewController {
         let landscape = width > 600
         bottom.spacing = compactTypingKeys ? 2 : 4
         spaceKeys.spacing = bottom.spacing
-        for case let button as KeycapButton in bottom.arrangedSubviews + [spaceKey, chordSpaceKey] where button.compactCap != compactTypingKeys {
+        for case let button as KeycapButton in bottom.arrangedSubviews + [spaceKey] where button.compactCap != compactTypingKeys {
             button.compactCap = compactTypingKeys
         }
         for constraint in bottomKeyWidths { constraint.constant = -5 * bottom.spacing / 7.5 }
@@ -1496,16 +1497,6 @@ final class KeyboardViewController: UIInputViewController {
         bottomLanguage.setTitle(surface.englishInput ? "EN" : "中", for: .normal)
         bottomLanguage.isSelected = surface.englishInput
         bottomLanguage.accessibilityLabel = surface.englishInput ? L("英文，切换中文", "English; switch to Chinese") : L("中文，切换英文", "Chinese; switch to English")
-        // Independent chord Space controls retain separate presses and hold gestures.
-        if chordSpaceKey.isHidden == swapped {
-            spaceKey.cancelTracking(with: nil); chordSpaceKey.cancelTracking(with: nil)
-            chordSpaceKey.isHidden = !swapped
-        }
-        spaceKey.accessibilityLabel = swapped ? L("左空格", "Left space") : L("空格", "Space")
-        spaceKey.accessibilityHint = swapped
-            ? L("点按输入空格；按住拖动可在 Buffer 中选择文字", "Tap for space; hold and drag to select text in the Buffer")
-            : L("按住并左右拖动可移动光标", "Hold and drag left or right to move the cursor")
-        chordSpaceKey.accessibilityHint = L("点按输入空格；按住并左右拖动可移动光标", "Tap for space; hold and drag left or right to move the cursor")
         if surface.usesCustomLayout {
             let actions = Set(surface.customLayout?.rows.flatMap { $0 }.map(\.action) ?? [])
             for (action, button) in customFunctions { button.isHidden = !actions.contains(action) }
@@ -1545,6 +1536,38 @@ final class KeyboardViewController: UIInputViewController {
             guard let target = currentDocument, delivery.moveCaret(by: steps, target: target) else { return }
         }
         caretSteps += 1; surface.feedback.send(.selection, combination: String(caretSteps))
+    }
+    // MARK: Space-bar candidate control
+    /// Starts a highlight on the visible candidates: the left half from the first, the right half from the last visible.
+    private func beginCandidateHighlight(_ half: SpaceHalf) -> Bool {
+        guard onscreen, !candidateStrip.isHidden, candidateStrip.count > 0 else { return false }
+        surface.cancel()
+        highlightStart = half == .left ? 0 : (candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1)
+        highlightIndex = highlightStart; candidateStrip.setHighlight(highlightStart)
+        surface.feedback.send(.selection, combination: "highlight-begin")
+        return true
+    }
+    private func moveCandidateHighlight(_ steps: Int) {
+        guard candidateStrip.count > 0 else { return }
+        let index = min(max(0, highlightStart + steps), candidateStrip.count - 1)
+        guard index != highlightIndex else { return }
+        highlightIndex = index; candidateStrip.setHighlight(index)
+        caretSteps += 1; surface.feedback.send(.selection, combination: "highlight-\(caretSteps)")
+    }
+    private func endCandidateHighlight(commit: Bool) {
+        let index = highlightIndex; highlightIndex = nil; candidateStrip.setHighlight(nil)
+        guard commit, let index, candidateStrip.buttons.indices.contains(index) else { return }
+        candidateStrip.onSelect?(index)
+    }
+    /// Down opens one row of candidates; once open, down and up scroll the matrix, and up at its first row closes it.
+    private func slideCandidateMatrix(_ direction: Int) {
+        guard onscreen, candidateStrip.count > 0 else { return }
+        if direction > 0 {
+            if expanded { candidateStrip.scrollRows(1) } else { expanded = true; resize() }
+        } else if expanded {
+            if candidateStrip.isAtTop { expanded = false; resize() } else { candidateStrip.scrollRows(-1) }
+        }
+        surface.feedback.send(.selection, combination: "slide-\(direction)-\(expanded)")
     }
     /// Expanded candidates are a one-shot view: choosing or typing returns to one row.
     private func collapseCandidates() {
@@ -2503,7 +2526,6 @@ final class KeyboardViewController: UIInputViewController {
     func developmentFinish(_ output: String) { if let id = buffer.generation { buffer.finish(output, id: id); render() } }
     var developmentPanel: KeyboardPanel? { panelOpen ? panel : nil }
     var developmentSpaceKey: SpaceCursorButton { spaceKey }
-    var developmentRightSpaceKey: SpaceCursorButton { chordSpaceKey }
     func developmentWaitForDelivery() async {
         for _ in 0..<100 {
             guard delivery.hasPendingWrites else { return }

@@ -67,6 +67,49 @@ enum KeycapStyle {
     }
 }
 
+extension KeycapStyle {
+    /// One Space cap in two halves: a thin straight seam, square inner ends and chamfered outer corners.
+    static func drawSplitSpace(in rect: CGRect, pressed: Set<SpaceHalf>, enabled: Bool = true, compact: Bool = false,
+                               theme: StatusSkin, legacy: Bool) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        let palette = theme.palette, system = theme.keyboardStyle == .system
+        let snapped = pixelSnapped(rect)
+        let box = system ? snapped.insetBy(dx: 0, dy: 0.5) : capRect(in: snapped, pressed: false, compact: compact)
+        let seam: CGFloat = 1.5, cut: CGFloat = compact ? 3 : 7
+        func path(_ half: SpaceHalf, dy: CGFloat = 0) -> UIBezierPath {
+            let top = box.minY + dy, bottom = box.maxY + dy, p = UIBezierPath()
+            if half == .left {
+                let edge = box.midX - seam / 2
+                p.move(to: CGPoint(x: box.minX + cut, y: top)); p.addLine(to: CGPoint(x: edge, y: top))
+                p.addLine(to: CGPoint(x: edge, y: bottom)); p.addLine(to: CGPoint(x: box.minX + cut, y: bottom))
+                p.addLine(to: CGPoint(x: box.minX, y: bottom - cut)); p.addLine(to: CGPoint(x: box.minX, y: top + cut))
+            } else {
+                let edge = box.midX + seam / 2
+                p.move(to: CGPoint(x: edge, y: top)); p.addLine(to: CGPoint(x: box.maxX - cut, y: top))
+                p.addLine(to: CGPoint(x: box.maxX, y: top + cut)); p.addLine(to: CGPoint(x: box.maxX, y: bottom - cut))
+                p.addLine(to: CGPoint(x: box.maxX - cut, y: bottom)); p.addLine(to: CGPoint(x: edge, y: bottom))
+            }
+            p.close(); return p
+        }
+        context.saveGState()
+        if !enabled { context.setAlpha(0.4) }
+        for half in [SpaceHalf.left, .right] {
+            let down = pressed.contains(half)
+            if legacy {
+                UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0, alpha: 0.6) : UIColor(red: 0.54, green: 0.54, blue: 0.56, alpha: 1) }.setFill()
+                path(half, dy: 1).fill()
+            }
+            let tone: UIColor = down ? (system ? palette.accent : palette.accent) : (system && !legacy ? palette.key.withAlphaComponent(translucentKeyAlpha) : palette.key)
+            tone.setFill(); path(half, dy: legacy ? -0.5 : 0).fill()
+            if !system {
+                UIColor.label.withAlphaComponent(down ? 0.15 : 0.10).setStroke()
+                let outline = path(half); outline.lineWidth = 0.7; outline.stroke()
+            }
+        }
+        context.restoreGState()
+    }
+}
+
 class KeycapButton: UIButton {
     var theme: StatusSkin = .rhino { didSet { if oldValue != theme { updateAppearance() } } }
     var skin: KeyboardSkin { theme.keyboardStyle }
@@ -211,46 +254,169 @@ struct CursorDrag {
     }
 }
 
-/// Space: a tap types; holding it and dragging moves by one character per step,
-/// and releasing then types nothing. The controller assigns selection or caret
-/// movement to each independent Space key.
+enum SpaceHalf { case left, right }
+
+/// Gesture logic of the split Space, kept apart from UIKit so it can be driven directly.
+/// A tap on either half is an ordinary space. Holding one half turns the other into a control:
+/// hold right, slide left to move the caret; hold left, slide right up or down to open and close
+/// the candidate matrix and left or right to highlight a word. Without a hold, sliding a half
+/// sweeps the candidates (left half from the first, right half from the last one visible).
+/// Releasing commits what is highlighted.
+final class SplitSpaceMachine {
+    static let holdDuration: TimeInterval = 0.35
+    static let slop: CGFloat = 8
+    /// Points of travel per highlighted candidate, per caret step, per matrix row.
+    static let highlightStep: CGFloat = 22, caretStep: CGFloat = 10, slideStep: CGFloat = 24
+    enum Role { case undecided, holder, caret, sweep, selector, dead }
+    struct Press {
+        var half: SpaceHalf
+        var start: CGPoint
+        var anchor: CGPoint
+        var role = Role.undecided
+        var steps = 0
+        var served = false, slid = false, highlighting = false
+    }
+    private(set) var presses: [Int: Press] = [:]
+    var onTap: () -> Void = {}
+    var onCaretBegan: () -> Bool = { false }
+    var onCaretMove: (Int) -> Void = { _ in }
+    var onCaretEnded: () -> Void = {}
+    var onHighlightBegan: (SpaceHalf) -> Bool = { _ in false }
+    /// Signed candidate steps from where the highlight began.
+    var onHighlightMove: (Int) -> Void = { _ in }
+    var onHighlightEnded: (Bool) -> Void = { _ in }
+    /// One matrix row per call: +1 down, -1 up.
+    var onSlide: (Int) -> Void = { _ in }
+    var onChange: () -> Void = {}
+    var pressedHalves: Set<SpaceHalf> { Set(presses.values.map(\.half)) }
+    var isHolding: Bool { presses.values.contains { $0.role == .holder } }
+
+    func down(_ id: Int, half: SpaceHalf, at point: CGPoint) {
+        var press = Press(half: half, start: point, anchor: point)
+        if let holder = presses.first(where: { $0.value.role == .holder && $0.value.half != half }) {
+            presses[holder.key]?.served = true
+            if holder.value.half == .right { press.role = onCaretBegan() ? .caret : .dead }
+            else { press.role = .selector; press.highlighting = onHighlightBegan(.left) }
+        }
+        presses[id] = press; onChange()
+    }
+    func holdElapsed(_ id: Int) {
+        guard var press = presses[id], press.role == .undecided, !press.slid else { return }
+        press.role = .holder; presses[id] = press; onChange()
+    }
+    func move(_ id: Int, to point: CGPoint) {
+        guard var press = presses[id] else { return }
+        func horizontalSteps() -> Int { Int(((point.x - press.start.x) / Self.highlightStep).rounded(.towardZero)) }
+        switch press.role {
+        case .undecided:
+            guard hypot(point.x - press.start.x, point.y - press.start.y) > Self.slop else { return }
+            press.slid = true
+            if onHighlightBegan(press.half) { press.role = .sweep; press.highlighting = true } else { press.role = .dead }
+        case .sweep:
+            let steps = horizontalSteps()
+            if steps != press.steps { press.steps = steps; onHighlightMove(steps) }
+        case .caret:
+            let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
+            if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCaretMove(count) }
+        case .selector:
+            let steps = horizontalSteps()
+            if press.highlighting, steps != press.steps { press.steps = steps; onHighlightMove(steps) }
+            let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
+            if rows != 0 {
+                press.anchor.y += CGFloat(rows) * Self.slideStep
+                for _ in 0..<abs(rows) { onSlide(rows > 0 ? 1 : -1) }
+            }
+        case .holder, .dead: break
+        }
+        presses[id] = press
+    }
+    func up(_ id: Int) {
+        guard let press = presses.removeValue(forKey: id) else { return }
+        switch press.role {
+        case .undecided: if !press.slid { onTap() }
+        case .holder:
+            // A hold nobody used is just a slow tap.
+            if !press.served { onTap() }
+            for (key, other) in presses where other.role == .caret || other.role == .selector {
+                presses[key]?.role = .dead
+                if other.role == .caret { onCaretEnded() } else if other.highlighting { onHighlightEnded(other.steps != 0) }
+            }
+        case .sweep: onHighlightEnded(true)
+        case .caret: onCaretEnded()
+        case .selector: if press.highlighting { onHighlightEnded(press.steps != 0) }
+        case .dead: break
+        }
+        onChange()
+    }
+    func cancelAll() {
+        let all = presses; presses = [:]
+        for press in all.values {
+            switch press.role {
+            case .caret: onCaretEnded()
+            case .sweep, .selector: if press.highlighting { onHighlightEnded(false) }
+            default: break
+            }
+        }
+        if !all.isEmpty { onChange() }
+    }
+}
+
+/// Space, drawn as two halves with a thin seam and chamfered outer corners. See `SplitSpaceMachine`.
 final class SpaceCursorButton: KeycapButton {
     var onCursorBegan: (() -> Bool)?
     var onCursorMove: ((Int) -> Void)?
-    private var drag = CursorDrag()
-    private var holdTimer: Timer?
-    private var lastX: CGFloat = 0
-    private var suppressTap = false
-    var isMovingCursor: Bool { drag.active }
-    /// False once a hold has turned this press into caret movement.
-    func consumeTap() -> Bool { defer { suppressTap = false }; return !suppressTap }
-    override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-        finish(); suppressTap = false; lastX = touch.location(in: self).x
-        let timer = Timer(timeInterval: CursorDrag.holdDuration, repeats: false) { [weak self] _ in self?.beginCursor(requireTracking: true) }
-        holdTimer = timer; RunLoop.main.add(timer, forMode: .common)
-        return super.beginTracking(touch, with: event)
+    var onCursorEnded: (() -> Void)?
+    var onHighlightBegan: ((SpaceHalf) -> Bool)?
+    var onHighlightMove: ((Int) -> Void)?
+    var onHighlightEnded: ((Bool) -> Void)?
+    var onSlide: ((Int) -> Void)?
+    let machine = SplitSpaceMachine()
+    private var touchIDs: [ObjectIdentifier: Int] = [:]
+    private var nextID = 0
+    private var timers: [Int: Timer] = [:]
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = true
+        machine.onTap = { [weak self] in self?.sendActions(for: .touchUpInside) }
+        machine.onCaretBegan = { [weak self] in self?.onCursorBegan?() ?? false }
+        machine.onCaretMove = { [weak self] in self?.onCursorMove?($0) }
+        machine.onCaretEnded = { [weak self] in self?.onCursorEnded?() }
+        machine.onHighlightBegan = { [weak self] in self?.onHighlightBegan?($0) ?? false }
+        machine.onHighlightMove = { [weak self] in self?.onHighlightMove?($0) }
+        machine.onHighlightEnded = { [weak self] in self?.onHighlightEnded?($0) }
+        machine.onSlide = { [weak self] in self?.onSlide?($0) }
+        machine.onChange = { [weak self] in self?.setNeedsDisplay() }
     }
-    func beginCursor(requireTracking: Bool) {
-        holdTimer?.invalidate(); holdTimer = nil
-        guard isTracking || !requireTracking, !drag.active, onCursorBegan?() == true else { return }
-        drag.activate(at: lastX); suppressTap = true; isSelected = true
+    required init?(coder: NSCoder) { fatalError() }
+    /// Kept for callers that cancel a press; releases every finger without typing.
+    override func cancelTracking(with event: UIEvent?) { reset(); super.cancelTracking(with: event) }
+    private func reset() {
+        timers.values.forEach { $0.invalidate() }; timers = [:]; touchIDs = [:]
+        machine.cancelAll()
     }
-    func moveCursor(to x: CGFloat) {
-        lastX = x
-        let count = drag.steps(to: x)
-        if count != 0 { onCursorMove?(count) }
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            let point = touch.location(in: self)
+            if machine.presses.isEmpty { sendActions(for: .touchDown) }
+            nextID += 1; let id = nextID; touchIDs[ObjectIdentifier(touch)] = id
+            machine.down(id, half: point.x < bounds.midX ? .left : .right, at: point)
+            let timer = Timer(timeInterval: SplitSpaceMachine.holdDuration, repeats: false) { [weak self] _ in self?.machine.holdElapsed(id) }
+            timers[id] = timer; RunLoop.main.add(timer, forMode: .common)
+        }
     }
-    override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-        if drag.active { moveCursor(to: touch.location(in: self).x); return true }
-        lastX = touch.location(in: self).x
-        return super.continueTracking(touch, with: event)
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches { if let id = touchIDs[ObjectIdentifier(touch)] { machine.move(id, to: touch.location(in: self)) } }
     }
-    override func endTracking(_ touch: UITouch?, with event: UIEvent?) { finish(); super.endTracking(touch, with: event) }
-    override func cancelTracking(with event: UIEvent?) { finish(); super.cancelTracking(with: event) }
-    override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { finish(); suppressTap = false } }
-    func finish() {
-        holdTimer?.invalidate(); holdTimer = nil
-        if drag.active { drag.cancel(); isSelected = false }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            guard let id = touchIDs.removeValue(forKey: ObjectIdentifier(touch)) else { continue }
+            timers.removeValue(forKey: id)?.invalidate(); machine.up(id)
+        }
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { reset() }
+    override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { reset() } }
+    override func draw(_ rect: CGRect) {
+        KeycapStyle.drawSplitSpace(in: bounds, pressed: machine.pressedHalves, enabled: isEnabled, compact: compactCap, theme: theme, legacy: legacyKey)
     }
 }
 

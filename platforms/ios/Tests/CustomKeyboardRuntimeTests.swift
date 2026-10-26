@@ -135,11 +135,11 @@ import RimesCore
         XCTAssertEqual(controller.layoutProxy.native.text, "ab \n")
 
         let space = controller.developmentSpaceKey
-        space.beginCursor(requireTracking: false)
-        XCTAssertTrue(space.isMovingCursor)
-        space.moveCursor(to: -CursorDrag.step)
+        let m = space.machine
+        m.down(1, half: .right, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1)
+        m.down(2, half: .left, at: CGPoint(x: 40, y: 20)); m.move(2, to: CGPoint(x: 40 - SplitSpaceMachine.caretStep, y: 20))
         XCTAssertEqual(controller.layoutProxy.native.selectedRange.location, 3)
-        space.finish()
+        m.up(2); m.up(1)
 
         let numbers = try key(.numbers)
         numbers.sendActions(for: .touchUpInside); window.layoutIfNeeded()

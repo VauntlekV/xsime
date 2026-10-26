@@ -80,10 +80,37 @@ final class CandidateStrip: UIView {
         expandButton.addAction(UIAction { [weak self] _ in self?.onExpand?() }, for: .touchUpInside)
     }
     required init?(coder: NSCoder) { fatalError() }
+    // MARK: Space-bar control
+    private(set) var highlightedIndex: Int?
+    var count: Int { buttons.count }
+    var isAtTop: Bool { scroll.contentOffset.y <= 0.5 }
+    /// The last candidate that fits entirely in the visible row or rows.
+    var lastVisibleIndex: Int? {
+        let visible = scroll.bounds
+        return buttons.indices.last { index in
+            let frame = buttons[index].frame
+            return expanded ? frame.maxY <= visible.maxY + 0.5 && frame.maxX <= visible.maxX + 0.5 && frame.minY >= visible.minY - 0.5
+                : frame.maxX <= visible.maxX + 0.5 && frame.minX >= visible.minX - 0.5
+        }
+    }
+    func setHighlight(_ index: Int?) {
+        if let old = highlightedIndex, buttons.indices.contains(old) { buttons[old].isSweepTarget = false }
+        highlightedIndex = index.flatMap { buttons.indices.contains($0) ? $0 : nil }
+        guard let index = highlightedIndex else { return }
+        buttons[index].isSweepTarget = true
+        scroll.scrollRectToVisible(buttons[index].frame.insetBy(dx: -12, dy: 0), animated: false)
+    }
+    func scrollRows(_ rows: Int) {
+        guard expanded else { return }
+        let step = CandidateLayout.rowHeight(landscape: landscape) * CGFloat(rows)
+        let limit = max(0, scroll.contentSize.height - scroll.bounds.height)
+        scroll.setContentOffset(CGPoint(x: 0, y: min(limit, max(0, scroll.contentOffset.y + step))), animated: false)
+    }
     func update(_ values: [String], comments: [String] = [], context: String = "") {
         let sameContext = context == self.context
         if !sameContext { self.context = context }
         guard values != texts || comments != self.comments else { return }
+        setHighlight(nil)
         let appending = expanded && sameContext && !texts.isEmpty && values.count >= texts.count
             && Array(values.prefix(texts.count)) == texts
             && texts.indices.allSatisfy { (comments.indices.contains($0) ? comments[$0] : "") == (self.comments.indices.contains($0) ? self.comments[$0] : "") }
@@ -165,6 +192,8 @@ final class CandidateStrip: UIView {
 final class CandidateButton: UIButton {
     let commentLabel = UILabel()
     private let highlight = UIView()
+    /// Chosen by the Space-bar sweep, not touched: shows in the accent colour.
+    var isSweepTarget = false { didSet { if oldValue != isSweepTarget { updateHighlight() } } }
     var comment = "" {
         didSet {
             guard comment != oldValue else { return }
@@ -194,7 +223,8 @@ final class CandidateButton: UIButton {
     override func tintColorDidChange() { super.tintColorDidChange(); updateHighlight() }
     private func updateHighlight() {
         // A touch only greys the word; the blue flood was jarring while scrolling or on a mis-tap.
-        highlight.backgroundColor = .tertiarySystemFill; highlight.alpha = isHighlighted ? 1 : 0
+        highlight.backgroundColor = isSweepTarget ? (tintColor ?? .systemBlue).withAlphaComponent(0.3) : .tertiarySystemFill
+        highlight.alpha = isHighlighted || isSweepTarget ? 1 : 0
         setTitleColor(.label, for: .normal); setTitleColor(.label, for: .highlighted)
         imageView?.tintColor = .label
         commentLabel.textColor = .secondaryLabel
