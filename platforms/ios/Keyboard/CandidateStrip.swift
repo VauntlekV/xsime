@@ -347,7 +347,7 @@ final class CandidateWheel: UIView {
             row.addSubview(label)
         }
         if slot != 0 {
-            row.alpha = 0.55
+            row.alpha = 0.22
             row.layer.transform = tilt(slot < 0 ? 0.95 : -0.95, pivot: slot < 0 ? height / 2 : -height / 2)
         }
         return row
