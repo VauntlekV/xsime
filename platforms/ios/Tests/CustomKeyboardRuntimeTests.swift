@@ -136,10 +136,10 @@ import RimesCore
 
         let space = controller.developmentSpaceKey
         let m = space.machine
-        m.down(1, half: .right, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1)
-        m.down(2, half: .left, at: CGPoint(x: 40, y: 20)); m.move(2, to: CGPoint(x: 40 - SplitSpaceMachine.caretStep, y: 20))
+        m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
+        m.move(1, to: CGPoint(x: m.width / 2 - SplitSpaceMachine.caretStep, y: 20))
         XCTAssertEqual(controller.layoutProxy.native.selectedRange.location, 3)
-        m.up(2); m.up(1)
+        m.up(1)
 
         let numbers = try key(.numbers)
         numbers.sendActions(for: .touchUpInside); window.layoutIfNeeded()

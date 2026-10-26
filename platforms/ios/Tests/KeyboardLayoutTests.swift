@@ -812,168 +812,132 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(drag.steps(to: 100 - CursorDrag.step * 0.9), 0) // less than one step: no move
         drag.cancel(); XCTAssertEqual(drag.steps(to: 0), 0)
     }
-    // MARK: Split Space
-    private func holdRightThenSlideLeft(_ space: SpaceCursorButton, steps: Int) {
-        let m = space.machine
-        m.down(1, half: .right, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1)
-        m.down(2, half: .left, at: CGPoint(x: 40, y: 20))
-        m.move(2, to: CGPoint(x: 40 + SplitSpaceMachine.caretStep * CGFloat(steps), y: 20))
-        m.up(2); m.up(1)
+    // MARK: Space gestures
+    private func space(_ controller: KeyboardViewController) -> (SpaceCursorButton, SplitSpaceMachine) {
+        let key = controller.developmentSpaceKey; return (key, key.machine)
     }
-    func testHoldingRightHalfLetsLeftHalfMoveCaretInHostAndBufferWithoutTypingSpace() {
+    func testSpaceMachineTapSweepRollCursorSpreadAndPinch() {
+        let m = SplitSpaceMachine(); m.width = 300
+        var events: [String] = [], places: [CGFloat] = [], rolls: [Int] = [], caret: [Int] = [], spread: [(Int, Int)] = []
+        m.onTap = { events.append("tap") }
+        m.onSweepBegan = { events.append("sweep+"); return true }
+        m.onSweepMove = { places.append($0) }; m.onSweepEnded = { events.append("sweep-\($0)") }
+        m.onRollerBegan = { events.append("roll+"); return true }; m.onRoll = { rolls.append($0) }; m.onRollerEnded = { events.append("roll-") }
+        m.onCursorBegan = { events.append("cursor+"); return true }; m.onCursorMove = { caret.append($0) }; m.onCursorEnded = { events.append("cursor-") }
+        m.onSpreadBegan = { events.append("spread+"); return true }; m.onSpreadMove = { spread.append(($0, $1)) }; m.onSpreadEnded = { events.append("spread-") }
+        m.onPinch = { events.append("pinch") }
+        // Tap.
+        m.down(1, at: CGPoint(x: 40, y: 20)); m.up(1)
+        XCTAssertEqual(events, ["tap"]); events = []
+        // Sideways slide: absolute place across the cap, from the middle to the left and back; lifting commits.
+        m.down(1, at: CGPoint(x: 150, y: 20)); m.move(1, to: CGPoint(x: 140, y: 22))
+        XCTAssertEqual(places.last!, 140 / 300, accuracy: 0.001)
+        m.move(1, to: CGPoint(x: 3, y: 22)); XCTAssertEqual(places.last!, 0.01, accuracy: 0.001)
+        m.move(1, to: CGPoint(x: 400, y: 22)); XCTAssertEqual(places.last!, 1, accuracy: 0.001)
+        m.up(1); XCTAssertEqual(events, ["sweep+", "sweep-true"]); events = []
+        // Vertical slide rolls lines (finger up = next) and selects nothing.
+        m.down(1, at: CGPoint(x: 150, y: 60)); m.move(1, to: CGPoint(x: 152, y: 60 - SplitSpaceMachine.slideStep))
+        m.move(1, to: CGPoint(x: 152, y: 60))
+        m.up(1)
+        XCTAssertEqual(rolls, [1, -1]); XCTAssertEqual(events, ["roll+", "roll-"]); events = []
+        // The middle held for the cursor delay starts cursor mode; the sides do not.
+        m.down(1, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1); m.move(1, to: CGPoint(x: 150 + 30, y: 20)); m.up(1)
+        XCTAssertEqual(caret, [3]); XCTAssertEqual(events, ["cursor+", "cursor-"]); events = []
+        m.down(1, at: CGPoint(x: 20, y: 20)); m.holdElapsed(1); m.up(1)
+        XCTAssertEqual(events, ["tap"], "A long press on a side is still just a space"); events = []
+        // Two fingers spreading from the middle select; the left finger pulls backwards, the right forwards.
+        m.down(1, at: CGPoint(x: 140, y: 20)); m.down(2, at: CGPoint(x: 160, y: 20))
+        m.move(1, to: CGPoint(x: 100, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
+        XCTAssertEqual(events, ["spread+"]); XCTAssertEqual(spread.last?.0, 4); XCTAssertEqual(spread.last?.1, 4)
+        m.up(1); m.up(2); XCTAssertEqual(events, ["spread+", "spread-"]); XCTAssertEqual(rolls.count, 2); events = []
+        // Pinching from both sides to the middle pulls text into the Buffer, once, and types nothing.
+        m.down(1, at: CGPoint(x: 20, y: 20)); m.down(2, at: CGPoint(x: 280, y: 20))
+        m.move(1, to: CGPoint(x: 80, y: 20)); m.move(2, to: CGPoint(x: 220, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
+        m.up(1); m.up(2)
+        XCTAssertEqual(events, ["pinch"])
+        // A slide with no candidates types no space.
+        events = []; m.onSweepBegan = { false }
+        m.down(1, at: CGPoint(x: 40, y: 20)); m.move(1, to: CGPoint(x: 120, y: 20)); m.up(1)
+        XCTAssertTrue(events.isEmpty)
+    }
+    func testSweepingSpaceHighlightsByPlaceAndLiftingCommitsTheWord() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin)
+        controller.developmentType("shi"); window.layoutIfNeeded()
+        let (_, m) = space(controller); let strip = controller.layoutViews.candidates
+        controller.layoutProxy.native.text = ""
+        let first = try! XCTUnwrap(strip.firstVisibleIndex), last = try! XCTUnwrap(strip.lastVisibleIndex), width = m.width
+        // Start in the middle and slide left: the highlight begins at the middle word and runs to the first.
+        m.down(1, at: CGPoint(x: width / 2, y: 20)); m.move(1, to: CGPoint(x: width / 2 - SplitSpaceMachine.slop - 1, y: 20))
+        let middle = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertEqual(middle, first + Int(((width / 2 - 9) / width * CGFloat(last - first)).rounded()))
+        m.move(1, to: CGPoint(x: 1, y: 20)); XCTAssertEqual(strip.highlightedIndex, first)
+        // Left to right reaches the last visible word; right to left comes back.
+        m.move(1, to: CGPoint(x: width - 1, y: 20)); XCTAssertEqual(strip.highlightedIndex, last)
+        m.move(1, to: CGPoint(x: width * 0.25, y: 20))
+        let pick = try! XCTUnwrap(strip.highlightedIndex)
+        let title = try! XCTUnwrap(strip.buttons[pick].currentTitle)
+        XCTAssertEqual(controller.layoutProxy.native.text, "")
+        m.up(1)
+        XCTAssertEqual(controller.layoutProxy.native.text, title); XCTAssertNil(strip.highlightedIndex)
+    }
+    func testRollingSpaceTurnsLinesWithTheDrumAndSelectsNothing() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin)
+        controller.developmentType("shi"); window.layoutIfNeeded()
+        let (_, m) = space(controller); let strip = controller.layoutViews.candidates
+        controller.layoutProxy.native.text = ""
+        m.down(1, at: CGPoint(x: 60, y: 40)); m.move(1, to: CGPoint(x: 60, y: 40 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
+        XCTAssertTrue(strip.isWheelActive); XCTAssertNil(strip.highlightedIndex)
+        XCTAssertGreaterThan(strip.scroll.contentOffset.x, 0)
+        XCTAssertFalse(strip.expanded)
+        m.move(1, to: CGPoint(x: 60, y: 40)); window.layoutIfNeeded()
+        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
+        m.up(1)
+        XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "", "Rolling commits no word")
+    }
+    func testHoldingTheMiddleOfSpaceMovesTheCaretInHostAndBufferWithoutTypingSpace() {
         for buffered in [false, true] {
             let (window, controller) = host(); defer { window.isHidden = true }
             controller.developmentChoose(.english)
-            let space = controller.developmentSpaceKey
+            let (_, m) = space(controller)
             if buffered { controller.developmentBuffer("ab😀cd") }
             else { controller.layoutProxy.native.text = "ab😀cd"; controller.layoutProxy.native.selectedRange = NSRange(location: 6, length: 0) }
             func caret() -> Int { buffered ? controller.developmentBufferCursor : controller.layoutProxy.native.selectedRange.location }
             let start = caret()
-            holdRightThenSlideLeft(space, steps: -3) // three characters left, including the emoji
+            m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
+            m.move(1, to: CGPoint(x: m.width / 2 - SplitSpaceMachine.caretStep * 3, y: 20)) // three characters, including the emoji
             XCTAssertEqual(caret(), buffered ? start - 3 : 2)
-            XCTAssertEqual(buffered ? controller.developmentBufferSource.text : controller.layoutProxy.native.text, "ab😀cd", "No space is typed")
+            m.up(1)
+            XCTAssertEqual(buffered ? controller.developmentBufferSource.text : controller.layoutProxy.native.text, "ab😀cd")
         }
-        // Holding during composition does not start caret movement.
+        // During composition the hold does nothing.
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentType("ni")
-        let m = controller.developmentSpaceKey.machine
-        m.down(1, half: .right, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1)
-        m.down(2, half: .left, at: CGPoint(x: 40, y: 20))
-        m.move(2, to: CGPoint(x: 10, y: 20))
-        XCTAssertEqual(m.presses[2]?.role, SplitSpaceMachine.Role.dead)
-        m.up(2); m.up(1)
-    }
-    func testTapOnEitherHalfTypesASpaceAndASlowUnusedHoldDoesToo() {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentChoose(.english); controller.layoutProxy.native.text = ""
-        let m = controller.developmentSpaceKey.machine
-        for (i, half) in [SpaceHalf.left, .right].enumerated() {
-            m.down(i, half: half, at: CGPoint(x: half == .left ? 40 : 150, y: 20)); m.up(i)
-        }
-        XCTAssertEqual(controller.layoutProxy.native.text, "  ")
-        m.down(9, half: .left, at: CGPoint(x: 40, y: 20)); m.holdElapsed(9); m.up(9)
-        XCTAssertEqual(controller.layoutProxy.native.text, "   ", "A hold nobody used is a slow tap")
-    }
-    func testSlidingAHalfSweepsCandidatesAndReleaseCommitsWhileEmptySlideTypesNothing() {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentChoose(.pinyin)
-        let m = controller.developmentSpaceKey.machine, strip = controller.layoutViews.candidates
-        controller.layoutProxy.native.text = ""
-        // No candidates: a slide does nothing and release is not a tap.
-        m.down(1, half: .left, at: CGPoint(x: 40, y: 20)); m.move(1, to: CGPoint(x: 120, y: 20)); m.up(1)
-        XCTAssertEqual(controller.layoutProxy.native.text, "")
-        controller.developmentType("ni"); window.layoutIfNeeded()
-        let third = try! XCTUnwrap(strip.buttons[2].currentTitle)
-        // Left half starts on the first word and moves right.
-        m.down(2, half: .left, at: CGPoint(x: 20, y: 20))
-        m.move(2, to: CGPoint(x: 20 + SplitSpaceMachine.slop + 1, y: 20))
-        XCTAssertEqual(strip.highlightedIndex, 0)
-        m.move(2, to: CGPoint(x: 20 + SplitSpaceMachine.highlightStep * 2, y: 20))
-        XCTAssertEqual(strip.highlightedIndex, 2)
-        m.up(2)
-        XCTAssertNil(strip.highlightedIndex)
-        XCTAssertEqual(controller.layoutProxy.native.text, third)
-        // Right half starts on the last visible word and moves left.
-        controller.developmentType("ni"); window.layoutIfNeeded()
-        let last = try! XCTUnwrap(strip.lastVisibleIndex)
-        m.down(3, half: .right, at: CGPoint(x: 150, y: 20))
-        m.move(3, to: CGPoint(x: 150 - SplitSpaceMachine.slop - 1, y: 20))
-        XCTAssertEqual(strip.highlightedIndex, last)
-        m.move(3, to: CGPoint(x: 150 - SplitSpaceMachine.highlightStep, y: 20))
-        XCTAssertEqual(strip.highlightedIndex, max(0, last - 1))
-        m.up(3)
-        XCTAssertEqual(strip.highlightedIndex, nil)
-    }
-
-    func testHoldingBothHalvesRollsLinesWithTheLeftThumbPicksWithTheRightAndCommitsWhenBothLiftOff() {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentChoose(.pinyin)
-        controller.developmentType("shi"); window.layoutIfNeeded()
-        let m = controller.developmentSpaceKey.machine, strip = controller.layoutViews.candidates
-        XCTAssertGreaterThan(strip.count, 20); XCTAssertFalse(strip.expanded)
-        controller.layoutProxy.native.text = ""
-        // Press and hold both halves: candidate mode begins, with the drum showing and the middle word highlighted.
-        m.down(1, half: .left, at: CGPoint(x: 40, y: 20)); m.down(2, half: .right, at: CGPoint(x: 150, y: 20))
-        m.holdElapsed(1); XCTAssertFalse(strip.isWheelActive, "One held half is not enough")
-        m.holdElapsed(2)
-        XCTAssertTrue(strip.isWheelActive, "Holding both halves shows the candidate drum")
-        let middle = try! XCTUnwrap(strip.middleVisibleIndex)
-        XCTAssertEqual(strip.highlightedIndex, middle); XCTAssertGreaterThan(middle, 0)
-        XCTAssertGreaterThan(m.selectorStep, 0)
-        // The right thumb only slides sideways: vertical wobble there does nothing.
-        m.move(2, to: CGPoint(x: 150, y: 20 - 60)); window.layoutIfNeeded()
-        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
-        XCTAssertEqual(strip.highlightedIndex, middle)
-        // The left thumb only rolls: finger up is the next line; sideways wobble there selects nothing.
-        m.move(1, to: CGPoint(x: 40 + 80, y: 20)); XCTAssertEqual(strip.highlightedIndex, middle)
-        m.move(1, to: CGPoint(x: 40, y: 20 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
-        XCTAssertGreaterThan(strip.scroll.contentOffset.x, 0)
-        let page2 = try! XCTUnwrap(strip.highlightedIndex)
-        XCTAssertGreaterThan(page2, middle); XCTAssertEqual(page2, strip.middleVisibleIndex)
-        XCTAssertFalse(strip.expanded)
-        // Finger down returns to the previous line.
-        m.move(1, to: CGPoint(x: 40, y: 20)); window.layoutIfNeeded()
-        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
-        // The right thumb picks sideways, scaled so a sweep of the half covers the line.
-        let from = try! XCTUnwrap(strip.highlightedIndex)
-        m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20))
-        let to = try! XCTUnwrap(strip.highlightedIndex)
-        XCTAssertEqual(to, from + 2)
-        let expected = try! XCTUnwrap(strip.buttons[to].currentTitle)
-        // Lifting one thumb keeps the mode; lifting both commits.
+        let (_, m) = space(controller)
+        m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
+        XCTAssertEqual(m.presses[1]?.role, SplitSpaceMachine.Role.dead)
         m.up(1)
-        XCTAssertTrue(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "")
-        m.up(2)
-        XCTAssertEqual(controller.layoutProxy.native.text, expected)
-        XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(strip.scroll.alpha, 1)
     }
-
-    func testExpandControlIsAFullSquareTouchTargetThroughTheWholeKeyboard() {
+    func testSpreadingTwoFingersSelectsBufferTextAndExplainsOnceInAppFields() {
+        UserDefaults.standard.removeObject(forKey: "rimes.keyboard.hostSelectionNoteShown")
         let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentChoose(.pinyin)
-        controller.developmentType("shi"); window.layoutIfNeeded()
-        let strip = controller.layoutViews.candidates
-        let frame = strip.expandButton.convert(strip.expandButton.bounds, to: controller.view)
-        // From the keyboard's top margin down into the gap above the keys, across the control and a little left of it.
-        var misses = 0, total = 0
-        for y in stride(from: max(1, frame.minY - 6), through: frame.maxY + 3, by: 2) {
-            for x in stride(from: frame.minX - 10, to: frame.maxX - 1, by: 4) {
-                total += 1
-                if controller.view.hitTest(CGPoint(x: x, y: y), with: nil) !== strip.expandButton { misses += 1 }
-            }
-        }
-        XCTAssertEqual(misses, 0, "\(misses) of \(total) points missed the control")
-        XCTAssertGreaterThanOrEqual(frame.height + 6 + 3, 38, "The reachable area is close to a key square")
-        // The words next to it keep their own touches.
-        let word = strip.buttons[0].convert(strip.buttons[0].bounds, to: controller.view)
-        XCTAssertTrue(controller.view.hitTest(CGPoint(x: word.midX, y: word.midY), with: nil) === strip.buttons[0])
-    }
-    func testCandidateModeNeedsBothHalvesAndACleanHoldCommitsNothing() {
-        let m = SplitSpaceMachine()
-        var began: [HighlightStart] = [], ended: [Bool] = [], taps = 0
-        m.onHighlightBegan = { began.append($0); return true }; m.onHighlightEnded = { ended.append($0) }; m.onTap = { taps += 1 }
-        // Both halves held, then released without moving: no word is committed and no space typed.
-        m.down(1, half: .left, at: .zero); m.down(2, half: .right, at: CGPoint(x: 100, y: 0))
-        m.holdElapsed(1); m.holdElapsed(2)
-        XCTAssertEqual(began, [.middle]); XCTAssertTrue(m.inCandidateMode)
+        let (_, m) = space(controller)
+        controller.developmentBuffer("abcdef")
+        let cursor = controller.developmentBufferCursor
+        m.down(1, at: CGPoint(x: m.width / 2 - 10, y: 20)); m.down(2, at: CGPoint(x: m.width / 2 + 10, y: 20))
+        m.move(1, to: CGPoint(x: m.width / 2 - 10 - 20, y: 20)); m.move(2, to: CGPoint(x: m.width / 2 + 10 + 10, y: 20))
+        let selection = try! XCTUnwrap(controller.developmentBufferSelection)
+        XCTAssertEqual(selection.lowerBound, max(0, cursor - 2)); XCTAssertEqual(selection.upperBound, min(6, cursor + 1))
         m.up(1); m.up(2)
-        XCTAssertEqual(ended, [false]); XCTAssertEqual(taps, 0)
-        // Hold left, then slide the right half at once: the same mode, with the slide counted.
-        began = []; ended = []
-        var moves: [Int] = []; m.onHighlightMove = { moves.append($0) }; m.selectorStep = 20
-        m.down(3, half: .left, at: .zero); m.holdElapsed(3)
-        m.down(4, half: .right, at: CGPoint(x: 100, y: 0))
-        m.move(4, to: CGPoint(x: 100 + SplitSpaceMachine.slop + 2, y: 0))
-        XCTAssertEqual(began, [.middle])
-        m.move(4, to: CGPoint(x: 150, y: 0))
-        XCTAssertEqual(moves.last, 2)
-        m.up(4); XCTAssertTrue(ended.isEmpty); m.up(3)
-        XCTAssertEqual(ended, [true])
-        // A quick tap on the other half while one is held types one space and leaves the hold unused.
-        m.down(5, half: .right, at: CGPoint(x: 100, y: 0)); m.holdElapsed(5)
-        m.down(6, half: .left, at: .zero); m.up(6)
-        XCTAssertEqual(taps, 1)
-        m.up(5); XCTAssertEqual(taps, 1, "The hold was joined, so releasing it types nothing")
+        // An app's own field cannot be selected by a keyboard: one explanation, no selection.
+        controller.developmentBuffer(nil)
+        controller.layoutProxy.native.text = "hello"; controller.layoutProxy.native.selectedRange = NSRange(location: 5, length: 0)
+        m.down(3, at: CGPoint(x: m.width / 2 - 10, y: 20)); m.down(4, at: CGPoint(x: m.width / 2 + 10, y: 20))
+        m.move(3, to: CGPoint(x: 10, y: 20)); m.move(4, to: CGPoint(x: m.width - 10, y: 20))
+        XCTAssertFalse(controller.developmentStatus.isEmpty)
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: "rimes.keyboard.hostSelectionNoteShown"))
+        m.up(3); m.up(4)
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }

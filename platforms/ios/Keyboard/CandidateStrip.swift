@@ -109,6 +109,7 @@ final class CandidateStrip: UIView, ExpandReach {
     required init?(coder: NSCoder) { fatalError() }
     // MARK: Space-bar control
     private var wheel: CandidateWheel?
+    private var wheelHighlights = true
     private var wheelPages: [[CandidateWheel.Item]] = []
     var isWheelActive: Bool { wheel != nil }
     /// The words of the line the wheel is on.
@@ -129,13 +130,13 @@ final class CandidateStrip: UIView, ExpandReach {
         return result
     }
     /// Shows the candidates as a drum on the line holding `index`; the plain row stays underneath, hidden.
-    func beginWheel(at index: Int) {
-        endWheel()
+    func beginWheel(at index: Int, highlighted: Bool = true) {
+        endWheel(); wheelHighlights = highlighted
         wheelPages = pageItems()
         let page = wheelPages.firstIndex { $0.contains { $0.index == index } } ?? 0
         let view = CandidateWheel(frame: scroll.frame)
         view.tintColor = tintColor
-        view.configure(pages: wheelPages, current: page, highlight: index,
+        view.configure(pages: wheelPages, current: page, highlight: highlighted ? index : nil,
                        font: .systemFont(ofSize: landscape ? 17 : 19))
         insertSubview(view, aboveSubview: scroll); wheel = view; scroll.alpha = 0
     }
@@ -144,7 +145,7 @@ final class CandidateStrip: UIView, ExpandReach {
         guard let wheel, wheelPages.indices.contains(wheel.current + delta) else { return nil }
         let line = wheelPages[wheel.current + delta]
         let middle = line[line.count / 2].index
-        wheel.roll(by: delta, highlight: middle)
+        wheel.roll(by: delta, highlight: wheelHighlights ? middle : nil)
         if buttons.indices.contains(line[0].index) {
             let limit = max(0, scroll.contentSize.width - scroll.bounds.width)
             scroll.setContentOffset(CGPoint(x: min(limit, buttons[line[0].index].frame.minX), y: 0), animated: false)

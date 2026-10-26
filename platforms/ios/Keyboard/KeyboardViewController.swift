@@ -228,7 +228,7 @@ final class KeyboardViewController: UIInputViewController {
     private var directEnglish: Bool { importedSchemeSelection != nil ? importedSchemeEnglish : (scheme == .english || preferences.englishInput) }
     private let globe = KeycapButton(), numbers = KeycapButton(), shiftButton = KeycapButton(), spaceKey = SpaceCursorButton()
     private let spaceKeys = UIStackView()
-    private var highlightStart = 0, highlightSteps = 0, highlightIndex: Int?
+    private var highlightIndex: Int?
     private var caretSteps = 0
     /// Set while the left Space is extending a Buffer selection on hold.
     private var selectingText = false
@@ -481,13 +481,19 @@ final class KeyboardViewController: UIInputViewController {
                 self.noteTypingKey(); self.space()
             }
             key.accessibilityLabel = L("空格", "Space")
-            key.accessibilityHint = L("点按输入空格；按住右半，在左半滑动移动光标；按住左半，在右半上下换行、左右选词；单独滑动一半可选词", "Tap for space. Hold the right half and slide the left to move the cursor. Hold the left half and slide the right to turn to the next line of candidates or pick a word. Slide one half alone to sweep the candidates.")
-            key.onCursorBegan = { [weak self] in self?.beginCaretDrag(selecting: false) ?? false }
-            key.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
-            key.onHighlightBegan = { [weak self] start in self?.beginCandidateHighlight(start) ?? false }
-            key.onHighlightMove = { [weak self] steps in self?.moveCandidateHighlight(steps) }
-            key.onHighlightEnded = { [weak self] commit in self?.endCandidateHighlight(commit: commit) }
-            key.onSlide = { [weak self] direction in self?.slideCandidateMatrix(direction) }
+            key.accessibilityHint = L("点按输入空格；左右滑动选词，松手上屏；上下滑动换行；按住中间 1.5 秒移动光标；双指向两侧展开选择文字，向中间合拢把输入框文字移入 Buffer", "Tap for space. Slide sideways to pick a word and lift to commit. Slide up or down to turn candidate lines. Hold the middle for 1.5 seconds to move the cursor. Spread two fingers to select text; pinch to move the field's text into the Buffer.")
+            let m = key.machine
+            m.onCursorBegan = { [weak self] in self?.beginCaretDrag(selecting: false) ?? false }
+            m.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
+            m.onSweepBegan = { [weak self] in self?.beginSweep() ?? false }
+            m.onSweepMove = { [weak self] place in self?.moveSweep(place) }
+            m.onSweepEnded = { [weak self] commit in self?.endSweep(commit: commit) }
+            m.onRollerBegan = { [weak self] in self?.beginRoller() ?? false }
+            m.onRoll = { [weak self] direction in self?.rollCandidateLines(direction) }
+            m.onRollerEnded = { [weak self] in self?.candidateStrip.endWheel() }
+            m.onSpreadBegan = { [weak self] in self?.beginSpread() ?? false }
+            m.onSpreadMove = { [weak self] before, after in self?.moveSpread(before: before, after: after) }
+            m.onPinch = { [weak self] in self?.pinchHostTextIntoBuffer() }
             spaceKeys.addArrangedSubview(key)
         }
         for delete in [deleteButton, chordDelete] {
@@ -1552,62 +1558,69 @@ final class KeyboardViewController: UIInputViewController {
         }
         caretSteps += 1; surface.feedback.send(.selection, combination: String(caretSteps))
     }
-    // MARK: Space-bar candidate control
-    /// Starts a highlight on the visible candidates: a lone left half from the first, a lone right half from the
-    /// last visible, and the half beside a held one from the middle, with a step that lets one sweep cover the line.
-    private func beginCandidateHighlight(_ start: HighlightStart) -> Bool {
+    // MARK: Space-bar gestures
+    private var sweepRange = 0...0
+    private var spreadOrigin = 0
+    /// Sweeping: the finger's place across Space maps onto the visible words.
+    private func beginSweep() -> Bool {
         guard onscreen, !candidateStrip.isHidden, candidateStrip.count > 0 else { return false }
         surface.cancel()
-        switch start {
-        case .first: highlightStart = candidateStrip.firstVisibleIndex ?? 0
-        case .last: highlightStart = candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1
-        case .middle:
-            highlightStart = candidateStrip.middleVisibleIndex ?? candidateStrip.count / 2
-            if !expanded { candidateStrip.beginWheel(at: highlightStart) }
-            let visible = max(1, (candidateStrip.lastVisibleIndex ?? highlightStart) - (candidateStrip.firstVisibleIndex ?? highlightStart) + 1)
-            spaceKey.machine.selectorStep = max(10, spaceKey.bounds.width / 2 / CGFloat(visible))
-        }
-        highlightSteps = 0; highlightIndex = highlightStart; candidateStrip.setHighlight(highlightStart)
-        surface.feedback.send(.selection, combination: "highlight-begin")
+        let first = candidateStrip.firstVisibleIndex ?? 0
+        sweepRange = first...max(first, candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1)
+        highlightIndex = nil
         return true
     }
-    private func moveCandidateHighlight(_ steps: Int) {
-        guard candidateStrip.count > 0 else { return }
-        highlightSteps = steps
-        var index = min(max(0, highlightStart + steps), candidateStrip.count - 1)
-        // On the drum a word stays on its own line; turning lines is the vertical slide.
-        if let range = candidateStrip.wheelRange { index = min(max(range.lowerBound, index), range.upperBound) }
-        guard index != highlightIndex else { return }
+    private func moveSweep(_ place: CGFloat) {
+        let span = sweepRange.upperBound - sweepRange.lowerBound
+        let index = sweepRange.lowerBound + Int((place * CGFloat(span)).rounded())
+        guard index != highlightIndex, candidateStrip.buttons.indices.contains(index) else { return }
         highlightIndex = index; candidateStrip.setHighlight(index)
-        caretSteps += 1; surface.feedback.send(.selection, combination: "highlight-\(caretSteps)")
+        caretSteps += 1; surface.feedback.send(.selection, combination: "sweep-\(caretSteps)")
     }
-    private func endCandidateHighlight(commit: Bool) {
-        let index = highlightIndex; highlightIndex = nil; candidateStrip.endWheel(); candidateStrip.setHighlight(nil)
+    private func endSweep(commit: Bool) {
+        let index = highlightIndex; highlightIndex = nil; candidateStrip.setHighlight(nil)
         guard commit, let index, candidateStrip.buttons.indices.contains(index) else { return }
         candidateStrip.onSelect?(index)
     }
-    /// With the single row showing, down and up turn it to the next or previous line of words and the
-    /// highlight lands in the middle of the new line. If the matrix was opened with its button, they move the
-    /// highlight across its rows instead, and up from the first row closes it.
-    private func slideCandidateMatrix(_ direction: Int) {
+    /// Rolling: sliding up or down turns the candidate lines (the drum shows) with no word selected.
+    private func beginRoller() -> Bool {
+        guard onscreen, !candidateStrip.isHidden, candidateStrip.count > 0 else { return false }
+        surface.cancel()
+        if !expanded { candidateStrip.beginWheel(at: candidateStrip.middleVisibleIndex ?? 0, highlighted: false) }
+        return true
+    }
+    private func rollCandidateLines(_ direction: Int) {
         guard onscreen, candidateStrip.count > 0 else { return }
-        func moveHighlight(to index: Int) {
-            // Later sideways travel continues from the new word, not from where the finger started.
-            highlightStart = index - highlightSteps; highlightIndex = index; candidateStrip.setHighlight(index)
+        if expanded { candidateStrip.scrollRows(direction) }
+        else if candidateStrip.isWheelActive { candidateStrip.turnWheel(direction) }
+        else { candidateStrip.turnPage(direction) }
+        surface.feedback.send(.selection, combination: "roll-\(direction)-\(caretSteps)")
+        caretSteps += 1
+    }
+    /// Spreading two fingers selects text in the Buffer; iOS gives a keyboard no selection in an app's field.
+    private func beginSpread() -> Bool {
+        guard onscreen, !hasComposition else { return false }
+        guard bufferEnabled else { showHostSelectionNoteOnce(); return false }
+        cancelDeletes(); surface.cancel(); breakAssociationChain()
+        spreadOrigin = buffer.cursor
+        surface.feedback.send(.press)
+        return true
+    }
+    private func moveSpread(before: Int, after: Int) {
+        guard onscreen, bufferEnabled else { return }
+        buffer.moveCursor(spreadOrigin - before - buffer.cursor)
+        buffer.beginSelection(); buffer.extendSelection(before + after)
+        selectingText = true; render()
+        caretSteps += 1; surface.feedback.send(.selection, combination: "spread-\(caretSteps)")
+    }
+    /// Pinching two fingers in moves the field's text into the Buffer, opening it first if needed.
+    private func pinchHostTextIntoBuffer() {
+        guard onscreen, !hasComposition else { return }
+        if !bufferEnabled { toggleBuffer() }
+        guard bufferEnabled, buffer.source.isEmpty else {
+            status.text = L("Buffer 中已有文字，请先上屏或清空", "The Buffer already has text; send or clear it first"); return
         }
-        if !expanded {
-            let middle = candidateStrip.isWheelActive ? candidateStrip.turnWheel(direction > 0 ? 1 : -1)
-                : (candidateStrip.turnPage(direction > 0 ? 1 : -1) ? candidateStrip.middleVisibleIndex : nil)
-            guard let middle else { return }
-            moveHighlight(to: middle)
-        } else if direction > 0 {
-            if let current = highlightIndex, let next = candidateStrip.index(inRowOffset: 1, from: current) { moveHighlight(to: next) }
-            else if highlightIndex == nil { candidateStrip.scrollRows(1) }
-        } else if let current = highlightIndex {
-            if let previous = candidateStrip.index(inRowOffset: -1, from: current) { moveHighlight(to: previous) }
-            else { expanded = false; resize(); candidateStrip.setHighlight(current) }
-        } else if candidateStrip.isAtTop { expanded = false; resize() } else { candidateStrip.scrollRows(-1) }
-        surface.feedback.send(.selection, combination: "slide-\(direction)-\(expanded)-\(highlightIndex ?? -1)")
+        importHostText()
     }
     /// Expanded candidates are a one-shot view: choosing or typing returns to one row.
     private func collapseCandidates() {

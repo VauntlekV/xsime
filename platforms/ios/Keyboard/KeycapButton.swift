@@ -69,7 +69,7 @@ enum KeycapStyle {
 
 extension KeycapStyle {
     /// Space is one ordinary cap; where it is pressed shows as a ripple (see `SpaceCursorButton`), never a hard split.
-    static func drawSplitSpace(in rect: CGRect, pressed: Set<SpaceHalf>, enabled: Bool = true, compact: Bool = false,
+    static func drawSplitSpace(in rect: CGRect, enabled: Bool = true, compact: Bool = false,
                                theme: StatusSkin, legacy: Bool) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         let palette = theme.palette, system = theme.keyboardStyle == .system
@@ -85,7 +85,7 @@ extension KeycapStyle {
         let cap = UIBezierPath(roundedRect: legacy ? box.offsetBy(dx: 0, dy: -0.5) : box, cornerRadius: radius)
         (system && !legacy ? palette.key.withAlphaComponent(translucentKeyAlpha) : palette.key).setFill(); cap.fill()
         if !system {
-            UIColor.label.withAlphaComponent(pressed.isEmpty ? 0.10 : 0.15).setStroke()
+            UIColor.label.withAlphaComponent(0.10).setStroke()
             cap.lineWidth = 0.7; cap.stroke()
         }
         context.restoreGState()
@@ -236,148 +236,151 @@ struct CursorDrag {
     }
 }
 
-enum SpaceHalf { case left, right }
-/// Where a candidate highlight begins among the visible words.
-enum HighlightStart { case first, middle, last }
+/// Where a finger lands on Space. The middle third is the cursor zone.
+enum SpaceZone { case left, center, right }
 
-/// Gesture logic of the split Space, kept apart from UIKit so it can be driven directly.
-/// - A tap on either half is an ordinary space.
-/// - Hold the right half and slide the left quickly: the caret moves.
-/// - Hold both halves (or hold one and slide the other): candidate mode. The left thumb slides up and
-///   down to roll the candidate lines (finger up is the next line); the right thumb slides sideways to
-///   pick a word on the line. Lifting both thumbs commits the highlighted word.
-/// - Slide one half alone: the left half sweeps the candidates from the first, the right half from
-///   the last visible one; releasing commits.
+/// Gesture logic of Space, kept apart from UIKit so it can be driven directly. Space is one cap with a
+/// left, a middle and a right part, and everything but a plain tap is a gesture:
+/// - Tap: a space.
+/// - Slide sideways with one finger: sweep the candidates. The finger's place across Space maps to the
+///   visible words (left edge first, middle the middle word, right edge last), so left to right, middle to
+///   either side and right to left all work. Lifting commits the highlighted word.
+/// - Slide up or down with one finger: the candidate lines roll (finger up is the next line) with no word
+///   selected; lifting leaves the row on that line.
+/// - Hold the middle for 1.5 s: cursor mode; sliding sideways moves the caret.
+/// - Two fingers spreading from the middle: select text. Two fingers pinching to the middle: pull the field's
+///   text into the Buffer.
 final class SplitSpaceMachine {
-    static let holdDuration: TimeInterval = 0.35
+    static let cursorHold: TimeInterval = 1.5
     static let slop: CGFloat = 8
-    /// Points of travel per highlighted candidate, per caret step, per line.
-    static let highlightStep: CGFloat = 22, caretStep: CGFloat = 10, slideStep: CGFloat = 24
-    enum Role { case undecided, holder, caret, sweep, roller, selector, dead }
+    static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, spreadStep: CGFloat = 10, pairSlop: CGFloat = 16
+    enum Role { case undecided, sweep, roller, cursor, spread, pinch, dead }
     struct Press {
-        var half: SpaceHalf
         var start: CGPoint
+        var last: CGPoint
         var anchor: CGPoint
         var role = Role.undecided
-        var steps = 0
-        var served = false, slid = false, highlighting = false
+        var slid = false
     }
     private(set) var presses: [Int: Press] = [:]
-    /// Whether the thumbs in candidate mode have moved anything; a pure hold-and-release commits nothing.
-    private var modeMoved = false
+    /// Width of the Space cap, set by the view.
+    var width: CGFloat = 200
     var onTap: () -> Void = {}
-    var onCaretBegan: () -> Bool = { false }
-    var onCaretMove: (Int) -> Void = { _ in }
-    var onCaretEnded: () -> Void = {}
-    var onHighlightBegan: (HighlightStart) -> Bool = { _ in false }
-    /// Points of sideways travel per word in candidate mode; the controller scales it so one sweep of the
-    /// right half covers a whole line.
-    var selectorStep = SplitSpaceMachine.highlightStep
-    /// Signed candidate steps from where the highlight began.
-    var onHighlightMove: (Int) -> Void = { _ in }
-    var onHighlightEnded: (Bool) -> Void = { _ in }
-    /// One line per call: +1 turns to the next line (finger moving up, as in a scrolled list), -1 to the previous.
-    var onSlide: (Int) -> Void = { _ in }
+    /// Sweep: begin returns false when there are no candidates. Move gets the finger's place, 0...1 across Space.
+    var onSweepBegan: () -> Bool = { false }
+    var onSweepMove: (CGFloat) -> Void = { _ in }
+    var onSweepEnded: (Bool) -> Void = { _ in }
+    /// Roller: one call per line, +1 next (finger up), -1 previous.
+    var onRollerBegan: () -> Bool = { false }
+    var onRoll: (Int) -> Void = { _ in }
+    var onRollerEnded: () -> Void = {}
+    var onCursorBegan: () -> Bool = { false }
+    var onCursorMove: (Int) -> Void = { _ in }
+    var onCursorEnded: () -> Void = {}
+    /// Spread: how many characters each finger has pulled the selection out on its side.
+    var onSpreadBegan: () -> Bool = { false }
+    var onSpreadMove: (_ before: Int, _ after: Int) -> Void = { _, _ in }
+    var onSpreadEnded: () -> Void = {}
+    var onPinch: () -> Void = {}
     var onChange: () -> Void = {}
-    var pressedHalves: Set<SpaceHalf> { Set(presses.values.map(\.half)) }
-    var isHolding: Bool { presses.values.contains { $0.role == .holder } }
-    var inCandidateMode: Bool { presses.values.contains { $0.role == .roller || $0.role == .selector } }
+    var isActive: Bool { !presses.isEmpty }
+    func zone(at x: CGFloat) -> SpaceZone { x < width / 3 ? .left : x > width * 2 / 3 ? .right : .center }
 
-    private func holder(opposite half: SpaceHalf) -> (key: Int, value: Press)? {
-        presses.first { $0.value.role == .holder && $0.value.half != half }
+    func down(_ id: Int, at point: CGPoint) {
+        var press = Press(start: point, last: point, anchor: point)
+        // A finger joining one that is already sweeping, rolling or in cursor mode is ignored.
+        if presses.values.contains(where: { [.sweep, .roller, .cursor].contains($0.role) }) { press.role = .dead }
+        presses[id] = press; onChange()
     }
-    func down(_ id: Int, half: SpaceHalf, at point: CGPoint) {
-        presses[id] = Press(half: half, start: point, anchor: point)
-        // Joining a held half: it is now being used, so releasing it types nothing.
-        if let held = holder(opposite: half) { presses[held.key]?.served = true }
-        onChange()
-    }
+    /// The cursor hold elapsed for a still finger in the middle.
     func holdElapsed(_ id: Int) {
-        guard var press = presses[id], press.role == .undecided, !press.slid else { return }
-        press.role = .holder; presses[id] = press
-        if let other = holder(opposite: press.half) { enterCandidateMode(between: id, and: other.key) }
-        onChange()
+        guard var press = presses[id], press.role == .undecided, !press.slid, presses.count == 1,
+              zone(at: press.start.x) == .center else { return }
+        press.role = onCursorBegan() ? .cursor : .dead
+        press.anchor = press.last; presses[id] = press; onChange()
     }
-    private func enterCandidateMode(between a: Int, and b: Int) {
-        guard presses[a] != nil, presses[b] != nil else { return }
-        let left = presses[a]!.half == .left ? a : b, right = left == a ? b : a
-        modeMoved = false
-        for id in [a, b] { presses[id]?.served = true }
-        guard onHighlightBegan(.middle) else { return }   // nothing to pick: the holds just type nothing
-        presses[left]?.role = .roller; presses[right]?.role = .selector
-        presses[left]?.highlighting = true; presses[right]?.highlighting = true
-        if let start = presses[left]?.start { presses[left]?.anchor = start }
-    }
-    func move(_ id: Int, to point: CGPoint, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    private func fraction(_ x: CGFloat) -> CGFloat { min(max(x / max(1, width), 0), 1) }
+    func move(_ id: Int, to point: CGPoint) {
         guard var press = presses[id] else { return }
-        if press.role == .undecided {
-            guard hypot(point.x - press.start.x, point.y - press.start.y) > Self.slop else { return }
-            press.slid = true
-            if let held = holder(opposite: press.half) {
-                if held.value.half == .right {
-                    // Hold right, slide left quickly: move the caret.
-                    press.role = onCaretBegan() ? .caret : .dead
-                } else {
-                    // Hold left, slide right: candidate mode, with this finger as the selector.
-                    presses[id] = press
-                    enterCandidateMode(between: id, and: held.key)
-                    press = presses[id]!
-                    press.start = point
-                    presses[id] = press
-                    onChange(); return
-                }
-            } else if onHighlightBegan(press.half == .left ? .first : .last) { press.role = .sweep; press.highlighting = true }
-            else { press.role = .dead }
-        }
-        switch press.role {
-        case .sweep:
-            let steps = Int(((point.x - press.start.x) / Self.highlightStep).rounded(.towardZero))
-            if steps != press.steps { press.steps = steps; onHighlightMove(steps) }
-        case .caret:
-            let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
-            if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCaretMove(count) }
-        case .roller:
-            // Left thumb: only vertical travel counts. Finger up turns to the next line, as dragging a list up does.
+        press.last = point
+        func roll(_ press: inout Press) {
             let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
             if rows != 0 {
-                press.anchor.y += CGFloat(rows) * Self.slideStep; modeMoved = true
-                for _ in 0..<abs(rows) { onSlide(rows < 0 ? 1 : -1) }
+                press.anchor.y += CGFloat(rows) * Self.slideStep
+                // Finger up turns to the next line, as dragging a list up does.
+                for _ in 0..<abs(rows) { onRoll(rows < 0 ? 1 : -1) }
             }
-        case .selector:
-            // Right thumb: only sideways travel counts.
-            let steps = Int(((point.x - press.start.x) / selectorStep).rounded(.towardZero))
-            if steps != press.steps { press.steps = steps; modeMoved = true; onHighlightMove(steps) }
-        case .undecided, .holder, .dead: break
         }
-        presses[id] = press
+        switch press.role {
+        case .undecided:
+            if presses.count == 2, let other = presses.first(where: { $0.key != id && $0.value.role == .undecided }) {
+                presses[id] = press
+                evaluatePair(id, other.key); return
+            }
+            guard presses.count == 1, hypot(point.x - press.start.x, point.y - press.start.y) > Self.slop else { presses[id] = press; return }
+            press.slid = true
+            if abs(point.y - press.start.y) > abs(point.x - press.start.x) {
+                press.role = onRollerBegan() ? .roller : .dead; press.anchor = press.start
+                if press.role == .roller { roll(&press) }
+            } else if onSweepBegan() {
+                press.role = .sweep; onSweepMove(fraction(point.x))
+            } else { press.role = .dead }
+        case .sweep: onSweepMove(fraction(point.x))
+        case .roller: roll(&press)
+        case .cursor:
+            let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
+            if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCursorMove(count) }
+        case .spread:
+            presses[id] = press
+            reportSpread()
+            return
+        case .pinch, .dead: break
+        }
+        presses[id] = press; onChange()
+    }
+    private func evaluatePair(_ a: Int, _ b: Int) {
+        guard let p = presses[a], let q = presses[b] else { return }
+        let before = abs(p.start.x - q.start.x), now = abs(p.last.x - q.last.x)
+        if now - before > Self.pairSlop {
+            if onSpreadBegan() { presses[a]?.role = .spread; presses[b]?.role = .spread; presses[a]?.slid = true; presses[b]?.slid = true; reportSpread() }
+            else { presses[a]?.role = .dead; presses[b]?.role = .dead }
+        } else if before - now > Self.pairSlop {
+            presses[a]?.role = .pinch; presses[b]?.role = .pinch; presses[a]?.slid = true; presses[b]?.slid = true
+            onPinch()
+        }
+        onChange()
+    }
+    private func reportSpread() {
+        let fingers = presses.values.filter { $0.role == .spread }.sorted { $0.start.x < $1.start.x }
+        guard fingers.count == 2 else { return }
+        // The left finger pulls the selection out backwards, the right finger forwards.
+        let before = max(0, Int(((fingers[0].start.x - fingers[0].last.x) / Self.spreadStep).rounded(.towardZero)))
+        let after = max(0, Int(((fingers[1].last.x - fingers[1].start.x) / Self.spreadStep).rounded(.towardZero)))
+        onSpreadMove(before, after)
     }
     func up(_ id: Int) {
         guard let press = presses.removeValue(forKey: id) else { return }
         switch press.role {
-        case .undecided: if !press.slid { onTap() }
-        case .holder:
-            // A hold nobody used is just a slow tap.
-            if !press.served { onTap() }
-            for (key, other) in presses where other.role == .caret {
-                presses[key]?.role = .dead; onCaretEnded()
-            }
-        case .sweep: onHighlightEnded(true)
-        case .caret: onCaretEnded()
-        case .roller, .selector:
-            // Candidate mode lasts until both thumbs are up; then the highlighted word goes on screen.
-            if !inCandidateMode { onHighlightEnded(modeMoved) }
-        case .dead: break
+        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .spread && $0.role != .pinch }) { onTap() }
+        case .sweep: onSweepEnded(true)
+        case .roller: onRollerEnded()
+        case .cursor: onCursorEnded()
+        case .spread:
+            onSpreadEnded()
+            for key in presses.keys where presses[key]?.role == .spread { presses[key]?.role = .dead }
+        case .pinch, .dead: break
         }
         onChange()
     }
     func cancelAll() {
         let all = presses; presses = [:]
-        var ended = false
+        var spreadEnded = false
         for press in all.values {
             switch press.role {
-            case .caret: onCaretEnded()
-            case .sweep: if press.highlighting { onHighlightEnded(false) }
-            case .roller, .selector: if !ended { ended = true; onHighlightEnded(false) }
+            case .sweep: onSweepEnded(false)
+            case .roller: onRollerEnded()
+            case .cursor: onCursorEnded()
+            case .spread: if !spreadEnded { spreadEnded = true; onSpreadEnded() }
             default: break
             }
         }
@@ -387,13 +390,6 @@ final class SplitSpaceMachine {
 
 /// Space, drawn as two halves with a thin seam and chamfered outer corners. See `SplitSpaceMachine`.
 final class SpaceCursorButton: KeycapButton {
-    var onCursorBegan: (() -> Bool)?
-    var onCursorMove: ((Int) -> Void)?
-    var onCursorEnded: (() -> Void)?
-    var onHighlightBegan: ((HighlightStart) -> Bool)?
-    var onHighlightMove: ((Int) -> Void)?
-    var onHighlightEnded: ((Bool) -> Void)?
-    var onSlide: ((Int) -> Void)?
     let machine = SplitSpaceMachine()
     /// Ripples spread from each finger inside the cap, so the pressed side is felt without a seam.
     private let rippleHost = CALayer()
@@ -410,13 +406,6 @@ final class SpaceCursorButton: KeycapButton {
         rippleHost.mask = rippleMask; rippleHost.masksToBounds = true
         layer.addSublayer(rippleHost)
         machine.onTap = { [weak self] in self?.sendActions(for: .touchUpInside) }
-        machine.onCaretBegan = { [weak self] in self?.onCursorBegan?() ?? false }
-        machine.onCaretMove = { [weak self] in self?.onCursorMove?($0) }
-        machine.onCaretEnded = { [weak self] in self?.onCursorEnded?() }
-        machine.onHighlightBegan = { [weak self] in self?.onHighlightBegan?($0) ?? false }
-        machine.onHighlightMove = { [weak self] in self?.onHighlightMove?($0) }
-        machine.onHighlightEnded = { [weak self] in self?.onHighlightEnded?($0) }
-        machine.onSlide = { [weak self] in self?.onSlide?($0) }
         machine.onChange = { [weak self] in self?.setNeedsDisplay() }
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -429,7 +418,7 @@ final class SpaceCursorButton: KeycapButton {
     }
     override func layoutSubviews() {
         super.layoutSubviews()
-        rippleHost.frame = bounds
+        rippleHost.frame = bounds; machine.width = bounds.width
         rippleMask.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 0.5), cornerRadius: KeycapStyle.cornerRadius).cgPath
     }
     private var rippleRadius: CGFloat { max(40, bounds.width * 0.3) }
@@ -472,10 +461,10 @@ final class SpaceCursorButton: KeycapButton {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             let point = touch.location(in: self)
-            if machine.presses.isEmpty { sendActions(for: .touchDown) }
+            if !machine.isActive { sendActions(for: .touchDown) }
             nextID += 1; let id = nextID; touchIDs[ObjectIdentifier(touch)] = id
-            machine.down(id, half: point.x < bounds.midX ? .left : .right, at: point); startRipple(id: id, at: point)
-            let timer = Timer(timeInterval: SplitSpaceMachine.holdDuration, repeats: false) { [weak self] _ in self?.machine.holdElapsed(id) }
+            machine.down(id, at: point); startRipple(id: id, at: point)
+            let timer = Timer(timeInterval: SplitSpaceMachine.cursorHold, repeats: false) { [weak self] _ in self?.machine.holdElapsed(id) }
             timers[id] = timer; RunLoop.main.add(timer, forMode: .common)
         }
     }
@@ -494,7 +483,7 @@ final class SpaceCursorButton: KeycapButton {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { reset() }
     override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { reset() } }
     override func draw(_ rect: CGRect) {
-        KeycapStyle.drawSplitSpace(in: bounds, pressed: machine.pressedHalves, enabled: isEnabled, compact: compactCap, theme: theme, legacy: legacyKey)
+        KeycapStyle.drawSplitSpace(in: bounds, enabled: isEnabled, compact: compactCap, theme: theme, legacy: legacyKey)
         guard !modeLabel.isEmpty else { return }
         let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: UIColor.secondaryLabel]
         let size = modeLabel.size(withAttributes: attributes)
