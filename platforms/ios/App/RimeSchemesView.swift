@@ -17,72 +17,76 @@ struct RimeSchemesView: View {
     private let store = RimeSchemeStore()
 
     var body: some View {
-        List {
-            Section {
-                Label("把完整方案带到 iPhone", systemImage: "shippingbox")
-                    .font(.headline)
-                Text("导入方案、词典与支持的 Lua 扩展，部署成功后再选择启用。只导入文件不会切换当前输入方式。")
-                    .font(.subheadline).foregroundStyle(.secondary)
-            }
-            Section {
-                LabeledContent("当前输入", value: activeName)
-                if active != nil {
-                    Button("停用导入方案，恢复内置") {
-                        do { try store.activate(nil); reload(); message = "已恢复原来的内置输入方式。" }
-                        catch { self.error = error.localizedDescription }
-                    }.accessibilityIdentifier("rimeSchemes.deactivate")
-                }
-            } footer: {
-                Text("启用导入方案会在下次唤起键盘时生效。原有并击选择和键位仍被保留，停用后恢复。")
-            }
-            Section {
-                if packages.isEmpty {
-                    Text("还没有安装的方案包。可以导入 Rime ZIP 或带编码的 UTF-8 文本词库。")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                // What is typing now, and the way back to the built-in schemes.
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("把完整方案带到 iPhone", systemImage: "shippingbox").font(.headline)
+                    Text("添加方案、词典与支持的 Lua 扩展，部署成功后再启用。只添加文件不会切换当前输入方式。")
                         .font(.subheadline).foregroundStyle(.secondary)
-                }
-                ForEach(packages, id: \.id) { package in
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(package.name).font(.headline)
-                            Text(package.importedAt, style: .date).font(.caption).foregroundStyle(.secondary)
+                        Label(activeName, systemImage: active == nil ? "keyboard" : "checkmark.circle.fill")
+                            .font(.subheadline.weight(.medium)).foregroundStyle(.indigo)
+                        Spacer()
+                        if active != nil {
+                            Button("恢复内置") {
+                                do { try store.activate(nil); reload(); message = "已恢复原来的内置输入方式。" }
+                                catch { self.error = error.localizedDescription }
+                            }.font(.subheadline).accessibilityIdentifier("rimeSchemes.deactivate")
+                        }
+                    }
+                }
+                .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                Text("启用导入方案会在下次唤起键盘时生效。原有并击选择和键位仍被保留，停用后恢复。")
+                    .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 4)
+                // The way in: one card that adds a package from a file.
+                Button { importing = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: inspecting ? "hourglass" : "plus").font(.title3.weight(.semibold))
+                            .frame(width: 40, height: 40).background(Color.indigo.opacity(0.13), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(inspecting ? "正在检查方案与依赖…" : "添加方案或文本词库").font(.headline)
+                            Text("Rime ZIP，或每行“词条⇥编码⇥可选权重”的 UTF-8 TXT / TSV").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button(role: .destructive) { packageToDelete = package } label: { Image(systemName: "trash") }
-                            .buttonStyle(.borderless).disabled(deploying)
-                            .accessibilityLabel("删除方案包“\(package.name)”")
-                            .accessibilityIdentifier("rimeSchemes.delete.\(package.id)")
+                        if inspecting { ProgressView() }
                     }
-                    ForEach(package.schemas, id: \.id) { schema in
-                        installedScheme(schema, package: package)
-                    }
-                    if !package.warnings.isEmpty {
-                        DisclosureGroup("部署与兼容说明") {
-                            ForEach(Array(package.warnings.enumerated()), id: \.offset) { item in
-                                Text(item.element).font(.caption).foregroundStyle(.secondary)
-                            }
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.indigo.opacity(0.45), style: StrokeStyle(lineWidth: 1.2, dash: [6, 4])))
+                }
+                .buttonStyle(.plain).disabled(inspecting || deploying).accessibilityIdentifier("rimeSchemes.import")
+                if packages.isEmpty {
+                    Text("还没有添加的方案包。").font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 4)
+                }
+                ForEach(packages, id: \.id) { package in
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(package.name).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                            Text(package.importedAt, style: .date).font(.caption).foregroundStyle(.tertiary)
+                            Spacer()
+                            Button(role: .destructive) { packageToDelete = package } label: { Image(systemName: "trash") }
+                                .disabled(deploying).accessibilityLabel("删除方案包“\(package.name)”")
+                                .accessibilityIdentifier("rimeSchemes.delete.\(package.id)")
+                        }.padding(.horizontal, 4)
+                        GalleryGrid {
+                            ForEach(package.schemas, id: \.id) { schema in schemeCard(schema, package: package) }
+                        }
+                        if !package.warnings.isEmpty {
+                            DisclosureGroup("部署与兼容说明") {
+                                ForEach(Array(package.warnings.enumerated()), id: \.offset) { item in
+                                    Text(item.element).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }.font(.footnote).padding(.horizontal, 4)
                         }
                     }
                 }
-            } header: { Text("已安装的方案") }
-            Section {
-                Button { importing = true } label: {
-                    Label("导入方案或文本词库", systemImage: "square.and.arrow.down")
+                if !message.isEmpty {
+                    Label(message, systemImage: "checkmark.circle").font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 4)
                 }
-                .disabled(inspecting || deploying)
-                .accessibilityIdentifier("rimeSchemes.import")
-                if inspecting {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("正在检查方案与依赖…").font(.subheadline)
-                    }
-                }
-            } footer: {
-                Text("支持上游 Rime ZIP，以及每行“词条⇥编码⇥可选权重”的 UTF-8 TXT / TSV。保留词典子目录、Lua 和 OpenCC；其他输入法的键盘布局不覆盖当前键位。")
-            }
-            if !message.isEmpty {
-                Section { Label(message, systemImage: "checkmark.circle").font(.subheadline).foregroundStyle(.secondary) }
-            }
+            }.padding(16)
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Rime 方案包")
         .tint(.indigo)
         .onAppear(perform: reload)
@@ -128,38 +132,25 @@ struct RimeSchemesView: View {
             message = "已删除“\(package.name)”。"
         } catch { self.error = error.localizedDescription }
     }
-    private func installedScheme(_ schema: ImportedRimeSchema, package: RimeSchemePackage) -> some View {
+    private func schemeCard(_ schema: ImportedRimeSchema, package: RimeSchemePackage) -> some View {
         let selection = RimeSchemeSelection(packageID: package.id, schemaID: schema.id)
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(schema.name)
-                    Text(schema.id).font(.caption.monospaced()).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if active == selection {
-                    Label("已启用", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.indigo)
-                }
-            }
-            HStack {
-                NavigationLink {
-                    ImportedRimeSchemeTestView(selection: selection, name: schema.name)
-                } label: { Label("测试候选", systemImage: "text.magnifyingglass") }
-                .accessibilityIdentifier("rimeSchemes.test.\(schema.id)")
-                Spacer()
-                if active != selection {
-                    Button("启用此方案") {
-                        do {
-                            try store.activate(selection)
-                            reload()
-                            message = "已启用“\(schema.name)”，请重新唤起键盘。"
-                        } catch { self.error = error.localizedDescription }
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityIdentifier("rimeSchemes.activate.\(schema.id)")
-                }
-            }.font(.subheadline)
-        }.padding(.vertical, 5)
+        let isActive = active == selection
+        return GalleryCard(symbol: "character.book.closed", title: schema.name, tagline: schema.id,
+                           status: isActive ? .enabled : .installed,
+                           detail: isActive ? "使用中" : "已添加 · 未启用",
+                           primaryTitle: isActive ? "停用" : "启用", primaryIsProminent: !isActive,
+                           primary: {
+            do {
+                if isActive { try store.activate(nil); message = "已恢复原来的内置输入方式。" }
+                else { try store.activate(selection); message = "已启用“\(schema.name)”，请重新唤起键盘。" }
+                reload()
+            } catch { self.error = error.localizedDescription }
+        }, menu: [GalleryMenuItem(title: "删除方案包“\(package.name)”", destructive: true, action: { packageToDelete = package })],
+           accessory: AnyView(NavigationLink {
+            ImportedRimeSchemeTestView(selection: selection, name: schema.name)
+        } label: { Label("测试候选", systemImage: "text.magnifyingglass").font(.caption) }
+            .accessibilityIdentifier("rimeSchemes.test.\(schema.id)")))
+        .accessibilityIdentifier("rimeSchemes.activate.\(schema.id)")
     }
     private func deploy(_ review: RimeSchemeImportReview, selected: [String]) {
         guard !deploying else { return }

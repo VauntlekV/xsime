@@ -16,6 +16,13 @@ enum GalleryStatus: Equatable {
     var tint: Color { self == .enabled ? .green : self == .installed ? .orange : .secondary }
 }
 
+struct GalleryMenuItem: Identifiable {
+    var id: String { title }
+    var title: String
+    var destructive = false
+    var action: () -> Void
+}
+
 /// One card of a gallery: an icon, a name and a line about it, its status and the one thing to do next.
 struct GalleryCard: View {
     let symbol: String
@@ -27,8 +34,10 @@ struct GalleryCard: View {
     var primaryIsProminent = true
     var busy = false
     let primary: () -> Void
-    var secondaryTitle: String? = nil
-    var secondary: (() -> Void)? = nil
+    /// Less common actions, such as removing the item.
+    var menu: [GalleryMenuItem] = []
+    /// A line of extra content under the status, such as a link to test the item.
+    var accessory: AnyView? = nil
     var onOpen: (() -> Void)? = nil
 
     var body: some View {
@@ -37,8 +46,8 @@ struct GalleryCard: View {
                 Image(systemName: symbol).font(.system(size: 20, weight: .semibold)).foregroundStyle(.tint)
                     .frame(width: 40, height: 40).background(Color.accentColor.opacity(0.13), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 Spacer()
-                if let secondary, let secondaryTitle {
-                    Menu { Button(secondaryTitle, role: .destructive, action: secondary) } label: {
+                if !menu.isEmpty {
+                    Menu { ForEach(menu) { item in Button(item.title, role: item.destructive ? .destructive : nil, action: item.action) } } label: {
                         Image(systemName: "ellipsis.circle").font(.title3).foregroundStyle(.secondary)
                     }.accessibilityLabel(L("更多", "More"))
                 }
@@ -51,6 +60,7 @@ struct GalleryCard: View {
                 Circle().fill(status.tint).frame(width: 7, height: 7)
                 Text(detail ?? status.title).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
+            if let accessory { accessory }
             Button(action: primary) {
                 ZStack {
                     Text(primaryTitle).opacity(busy ? 0 : 1)
@@ -130,8 +140,7 @@ struct PluginGalleryContent: View {
                                 detail: item.status == .notInstalled ? item.version : "\(item.status.title) · \(item.version)",
                                 primaryTitle: primaryTitle(item), primaryIsProminent: item.status != .enabled,
                                 busy: busy == item.id, primary: { onPrimary(item) },
-                                secondaryTitle: item.status == .notInstalled ? nil : L("卸载", "Remove"),
-                                secondary: item.status == .notInstalled ? nil : { onUninstall(item) })
+                                menu: item.status == .notInstalled ? [] : [GalleryMenuItem(title: L("卸载", "Remove"), destructive: true, action: { onUninstall(item) })])
                     .accessibilityIdentifier("gallery.plugin.\(item.id)")
                 }
             }
