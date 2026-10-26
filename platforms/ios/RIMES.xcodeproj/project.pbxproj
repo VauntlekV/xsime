@@ -47,6 +47,7 @@
 		61039F247ED247BAE7C8DCB1 /* KeyboardResourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD001E069CEC639E06B20DAF /* KeyboardResourceTests.swift */; };
 		630E928793178DCD96B5DD17 /* MobileEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E21B5038BEE6B784ABA0CB35 /* MobileEngine.swift */; };
 		63ED8AC039471572901856BA /* OfficialPluginsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3EF7889B9E7C880F64CF004 /* OfficialPluginsView.swift */; };
+		A55157A0A55157A0A55157A1 /* AssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55157A0A55157A0A55157A2 /* AssistantView.swift */; };
 		651D571E0323CA51BE0712B1 /* BufferImportPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8CE08949496F7C666B93BD /* BufferImportPrompt.swift */; };
 		6676C678F69E9C29144B1955 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD234B056A3AB0890E5F757B /* KeyboardViewController.swift */; };
 		69B1672DB0DA4A702CD47E8E /* KeyboardTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F5A93D8EB1084348D7BBF9 /* KeyboardTheme.swift */; };
@@ -250,6 +251,7 @@
 		EF6CD944F6471C08640346FA /* SingleLineTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingleLineTextView.swift; sourceTree = "<group>"; };
 		F19BE59861921D5B014A41BC /* Shared */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Shared; path = ../../Shared; sourceTree = SOURCE_ROOT; };
 		F3EF7889B9E7C880F64CF004 /* OfficialPluginsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficialPluginsView.swift; sourceTree = "<group>"; };
+		A55157A0A55157A0A55157A2 /* AssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantView.swift; sourceTree = "<group>"; };
 		F7F5A93D8EB1084348D7BBF9 /* KeyboardTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardTheme.swift; sourceTree = "<group>"; };
 		FA3FB5E8F813ABA8A7A97E00 /* KeyboardThemeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardThemeStore.swift; sourceTree = "<group>"; };
 		FC2A712CDC7868E1C11B6DAA /* ProxyTextDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyTextDelivery.swift; sourceTree = "<group>"; };
@@ -360,6 +362,7 @@
 				A2E6C34C84404B467B8CBA27 /* InputHabitsView.swift */,
 				4B512948F71264382280A49E /* KeyboardAppearanceView.swift */,
 				F3EF7889B9E7C880F64CF004 /* OfficialPluginsView.swift */,
+				A55157A0A55157A0A55157A2 /* AssistantView.swift */,
 				A4B419A120442590CD0E3351 /* RIMES.entitlements */,
 				CDCAEBF5822184603F11002A /* RimesApp.swift */,
 				D5A42947E46873A8D30C3F89 /* RimeSchemeImportService.swift */,
@@ -631,6 +634,7 @@
 				983BF5641DF0DEB2422295E5 /* MobileEngine.swift in Sources */,
 				58F7097E34013C659DAEA6F0 /* OfficialPlugins.swift in Sources */,
 				63ED8AC039471572901856BA /* OfficialPluginsView.swift in Sources */,
+				A55157A0A55157A0A55157A1 /* AssistantView.swift in Sources */,
 				AA86058D8045A662522EAB11 /* ProductBrand.swift in Sources */,
 				3E11FAC0D97F5886CDCC43B0 /* ProxyTextDelivery.swift in Sources */,
 				B128CD8F9F802BF9045E8BE2 /* RimeMobile.mm in Sources */,

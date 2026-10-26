@@ -23,6 +23,9 @@ struct AppConfiguration: Codable {
     /// Optional so configurations saved before AI Poem still decode.
     var poem: PoemLibrary?
     var poemLibrary: PoemLibrary { get { poem ?? .init() } set { poem = newValue } }
+    /// Assistant presets and the keyboard's quick entrance bar; optional so older snapshots decode.
+    var assistant: AssistantLibrary?
+    var assistantLibrary: AssistantLibrary { get { assistant ?? .init() } set { assistant = newValue } }
     /// Status-light looks a tap rotates through, chosen in the app; nil leaves the keyboard's own choice.
     var statusSkins: [String]?
     /// Changes with each app edit so the keyboard applies it once, like the scheme.

@@ -29,6 +29,7 @@ final class KeyboardViewController: UIInputViewController {
     // Presentation only. Refresh with the menu/lifecycle, never on each key.
     // Requests and insertion still check the live receipt and package below.
     private var enabledShortcutPlugins = Set<KeyboardPlugin>()
+    private var allPlugins = KeyboardPlugin.builtIn
     private var config = AppConfiguration()
     private var scheme: InputScheme = .pinyin
     private var importedSchemeStore = RimeSchemeStore()
@@ -325,7 +326,7 @@ final class KeyboardViewController: UIInputViewController {
     private lazy var caption = ThinkingCaption(line: result)
     private var insertionContext: InsertionContext {
         InsertionContext(target: currentDocument, revision: buffer.sourceRevision, plugin: selectedPlugin,
-                         authorization: selectedPlugin.flatMap { pluginAuthorization($0.rawValue) }, blocks: needsPluginResult ? buffer.pluginPending : buffer.pending)
+                         authorization: selectedPlugin.flatMap { pluginAuthorization($0.gateID) }, blocks: needsPluginResult ? buffer.pluginPending : buffer.pending)
     }
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -1842,7 +1843,7 @@ final class KeyboardViewController: UIInputViewController {
     /// `activelySent` is a person's tap or hold, as opposed to the auto-send timer; when it leaves the Buffer with nothing
     /// in it, the Buffer closes.
     @discardableResult private func deliver(all: Bool, activelySent: Bool = false) -> Bool {
-        if let selectedPlugin, pluginAuthorization(selectedPlugin.rawValue) == nil || pluginAuthorization(selectedPlugin.rawValue) != resultPluginAuthorization {
+        if let selectedPlugin, pluginAuthorization(selectedPlugin.gateID) == nil || pluginAuthorization(selectedPlugin.gateID) != resultPluginAuthorization {
             cancelRequest(); buffer.invalidateResult(); return false
         }
         surface.cancel(); if !snapshot.preedit.isEmpty { settle(); return false }
@@ -2150,10 +2151,17 @@ final class KeyboardViewController: UIInputViewController {
     }
     private func refreshPluginMenu() {
         chordPluginOn = officialPlugins?.isEnabled(legacyID: "chord") == true
-        enabledShortcutPlugins = Set(KeyboardPlugin.allCases.filter { pluginAuthorization($0.rawValue) != nil })
+        let library = config.assistantLibrary
+        // A preset deleted in the app while it is open closes with it.
+        if let open = selectedPlugin, open.isPreset, !library.presets.contains(where: { $0.entryID == open.rawValue }) {
+            cancelRequest(); buffer.invalidateResult(); selectedPlugin = nil; panelOpen = false
+        }
+        allPlugins = KeyboardPlugin.all(in: library)
+        shortcuts.setPlugins(KeyboardPlugin.entrance(in: library))
+        enabledShortcutPlugins = Set(allPlugins.filter { pluginAuthorization($0.gateID) != nil })
         let original = UIAction(title: "Buffer", image: UIImage(systemName: "square.stack.3d.up"), state: selectedPlugin == nil ? .on : .off) { [weak self] _ in self?.selectPlugin(nil) }
         // Each plugin stands alone; choosing one only opens it.
-        let plugins = KeyboardPlugin.allCases.map { plugin in
+        let plugins = allPlugins.map { plugin in
             UIAction(title: plugin.title, image: UIImage(systemName: plugin.symbol), attributes: enabledShortcutPlugins.contains(plugin) ? [] : [.disabled], state: selectedPlugin == plugin ? .on : .off) { [weak self] _ in
                 guard let self else { return }; self.surface.cancel(); self.settle(); self.selectPlugin(plugin)
             }
@@ -2174,7 +2182,7 @@ final class KeyboardViewController: UIInputViewController {
         selectPlugin(plugin)
     }
     private func selectPlugin(_ plugin: KeyboardPlugin?) {
-        if let plugin, pluginAuthorization(plugin.rawValue) == nil {
+        if let plugin, pluginAuthorization(plugin.gateID) == nil {
             status.text = L("请在 \(ProductBrand.name) App 的“官方插件”中安装并启用", "Install and enable this plugin in \(ProductBrand.name) → Official plugins")
             return
         }
@@ -2304,15 +2312,15 @@ final class KeyboardViewController: UIInputViewController {
             PanelItem(id: "clipboard", title: L("本地剪贴板", "Local clipboard"), symbol: "doc.on.clipboard")
         ]) { [weak self] _ in self?.openClipboard() })
         let plugins = [PanelItem(id: "default", title: "Buffer", symbol: "square.stack.3d.up", selected: selectedPlugin == nil)]
-            + KeyboardPlugin.allCases.map { PanelItem(id: $0.rawValue, title: $0.title, symbol: $0.symbol, selected: selectedPlugin == $0) }
-        sections.append(PanelSection(title: L("插件", "Plugin"), items: plugins) { [weak self] id in self?.selectPlugin(KeyboardPlugin(rawValue: id)) })
-        switch selectedPlugin {
+            + allPlugins.map { PanelItem(id: $0.rawValue, title: $0.title, symbol: $0.symbol, selected: selectedPlugin == $0) }
+        sections.append(PanelSection(title: L("插件", "Plugin"), items: plugins) { [weak self] id in self?.selectPlugin(self?.allPlugins.first { $0.rawValue == id }) })
+        switch selectedPlugin?.rawValue {
         case nil:
             let delays = [0.0, 1, 2, 3, 5].map { PanelItem(id: "\($0)", title: $0 == 0 ? L("关闭", "Off") : "\(Int($0)) s", selected: defaultDelay == $0) }
             sections.append(PanelSection(title: L("自动上屏", "Automatic insertion"), note: L("停止输入达到所选时长后，自动插入最前面的一块。", "Inserts the first block after you pause for the chosen time."), items: delays) { [weak self] id in
                 self?.setDefaultDelay(Double(id) ?? 0); self?.render()
             })
-        case .translate?:
+        case KeyboardPlugin.translate.rawValue:
             refreshLanguageRows()
             sections.append(PanelSection(title: L("Apple 本地翻译", "Apple on-device translation"),
                                          note: L("使用本机 Apple 语言包。AI 服务用于快问、润色、作诗和字符画。", "Uses Apple's on-device language packs. Your AI service powers Q&A, polish, poems and text art."), custom: languageRow, customHeight: 102,
@@ -2320,7 +2328,7 @@ final class KeyboardViewController: UIInputViewController {
             speakRow.toggle.setOn(preferences.speakTranslation, animated: false)
             sections.append(PanelSection(title: L("朗读", "Read aloud"), note: L("开启后，发送时朗读发出的块。不开启也可以点按输出块来听。", "When on, blocks are read as you send them. Tap an output block to hear it any time."),
                                          custom: speakRow, customHeight: 36, customKey: "\(preferences.speakTranslation)"))
-        case .art?:
+        case KeyboardPlugin.art.rawValue:
             let art = preferences.art
             func change(_ edit: @escaping (inout TextArtOptions, String) -> Void) -> (String) -> Void {
                 { [weak self] id in guard let self else { return }; edit(&self.preferences.art, id); self.preferencesStore.save(self.preferences); self.render() }
@@ -2329,9 +2337,7 @@ final class KeyboardViewController: UIInputViewController {
                                          items: TextArtStyle.allCases.map { PanelItem(id: $0.rawValue, title: $0.title, selected: art.style == $0) }, action: change { value, id in value.style = TextArtStyle(rawValue: id) ?? .blocks }))
             sections.append(PanelSection(title: L("画框（宽 × 高）", "Frame (width × height)"), items: TextArtOptions.sizes.map { PanelItem(id: "\($0)", title: "\($0) × \($0)", selected: art.width == $0 && art.height == $0) },
                                          action: change { value, id in let size = Int(id) ?? 10; value.width = size; value.height = size }))
-        case .polish?, .ask?:
-            sections.append(PanelSection(title: L("AI 服务", "AI service"), note: config.provider.map { "\($0.name) · \($0.model)" } ?? L("未配置。请在 \(ProductBrand.name) App 的“AI 服务”中添加。", "Not set up. Add one under AI services in the \(ProductBrand.name) app."), items: []) { _ in })
-        case .poem?:
+        case KeyboardPlugin.poem.rawValue:
             let options = preferences.poem, library = config.poemLibrary
             func change(_ edit: @escaping (inout PoemOptions, String) -> Void) -> (String) -> Void {
                 { [weak self] id in guard let self else { return }; edit(&self.preferences.poem, id); self.preferencesStore.save(self.preferences); self.render() }
@@ -2344,6 +2350,8 @@ final class KeyboardViewController: UIInputViewController {
                 guard let card = UUID(uuidString: id) else { return }
                 if value.cardIDs.contains(card) { value.cardIDs.removeAll { $0 == card } } else { value.cardIDs.append(card) }
             }))
+        default:
+            sections.append(PanelSection(title: L("AI 服务", "AI service"), note: config.provider.map { "\($0.name) · \($0.model)" } ?? L("未配置。请在 \(ProductBrand.name) App 的“AI 服务”中添加。", "Not set up. Add one under AI services in the \(ProductBrand.name) app."), items: []) { _ in })
         }
         if selectedPlugin?.isAI == true {
             sections.append(PanelSection(title: L("思考深度", "Thinking depth"),
@@ -2463,7 +2471,7 @@ final class KeyboardViewController: UIInputViewController {
         defer { render() }
         surface.cancel(); settle()
         guard onscreen, bufferEnabled, selectedPlugin == plugin, plugin.isAI,
-              let authorization = pluginAuthorization(plugin.rawValue),
+              let authorization = pluginAuthorization(plugin.gateID),
               let target = currentDocument, target == DocumentIdentity.read(textDocumentProxy) else { return }
         if let hint = aiReadinessHint() { status.text = hint; return }
         guard !buffer.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let provider = config.provider else {
@@ -2471,12 +2479,15 @@ final class KeyboardViewController: UIInputViewController {
         }
         let instruction: String
         do {
-            guard let store = officialPlugins, let entry = store.entry(legacyID: plugin.rawValue) else { throw OfficialPluginStateError.unavailable }
-            let content = try store.package(entry.id).instruction()
-            switch plugin {
-            case .poem: instruction = content + "\n" + (try PoemPrompt.instruction(source: buffer.source, options: preferences.poem, library: config.poemLibrary))
-            case .art: instruction = content + "\n" + TextArt.instruction(options: preferences.art)
-            default: instruction = content
+            if let own = plugin.presetInstruction { instruction = own }
+            else {
+                guard let store = officialPlugins, let entry = store.entry(legacyID: plugin.gateID) else { throw OfficialPluginStateError.unavailable }
+                let content = try store.package(entry.id).instruction()
+                switch plugin {
+                case .poem: instruction = content + "\n" + (try PoemPrompt.instruction(source: buffer.source, options: preferences.poem, library: config.poemLibrary))
+                case .art: instruction = content + "\n" + TextArt.instruction(options: preferences.art)
+                default: instruction = content
+                }
             }
         } catch let error as PoemError { status.text = error.message; return }
         catch { status.text = error.localizedDescription; return }
@@ -2504,7 +2515,7 @@ final class KeyboardViewController: UIInputViewController {
                 let rows = TextArt.normalize(reply, options: art)
                 return rows.enumerated().map { $0.offset == rows.count - 1 ? $0.element : $0.element + "\n" }
             } : nil
-            run(AITextPlugin(id: plugin.rawValue, title: plugin.title, provider: provider, key: key, consent: identity, instruction: instruction,
+            run(AITextPlugin(id: plugin.gateID, title: plugin.title, provider: provider, key: key, consent: identity, instruction: instruction,
                              thinking: preferences.thinking, shape: shape), delay: 0)
         } catch { status.text = (error as? CoreError)?.localizedDescription ?? L("无法读取 AI 配置", "Unable to read AI configuration") }
     }
@@ -2513,7 +2524,7 @@ final class KeyboardViewController: UIInputViewController {
             && !hasComposition && engine.rawInput.isEmpty
             && buffer.sourceRevision == pending.revision && currentDocument == pending.target
             && DocumentIdentity.read(textDocumentProxy) == pending.target
-            && pluginAuthorization(pending.plugin.rawValue) == pending.authorization
+            && pluginAuthorization(pending.plugin.gateID) == pending.authorization
     }
     private func dismissAIConsent() {
         guard pendingAIConsent != nil else { return }
@@ -2602,10 +2613,11 @@ final class KeyboardViewController: UIInputViewController {
     func developmentAIProvider(_ provider: ProviderConfiguration) {
         config.providers = [provider]; config.selectedProvider = provider.id; config.consents = []; render()
     }
+    func developmentAssistantLibrary(_ library: AssistantLibrary) { config.assistantLibrary = library; refreshPluginMenu(); render(); view.layoutIfNeeded() }
     func developmentPreview(_ text: String) { if let id = buffer.generation { buffer.receive(text, id: id); render() } }
     /// Opens a plugin with sample text, optionally a finished output or a running request.
     func developmentPlugin(_ plugin: KeyboardPlugin?, source: String, output: String? = nil, blocks: [String]? = nil, generating: Bool = false) {
-        resultPluginAuthorization = plugin.flatMap { pluginAuthorization($0.rawValue) }
+        resultPluginAuthorization = plugin.flatMap { pluginAuthorization($0.gateID) }
         cancelRequest(); buffer = .init(); bufferEnabled = true; selectedPlugin = plugin; panelOpen = false; breakAssociationChain()
         buffer.edit(source)
         if let output { let id = buffer.begin(); buffer.finish(output, id: id, blocks: blocks) }

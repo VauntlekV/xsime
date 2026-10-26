@@ -713,6 +713,29 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(settled.count, 2)
         if settled.count == 2 { XCTAssertLessThanOrEqual(settled[0].maxX, settled[1].minX + 0.5) }
     }
+    func testEntranceBarFollowsTheUsersAssistantPresetsAndOrder() throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        let bar = controller.developmentShortcuts
+        var library = AssistantLibrary()
+        let sleep = AssistantPreset(name: "哄睡", symbol: "moon.stars", instruction: "温柔地哄对方入睡", placeholder: "写下对方的情况")
+        library.save(sleep)
+        controller.developmentAssistantLibrary(library)
+        XCTAssertEqual(bar.buttons.map(\.plugin), [.translate, .ask, .polish, .poem, .art], "a new preset stays off the bar until added")
+        library.setOnEntrance(sleep.entryID, true); library.setOnEntrance("ai.polish", false); library.setOnEntrance("ai.art", false)
+        controller.developmentAssistantLibrary(library)
+        XCTAssertEqual(bar.buttons.map(\.plugin.rawValue), ["apple.translation", "ai.ask", "ai.poem", sleep.entryID])
+        let button = try XCTUnwrap(bar.buttons.last)
+        XCTAssertEqual(button.plugin.title, "哄睡"); XCTAssertEqual(button.plugin.symbol, "moon.stars")
+        XCTAssertTrue(button.button.isEnabled, "presets run on the Ask plugin, which is on")
+        button.button.sendActions(for: .touchUpInside); window.layoutIfNeeded()
+        XCTAssertEqual(controller.developmentSelectedPlugin, button.plugin)
+        XCTAssertEqual(controller.layoutViews.source.placeholder, "写下对方的情况")
+        XCTAssertEqual(button.plugin.presetInstruction, "温柔地哄对方入睡")
+        // Deleting the open preset in the app closes it on the keyboard.
+        library.remove(sleep.id); controller.developmentAssistantLibrary(library)
+        XCTAssertNil(controller.developmentSelectedPlugin)
+        XCTAssertEqual(bar.buttons.map(\.plugin.rawValue), ["apple.translation", "ai.ask", "ai.poem"])
+    }
     func testEmptyCandidateRowOpensPluginsWithoutRunningThem() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         let bar = controller.developmentShortcuts, controls = controller.developmentPluginControls

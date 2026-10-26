@@ -57,6 +57,7 @@ struct HomeView: View {
                     NavigationLink { TranslationSetupView() } label: { Label(L("Apple 本地翻译语言包", "Apple translation languages"), systemImage: "translate") }
                     NavigationLink { OfficialPluginsView() } label: { Label(L("官方插件", "Official plugins"), systemImage: "puzzlepiece.extension") }
                     NavigationLink { ProvidersView() } label: { Label(L("AI 服务", "AI services"), systemImage: "sparkles") }
+                    NavigationLink { AssistantView() } label: { Label(L("AI 助手与快捷入口", "AI assistant & quick entrance"), systemImage: "wand.and.stars") }
                     NavigationLink { PoemLibraryView() } label: { Label(L("AI 作诗：句式与词卡", "AI Poem: patterns & word cards"), systemImage: "text.book.closed") }
                     NavigationLink { StatusSkinsView() } label: { Label(L("宠物轮换", "Pet rotation"), systemImage: "pawprint") }
                 }

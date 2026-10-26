@@ -531,7 +531,14 @@ final class PluginShortcutBar: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         scroll.showsHorizontalScrollIndicator = false; addSubview(scroll); scroll.hideEdgeEffects()
-        for plugin in KeyboardPlugin.allCases {
+        setPlugins(KeyboardPlugin.builtIn)
+    }
+    /// Rebuilds the bar when the user's entrance list changes; unchanged lists keep their buttons.
+    func setPlugins(_ plugins: [KeyboardPlugin]) {
+        func signature(_ list: [KeyboardPlugin]) -> [String] { list.map { [$0.rawValue, $0.title, $0.shortTitle, $0.symbol].joined(separator: "|") } }
+        guard buttons.isEmpty || signature(plugins) != signature(buttons.map(\.plugin)) else { return }
+        buttons.forEach { $0.button.removeFromSuperview() }; buttons = []
+        for plugin in plugins {
             let button = UIButton(configuration: .gray())
             button.accessibilityIdentifier = "keyboard.shortcut.\(plugin.rawValue)"
             button.accessibilityLabel = plugin.title
@@ -541,7 +548,7 @@ final class PluginShortcutBar: UIView {
             button.addGestureRecognizer(hold)
             scroll.addSubview(button); buttons.append((plugin, button))
         }
-        refresh()
+        refresh(); setNeedsLayout()
     }
     required init?(coder: NSCoder) { fatalError() }
     override func tintColorDidChange() { super.tintColorDidChange(); refresh() }
