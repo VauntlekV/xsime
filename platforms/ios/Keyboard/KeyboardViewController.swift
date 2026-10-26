@@ -228,7 +228,7 @@ final class KeyboardViewController: UIInputViewController {
     private var directEnglish: Bool { importedSchemeSelection != nil ? importedSchemeEnglish : (scheme == .english || preferences.englishInput) }
     private let globe = KeycapButton(), numbers = KeycapButton(), shiftButton = KeycapButton(), spaceKey = SpaceCursorButton()
     private let spaceKeys = UIStackView()
-    private var highlightStart = 0, highlightIndex: Int?
+    private var highlightStart = 0, highlightSteps = 0, highlightIndex: Int?
     private var caretSteps = 0
     /// Set while the left Space is extending a Buffer selection on hold.
     private var selectingText = false
@@ -1557,12 +1557,13 @@ final class KeyboardViewController: UIInputViewController {
         guard onscreen, !candidateStrip.isHidden, candidateStrip.count > 0 else { return false }
         surface.cancel()
         highlightStart = half == .left ? 0 : (candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1)
-        highlightIndex = highlightStart; candidateStrip.setHighlight(highlightStart)
+        highlightSteps = 0; highlightIndex = highlightStart; candidateStrip.setHighlight(highlightStart)
         surface.feedback.send(.selection, combination: "highlight-begin")
         return true
     }
     private func moveCandidateHighlight(_ steps: Int) {
         guard candidateStrip.count > 0 else { return }
+        highlightSteps = steps
         let index = min(max(0, highlightStart + steps), candidateStrip.count - 1)
         guard index != highlightIndex else { return }
         highlightIndex = index; candidateStrip.setHighlight(index)
@@ -1573,15 +1574,25 @@ final class KeyboardViewController: UIInputViewController {
         guard commit, let index, candidateStrip.buttons.indices.contains(index) else { return }
         candidateStrip.onSelect?(index)
     }
-    /// Down opens one row of candidates; once open, down and up scroll the matrix, and up at its first row closes it.
+    /// Down opens the matrix. Once open, down and up move the highlight across rows, so a word on any line
+    /// can be picked; with nothing highlighted they scroll. Up from the first row closes the matrix.
     private func slideCandidateMatrix(_ direction: Int) {
         guard onscreen, candidateStrip.count > 0 else { return }
-        if direction > 0 {
-            if expanded { candidateStrip.scrollRows(1) } else { expanded = true; resize() }
-        } else if expanded {
-            if candidateStrip.isAtTop { expanded = false; resize() } else { candidateStrip.scrollRows(-1) }
+        func moveHighlight(to index: Int) {
+            // Later sideways travel continues from the new word, not from where the finger started.
+            highlightStart = index - highlightSteps; highlightIndex = index; candidateStrip.setHighlight(index)
         }
-        surface.feedback.send(.selection, combination: "slide-\(direction)-\(expanded)")
+        if direction > 0 {
+            if !expanded { expanded = true; resize() }
+            else if let current = highlightIndex, let next = candidateStrip.index(inRowOffset: 1, from: current) { moveHighlight(to: next) }
+            else if highlightIndex == nil { candidateStrip.scrollRows(1) }
+        } else if expanded {
+            if let current = highlightIndex {
+                if let previous = candidateStrip.index(inRowOffset: -1, from: current) { moveHighlight(to: previous) }
+                else { expanded = false; resize(); candidateStrip.setHighlight(current) }
+            } else if candidateStrip.isAtTop { expanded = false; resize() } else { candidateStrip.scrollRows(-1) }
+        }
+        surface.feedback.send(.selection, combination: "slide-\(direction)-\(expanded)-\(highlightIndex ?? -1)")
     }
     /// Expanded candidates are a one-shot view: choosing or typing returns to one row.
     private func collapseCandidates() {

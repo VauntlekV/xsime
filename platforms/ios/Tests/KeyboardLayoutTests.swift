@@ -898,11 +898,22 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertFalse(strip.expanded)
         m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
         XCTAssertTrue(controller.layoutViews.candidates.expanded)
-        // Further down scrolls; up scrolls back, and up again at the first row closes it.
+        // Down and up now carry the highlight across rows (and scroll to keep it visible).
+        let firstRow = strip.buttons[0].frame.minY
+        let start = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertEqual(strip.buttons[start].frame.minY, firstRow)
         m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep * 2)); window.layoutIfNeeded()
-        XCTAssertFalse(strip.isAtTop)
+        let second = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertGreaterThan(strip.buttons[second].frame.minY, firstRow, "Down moves to the next line")
+        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep * 3)); window.layoutIfNeeded()
+        let third = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertGreaterThan(strip.buttons[third].frame.minY, strip.buttons[second].frame.minY)
+        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep * 2)); window.layoutIfNeeded()
+        XCTAssertEqual(strip.highlightedIndex, second, "Up returns to the line above")
         m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
-        XCTAssertTrue(strip.isAtTop); XCTAssertTrue(strip.expanded)
+        XCTAssertEqual(strip.buttons[try! XCTUnwrap(strip.highlightedIndex)].frame.minY, firstRow)
+        XCTAssertTrue(strip.expanded)
+        // Up from the first line closes the matrix.
         m.move(2, to: CGPoint(x: 150, y: 20)); window.layoutIfNeeded()
         XCTAssertFalse(strip.expanded)
         // Sliding sideways highlights; releasing commits it.

@@ -100,6 +100,14 @@ final class CandidateStrip: UIView {
         buttons[index].isSweepTarget = true
         scroll.scrollRectToVisible(buttons[index].frame.insetBy(dx: -12, dy: 0), animated: false)
     }
+    /// The candidate one row above or below `index`, nearest in horizontal position; nil past either end.
+    func index(inRowOffset delta: Int, from index: Int) -> Int? {
+        guard buttons.indices.contains(index) else { return nil }
+        let current = buttons[index].frame, rowHeight = CandidateLayout.rowHeight(landscape: landscape)
+        let targetY = current.minY + CGFloat(delta) * rowHeight
+        let row = buttons.indices.filter { abs(buttons[$0].frame.minY - targetY) < rowHeight / 2 }
+        return row.min { abs(buttons[$0].frame.midX - current.midX) < abs(buttons[$1].frame.midX - current.midX) }
+    }
     func scrollRows(_ rows: Int) {
         guard expanded else { return }
         let step = CandidateLayout.rowHeight(landscape: landscape) * CGFloat(rows)
