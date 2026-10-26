@@ -867,6 +867,23 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         m.move(1, to: CGPoint(x: 80, y: 20)); m.move(2, to: CGPoint(x: 220, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
         m.up(1); m.up(2)
         XCTAssertEqual(events, ["pinch"])
+        // Two fingers sliding up together open the Buffer, down close it (once each, no space).
+        var slides: [Int] = []; m.onPairSlide = { slides.append($0) }
+        events = []
+        m.down(1, at: CGPoint(x: 100, y: 60)); m.down(2, at: CGPoint(x: 200, y: 60))
+        m.move(1, to: CGPoint(x: 100, y: 40)); m.move(2, to: CGPoint(x: 200, y: 40)); m.move(1, to: CGPoint(x: 100, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
+        m.up(1); m.up(2); XCTAssertEqual(slides, [1]); XCTAssertTrue(events.isEmpty)
+        m.down(1, at: CGPoint(x: 100, y: 20)); m.down(2, at: CGPoint(x: 200, y: 20))
+        m.move(1, to: CGPoint(x: 100, y: 50)); m.move(2, to: CGPoint(x: 200, y: 50)); m.up(1); m.up(2)
+        XCTAssertEqual(slides, [1, -1])
+        // Thumbs that drift together while sliding up still slide: the larger movement decides.
+        m.down(1, at: CGPoint(x: 100, y: 60)); m.down(2, at: CGPoint(x: 200, y: 60))
+        m.move(1, to: CGPoint(x: 108, y: 20)); m.move(2, to: CGPoint(x: 192, y: 20)); m.up(1); m.up(2)
+        XCTAssertEqual(slides, [1, -1, 1]); XCTAssertFalse(events.contains("pinch"))
+        // And a pinch with a little vertical wobble is still a pinch.
+        m.down(1, at: CGPoint(x: 20, y: 30)); m.down(2, at: CGPoint(x: 280, y: 30))
+        m.move(1, to: CGPoint(x: 90, y: 22)); m.move(2, to: CGPoint(x: 210, y: 22)); m.up(1); m.up(2)
+        XCTAssertEqual(slides.count, 3); XCTAssertEqual(events.filter { $0 == "pinch" }.count, 1)
         // A slide with no candidates types no space.
         events = []; m.onSweepBegan = { false }
         m.down(1, at: CGPoint(x: 40, y: 20)); m.move(1, to: CGPoint(x: 120, y: 20)); m.up(1)
@@ -907,6 +924,26 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
         m.up(1)
         XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "", "Rolling commits no word")
+    }
+    func testTwoFingersSlidingUpOpenTheBufferAndDownCloseItUnlessItIsStillWorking() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        let (_, m) = space(controller)
+        func slide(_ from: CGFloat, _ to: CGFloat, _ a: Int) {
+            m.down(a, at: CGPoint(x: m.width / 2 - 30, y: from)); m.down(a + 1, at: CGPoint(x: m.width / 2 + 30, y: from))
+            m.move(a, to: CGPoint(x: m.width / 2 - 30, y: to)); m.move(a + 1, to: CGPoint(x: m.width / 2 + 30, y: to)); m.up(a); m.up(a + 1)
+        }
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden)
+        slide(60, 20, 1); window.layoutIfNeeded()
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "Two fingers up open the Buffer")
+        slide(60, 20, 3); window.layoutIfNeeded()
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "Opening twice changes nothing")
+        controller.developmentBuffer("原文", plugin: true, generating: true); window.layoutIfNeeded()
+        slide(20, 60, 5); window.layoutIfNeeded()
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "A Buffer that is still working stays open")
+        XCTAssertFalse(controller.developmentStatus.isEmpty)
+        controller.developmentBuffer("原文", plugin: false); window.layoutIfNeeded()
+        slide(20, 60, 7); window.layoutIfNeeded()
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "Two fingers down close it")
     }
     func testHoldingTheMiddleOfSpaceMovesTheCaretInHostAndBufferWithoutTypingSpace() {
         for buffered in [false, true] {

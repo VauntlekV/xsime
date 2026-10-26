@@ -254,12 +254,13 @@ enum SpaceZone { case left, center, right }
 ///   selected; lifting leaves the row on that line.
 /// - Hold the middle for 1 s: cursor mode; sliding sideways moves the caret.
 /// - Two fingers pinching from the sides to the middle: put the field's text straight into the Buffer, replacing
-///   whatever it holds.
+///   whatever it holds. Two fingers sliding together: up opens the Buffer, down closes it. Whichever movement is
+///   larger decides, so a slide whose fingers drift together is not mistaken for a pinch.
 final class SplitSpaceMachine {
     static let cursorHold: TimeInterval = 1.0
     static let slop: CGFloat = 8
-    static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, pairSlop: CGFloat = 16
-    enum Role { case undecided, sweep, roller, cursor, pinch, dead }
+    static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, pairSlop: CGFloat = 16, pairSlide: CGFloat = 24
+    enum Role { case undecided, sweep, roller, cursor, pinch, paired, dead }
     struct Press {
         var start: CGPoint
         var last: CGPoint
@@ -283,6 +284,8 @@ final class SplitSpaceMachine {
     var onCursorMove: (Int) -> Void = { _ in }
     var onCursorEnded: () -> Void = {}
     var onPinch: () -> Void = {}
+    /// Two fingers sliding together: +1 up, -1 down. Fires once.
+    var onPairSlide: (Int) -> Void = { _ in }
     var onChange: () -> Void = {}
     var isActive: Bool { !presses.isEmpty }
     func zone(at x: CGFloat) -> SpaceZone { x < width / 3 ? .left : x > width * 2 / 3 ? .right : .center }
@@ -331,28 +334,35 @@ final class SplitSpaceMachine {
         case .cursor:
             let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
             if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCursorMove(count) }
-        case .pinch, .dead: break
+        case .pinch, .paired, .dead: break
         }
         presses[id] = press; onChange()
     }
-    /// Two undecided fingers moving toward each other pinch; the Buffer takes the field's text, once.
+    /// Two undecided fingers decide once, by whichever movement is larger. Moving toward each other is a pinch (the
+    /// Buffer takes the field's text); both moving the same way vertically is a slide (up opens the Buffer, down
+    /// closes it). A slide whose fingers also drift together stays a slide, and a pinch with a little wobble a pinch.
     private func evaluatePair(_ a: Int, _ b: Int) {
         guard let p = presses[a], let q = presses[b] else { return }
-        let before = abs(p.start.x - q.start.x), now = abs(p.last.x - q.last.x)
-        if before - now > Self.pairSlop {
-            presses[a]?.role = .pinch; presses[b]?.role = .pinch; presses[a]?.slid = true; presses[b]?.slid = true
-            onPinch()
+        let gapChange = abs(p.last.x - q.last.x) - abs(p.start.x - q.start.x)
+        let dyP = p.last.y - p.start.y, dyQ = q.last.y - q.start.y
+        let together = (dyP > 0) == (dyQ > 0) ? (abs(dyP) + abs(dyQ)) / 2 : 0
+        let sameWay = min(abs(dyP), abs(dyQ)) >= Self.pairSlide / 2
+        func settle(_ role: Role) { for id in [a, b] { presses[id]?.role = role; presses[id]?.slid = true } }
+        if sameWay, together >= Self.pairSlide, together > abs(gapChange) {
+            settle(.paired); onPairSlide(dyP < 0 ? 1 : -1)
+        } else if -gapChange > Self.pairSlop, -gapChange > together {
+            settle(.pinch); onPinch()
         }
         onChange()
     }
     func up(_ id: Int) {
         guard let press = presses.removeValue(forKey: id) else { return }
         switch press.role {
-        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .pinch }) { onTap() }
+        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .pinch && $0.role != .paired }) { onTap() }
         case .sweep: onSweepEnded(true)
         case .roller: onRollerEnded()
         case .cursor: onCursorEnded()
-        case .pinch, .dead: break
+        case .pinch, .paired, .dead: break
         }
         onChange()
     }
@@ -404,29 +414,39 @@ final class SpaceCursorButton: KeycapButton {
         rippleMask.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 0.5), cornerRadius: KeycapStyle.cornerRadius).cgPath
     }
     private var rippleRadius: CGFloat { max(40, bounds.width * 0.3) }
+    /// A soft ripple: a blurred wave of colour spreads from the finger and melts away, with no outline at all, and a
+    /// gentle glow stays under the finger while it is down.
     private func startRipple(id: Int, at point: CGPoint) {
         let color = theme.palette.accent
-        // A ring that spreads and fades once...
-        let ring = CAShapeLayer(); ring.fillColor = color.withAlphaComponent(0.22).cgColor
-        ring.strokeColor = color.withAlphaComponent(0.45).cgColor; ring.lineWidth = 1.5
-        ring.frame = rippleHost.bounds
-        let start = UIBezierPath(arcCenter: point, radius: 2, startAngle: 0, endAngle: .pi * 2, clockwise: true).cgPath
-        let end = UIBezierPath(arcCenter: point, radius: rippleRadius * 1.5, startAngle: 0, endAngle: .pi * 2, clockwise: true).cgPath
-        ring.path = end; rippleHost.addSublayer(ring)
-        let grow = CABasicAnimation(keyPath: "path"); grow.fromValue = start; grow.toValue = end
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
-        let group = CAAnimationGroup(); group.animations = [grow, fade]; group.duration = 0.7
-        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        CATransaction.begin(); CATransaction.setCompletionBlock { ring.removeFromSuperlayer() }
-        ring.add(group, forKey: "ripple"); ring.opacity = 0
-        CATransaction.commit()
-        // ...and a soft glow that follows the finger while it stays down.
+        func softDisc(_ center: CGFloat, _ alpha: CGFloat) -> CAGradientLayer {
+            let layer = CAGradientLayer(); layer.type = .radial
+            // Fully transparent at the rim, so there is never an edge: the wave is brightest part-way out and fades both ways.
+            layer.colors = [color.withAlphaComponent(alpha * 0.35).cgColor, color.withAlphaComponent(alpha).cgColor, color.withAlphaComponent(0).cgColor]
+            layer.locations = [0, NSNumber(value: Double(center)), 1]
+            layer.startPoint = CGPoint(x: 0.5, y: 0.5); layer.endPoint = CGPoint(x: 1, y: 1)
+            return layer
+        }
+        for (delay, alpha) in [(0.0, CGFloat(0.30)), (0.14, CGFloat(0.16))] {
+            let wave = softDisc(0.55, alpha)
+            let size = rippleRadius * 3.4
+            wave.bounds = CGRect(x: 0, y: 0, width: size, height: size); wave.position = point
+            wave.opacity = 0; rippleHost.addSublayer(wave)
+            let grow = CABasicAnimation(keyPath: "transform.scale"); grow.fromValue = 0.18; grow.toValue = 1
+            let fade = CAKeyframeAnimation(keyPath: "opacity"); fade.values = [0, 1, 0]; fade.keyTimes = [0, 0.25, 1]
+            let group = CAAnimationGroup(); group.animations = [grow, fade]; group.duration = 0.9; group.beginTime = CACurrentMediaTime() + delay
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut); group.fillMode = .backwards
+            CATransaction.begin(); CATransaction.setCompletionBlock { wave.removeFromSuperlayer() }
+            wave.add(group, forKey: "ripple")
+            CATransaction.commit()
+        }
+        // The glow under the finger, as soft as the wave.
         let glow = CAGradientLayer(); glow.type = .radial
-        glow.colors = [color.withAlphaComponent(0.34).cgColor, color.withAlphaComponent(0).cgColor]
+        glow.colors = [color.withAlphaComponent(0.26).cgColor, color.withAlphaComponent(0.10).cgColor, color.withAlphaComponent(0).cgColor]
+        glow.locations = [0, 0.5, 1]
         glow.startPoint = CGPoint(x: 0.5, y: 0.5); glow.endPoint = CGPoint(x: 1, y: 1)
-        glow.bounds = CGRect(x: 0, y: 0, width: rippleRadius * 2, height: rippleRadius * 2); glow.position = point
+        glow.bounds = CGRect(x: 0, y: 0, width: rippleRadius * 2.4, height: rippleRadius * 2.4); glow.position = point
         glow.opacity = 0; rippleHost.addSublayer(glow); glows[id] = glow
-        let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 0; appear.toValue = 1; appear.duration = 0.15
+        let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 0; appear.toValue = 1; appear.duration = 0.25
         glow.opacity = 1; glow.add(appear, forKey: "appear")
     }
     private func moveRipple(id: Int, to point: CGPoint) {
