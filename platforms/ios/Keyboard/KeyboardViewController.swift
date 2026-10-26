@@ -400,7 +400,8 @@ final class KeyboardViewController: UIInputViewController {
         }
         insertButton.onInsert = { [weak self] action in
             guard let self, self.pressedInsertion == self.insertionContext else { return }
-            self.deliver(all: action == .all)
+            // A one-second hold sends everything; once the Buffer is empty it closes.
+            self.deliver(all: action == .all, activelySent: true)
         }
         configure(stopButton, "") { [weak self] in
             guard let self else { return }
@@ -1070,7 +1071,7 @@ final class KeyboardViewController: UIInputViewController {
                 if !handled { commitRawInput() }
             } else { commitRawInput(); render() }
         case .insertBuffer:
-            _ = deliver(all: false)
+            _ = deliver(all: false, activelySent: true)
         case .waiting:
             break
         case .host:
@@ -1115,7 +1116,17 @@ final class KeyboardViewController: UIInputViewController {
         guard returnAction == .insertBuffer, onscreen else { return }
         // The one-second hold: everything in the Buffer goes on screen, and the release that follows is not a tap.
         pressedReturn = nil; holdBar.complete()
-        deliver(all: true)
+        deliver(all: true, activelySent: true)
+    }
+    /// The Buffer sinks away and closes. Used when a hold has just sent everything, and by the two-finger slide down.
+    private func closeBufferAnimated() {
+        guard bufferEnabled, !buffer.generating else { return }
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: {
+            self.bufferPanel.alpha = 0; self.bufferPanel.transform = CGAffineTransform(translationX: 0, y: 16)
+        }, completion: { _ in
+            if self.bufferEnabled, !self.buffer.generating { self.toggleBuffer() }
+            self.bufferPanel.alpha = 1; self.bufferPanel.transform = .identity
+        })
     }
     private func refreshReturnKey() {
         let title: String, hint: String?
@@ -1636,12 +1647,7 @@ final class KeyboardViewController: UIInputViewController {
         } else if bufferEnabled {
             if buffer.generating { status.text = L("正在生成，Buffer 暂不关闭", "Still working; the Buffer stays open"); return }
             // It sinks away first and the Buffer closes as it goes, so the slide reads as putting the Buffer down.
-            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: {
-                self.bufferPanel.alpha = 0; self.bufferPanel.transform = CGAffineTransform(translationX: 0, y: 16)
-            }, completion: { _ in
-                if self.bufferEnabled, !self.buffer.generating { self.toggleBuffer() }
-                self.bufferPanel.alpha = 1; self.bufferPanel.transform = .identity
-            })
+            closeBufferAnimated()
         }
     }
     /// Pinching two fingers from the sides to the middle puts the field's text straight into the Buffer: no
@@ -1833,7 +1839,9 @@ final class KeyboardViewController: UIInputViewController {
         items.append(haptics)
         moreButton.menu = UIMenu(children: items)
     }
-    @discardableResult private func deliver(all: Bool) -> Bool {
+    /// `activelySent` is a person's tap or hold, as opposed to the auto-send timer; when it leaves the Buffer with nothing
+    /// in it, the Buffer closes.
+    @discardableResult private func deliver(all: Bool, activelySent: Bool = false) -> Bool {
         if let selectedPlugin, pluginAuthorization(selectedPlugin.rawValue) == nil || pluginAuthorization(selectedPlugin.rawValue) != resultPluginAuthorization {
             cancelRequest(); buffer.invalidateResult(); return false
         }
@@ -1844,7 +1852,9 @@ final class KeyboardViewController: UIInputViewController {
         guard !text.isEmpty, let target = currentDocument, delivery.insert(text, target: target) else { return false }
         // Read aloud exactly what was sent: one block per tap, everything on a hold.
         if realtime && preferences.speakTranslation { speaker.speak(text, language: preferences.targetLanguage) }
-        return finishDelivery(all: all)
+        let sent = finishDelivery(all: all)
+        if sent, activelySent, buffer.source.isEmpty, (needsPluginResult ? buffer.pluginPending : buffer.pending).isEmpty { closeBufferAnimated() }
+        return sent
     }
     /// The status row opens all export formats without inserting anything yet.
     private func showTypingCard() {
@@ -2628,6 +2638,8 @@ final class KeyboardViewController: UIInputViewController {
     var developmentHoldBar: HoldProgressBar { holdBar }
     var developmentReturnHold: UILongPressGestureRecognizer { returnHold }
     func developmentReturnHeld() { sendEverythingFromReturnHold() }
+    /// The send button held for its second.
+    func developmentHoldInsertButton() { insertButton.onPressBegan?(); insertButton.onInsert?(.all) }
     func developmentImportHostText() { importHostText() }
     var developmentOffersHostText: Bool { offeredHostText != nil }
     func developmentReleaseEdgeTouchDelay() { releaseEdgeTouchDelay() }

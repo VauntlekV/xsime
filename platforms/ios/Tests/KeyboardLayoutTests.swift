@@ -1023,6 +1023,35 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         controller.developmentReturnHeld()
         await controller.developmentWaitForDelivery()
         XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。丙。")
+        // Everything is out and the Buffer is empty, so it closes.
+        for _ in 0..<60 where !controller.layoutViews.buffer.isHidden { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "The Buffer closes once a hold has sent everything")
+    }
+    func testSendingTheLastBlockByTapClosesTheBufferButEarlierBlocksAndAutoSendDoNot() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.layoutProxy.native.text = ""
+        controller.developmentBuffer("甲。乙。"); window.layoutIfNeeded()
+        let enter = try XCTUnwrap(controller.developmentStandardFunctions[.enter] as? KeycapButton)
+        enter.sendActions(for: .touchUpInside)
+        await controller.developmentWaitForDelivery(); window.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。")
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "A block is still waiting, so the Buffer stays")
+        enter.sendActions(for: .touchUpInside)
+        await controller.developmentWaitForDelivery()
+        for _ in 0..<60 where !controller.layoutViews.buffer.isHidden { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。")
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "The last block went out by hand: the Buffer closes")
+    }
+    func testHoldingTheSendButtonSendsEverythingAndThenClosesTheBufferButATapKeepsItOpen() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.layoutProxy.native.text = ""
+        controller.developmentBuffer("甲。乙。丙。"); window.layoutIfNeeded()
+        controller.developmentHoldInsertButton()
+        await controller.developmentWaitForDelivery()
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。丙。")
+        for _ in 0..<60 where !controller.layoutViews.buffer.isHidden { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden)
     }
     func testHoldProgressBarFillsThenDropsOrFlashes() {
         // Views outside a window finish their animations at once, so give it one.
