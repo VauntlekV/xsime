@@ -469,7 +469,7 @@ final class KeyboardViewController: UIInputViewController {
                 self.noteTypingKey(); self.space()
             }
             key.accessibilityLabel = L("空格", "Space")
-            key.accessibilityHint = L("点按输入空格；左右滑动选词，松手上屏；上下滑动换行；按住中间 1 秒移动光标；双指向中间合拢把输入框文字移入 Buffer", "Tap for space. Slide sideways to pick a word and lift to commit. Slide up or down to turn candidate lines. Hold the middle for 1 second to move the cursor. Pinch two fingers together to move the field's text into the Buffer.")
+            key.accessibilityHint = L("点按输入空格；左右滑动选词，松手上屏；上下滑动换行；按住中间 1 秒移动光标；双指向中间合拢把输入框文字移入 Buffer，向两侧展开把 Buffer 全部上屏并关闭", "Tap for space. Slide sideways to pick a word and lift to commit. Slide up or down to turn candidate lines. Hold the middle for 1 second to move the cursor. Pinch two fingers together to move the field's text into the Buffer; spread them apart to put the whole Buffer on screen and close it.")
             let m = key.machine
             m.onCursorBegan = { [weak self] in self?.beginCaretDrag() ?? false }
             m.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
@@ -480,6 +480,7 @@ final class KeyboardViewController: UIInputViewController {
             m.onRoll = { [weak self] direction in self?.rollCandidateLines(direction) }
             m.onRollerEnded = { [weak self] in self?.candidateStrip.endWheel() }
             m.onPinch = { [weak self] in self?.pinchHostTextIntoBuffer() }
+            m.onSpread = { [weak self] in self?.spreadBufferOntoScreen() }
             spaceKeys.addArrangedSubview(key)
         }
         for delete in [deleteButton, chordDelete] {
@@ -1585,6 +1586,16 @@ final class KeyboardViewController: UIInputViewController {
         else { candidateStrip.turnPage(direction) }
         surface.feedback.send(.selection, combination: "roll-\(direction)-\(caretSteps)")
         caretSteps += 1
+    }
+    /// Spreading two fingers apart sends everything in the Buffer to the field and closes the Buffer.
+    private func spreadBufferOntoScreen() {
+        guard onscreen, bufferEnabled else { return }
+        if hasComposition { settle() }
+        let pending = needsPluginResult ? buffer.pluginPending : buffer.pending
+        if !pending.isEmpty, !deliver(all: true) {
+            status.text = L("暂时无法上屏，Buffer 保持打开", "Could not put it on screen yet; the Buffer stays open"); return
+        }
+        toggleBuffer()
     }
     /// Pinching two fingers in moves the field's text into the Buffer, opening it first if needed.
     private func pinchHostTextIntoBuffer() {
