@@ -506,19 +506,15 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertTrue(try XCTUnwrap(find("keyboard.panel.speak", as: PanelToggle.self)).isOn) // saved
         toggle.sendActions(for: .touchUpInside)
     }
-    func testQuickAskUsesSharedPasteButtonAndSurvivesAlerts() throws {
+    func testQuickAskOpensTheBufferAndSurvivesAlerts() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentBuffer("", plugin: false); window.layoutIfNeeded()
         let bar = controller.developmentShortcuts
         try XCTUnwrap(bar.buttons.first { $0.plugin == .ask }).button.sendActions(for: .touchUpInside); window.layoutIfNeeded()
         XCTAssertEqual(controller.developmentSelectedPlugin, .ask)
         XCTAssertEqual(controller.layoutViews.source.placeholder, KeyboardPlugin.ask.placeholder)
-        let paste = try XCTUnwrap(controller.layoutViews.buffer.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.paste" } as? BufferPasteButton)
         XCTAssertFalse(controller.developmentPluginControls.run.isHidden)
         XCTAssertNil(controller.layoutViews.source.onTapBackground, "Tapping the input line no longer imports host text")
-        controller.developmentClipboardAccess = false
-        paste.sendActions(for: .touchUpInside)
-        XCTAssertTrue(controller.developmentStatus.contains(L("完全访问", "Full Access")))
         // A system alert briefly takes focus: the Buffer and the plugin stay open.
         controller.developmentHostResigned()
         XCTAssertEqual(controller.developmentSelectedPlugin, .ask)

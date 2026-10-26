@@ -90,7 +90,6 @@ final class KeyboardViewController: UIInputViewController {
     }
     /// Bound to the same field, Buffer and plugin across iOS's paste alert.
     private var pendingPaste: PendingPaste?
-    private let pasteButton = BufferPasteButton()
     private var clipboardStore = TextClipboardStore()
     private let clipboardView = TextClipboardPanel()
     private var clipboardEntries: [TextClipboardStore.Entry] = []
@@ -416,13 +415,6 @@ final class KeyboardViewController: UIInputViewController {
             bufferPanel.addSubview(line)
         }
         source.role = .input; result.role = .output
-        source.trailingAccessoryWidth = 44
-        pasteButton.onPaste = { [weak self] in self?.pasteIntoBuffer(itemProviders: $0) }
-        pasteButton.onNeedsAccess = { [weak self] in self?.explainClipboardAccess() }
-        #if KEYBOARD_LAYOUT_TESTS
-        pasteButton.addAction(UIAction { [weak self] _ in self?.developmentPasteClipboard() }, for: .touchUpInside)
-        #endif
-        bufferPanel.addSubview(pasteButton)
         // Tapping an output block reads it aloud without sending it; tap again to hear it again.
         result.onTapBlock = { [weak self] index in self?.readOutputBlock(index) }
         result.onTapBackground = { [weak self] in if self?.isDefaultBuffer == true { self?.showTypingCard() } }
@@ -1489,7 +1481,6 @@ final class KeyboardViewController: UIInputViewController {
             // Default sends what you type, so the input line sits beside Send and the typing
             // readout drops below it. Plugins send their output, which stays on top.
             if isDefaultBuffer { source.frame = topLine; result.frame = bottomLine } else { result.frame = topLine; source.frame = bottomLine }
-            pasteButton.frame = CGRect(x: source.frame.maxX - 44, y: source.frame.minY, width: 44, height: bufferRowHeight)
             typingStats.frame = CGRect(x: 8, y: 0, width: max(0, result.bounds.width - 16), height: bufferRowHeight)
             result.font = .systemFont(ofSize: landscape ? 14 : 15)
         }
@@ -1867,9 +1858,6 @@ final class KeyboardViewController: UIInputViewController {
     }
     private func refreshBufferImports() {
         let visible = bufferEnabled && onscreen
-        pasteButton.isHidden = !bufferEnabled
-        pasteButton.fullAccess = canReadClipboard
-        pasteButton.isEnabled = visible && pendingPaste == nil && hostImportTask == nil
         let canOffer = visible && buffer.source.isEmpty && !hasComposition && !buffer.generating && hostImportTask == nil
         let beganOffering = canOffer && !wasOfferingHostText
         wasOfferingHostText = canOffer
@@ -1972,8 +1960,7 @@ final class KeyboardViewController: UIInputViewController {
             }
             render(); return
         }
-        surface.cancel(); surface.feedback.send(.commit); cancelRequest()
-        buffer.insert(text); sourceChanged(); status.text = L("已粘贴到 Buffer", "Pasted into Buffer"); render()
+        // Only the clipboard history collects text now; the Buffer's own input line has no paste control.
     }
     private func readOutputBlock(_ index: Int) {
         guard onscreen, needsPluginResult, selectedPlugin != .art, !buffer.generating, buffer.pluginPending.indices.contains(index) else { return }
@@ -2469,12 +2456,6 @@ final class KeyboardViewController: UIInputViewController {
     }
     func developmentSelectClipboard(_ id: UUID) {
         guard let presentation = clipboardPresentation else { return }; selectClipboard(id, presentation: presentation.id)
-    }
-    private func developmentPasteClipboard() {
-        guard beginPaste() else { return }
-        let text = developmentReadClipboard?() ?? ""
-        pendingPaste?.text = text
-        applyPendingPaste()
     }
     func developmentWaitForBufferImport() async { await hostImportTask?.value }
     func developmentResume() { resume() }

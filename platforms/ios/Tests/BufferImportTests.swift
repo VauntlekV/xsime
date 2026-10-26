@@ -10,19 +10,14 @@ import RimesCore
             let text = String(repeating: "输入框已有的长文字，", count: 12)
             setHost(text, controller: controller)
             controller.developmentBuffer(""); window.layoutIfNeeded()
-            let paste = try paste(controller)
-            XCTAssertTrue(paste.isEnabled)
+            XCTAssertNil(controller.layoutViews.buffer.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.paste" }, "The Buffer input has no paste control")
             // No hint text and no tap-to-import row: the field's text is only moved in by the pinch gesture.
             XCTAssertNil(controller.layoutViews.buffer.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.importHost" })
             XCTAssertNil(controller.layoutViews.source.onTapBackground)
             XCTAssertEqual(controller.developmentBufferSource.text, "")
             XCTAssertEqual(controller.layoutProxy.native.text, text)
-            // The paste control's opaque background stays inside the input line's outline.
-            let line = controller.layoutViews.source.frame.insetBy(dx: BufferPasteButton.lineInset, dy: BufferPasteButton.lineInset)
-            XCTAssertTrue(line.insetBy(dx: -0.5, dy: -0.5).contains(paste.convert(paste.controlFrame, to: paste.superview)))
             let height = controller.view.bounds.height
             controller.developmentChoose(.english); controller.developmentType("x"); window.layoutIfNeeded()
-            XCTAssertFalse(paste.isHidden)
             XCTAssertEqual(controller.layoutProxy.native.text, text)
             XCTAssertEqual(controller.view.bounds.height, height)
         }
@@ -115,78 +110,6 @@ import RimesCore
         XCTAssertEqual(controller.developmentBufferSource.text, "甲乙丙")
     }
 
-    func testClipboardIsReadOnlyOnTapAndPreservesWhitespaceLongTextAndExistingBuffer() throws {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        setHost("宿主原文", controller: controller)
-        controller.developmentClipboardAccess = true
-        var reads = 0
-        let text = " \n" + String(repeating: "字", count: 5000) + "\n "
-        controller.developmentReadClipboard = { reads += 1; return text }
-        controller.developmentBuffer("甲乙"); controller.developmentBufferCursor(1); window.layoutIfNeeded()
-        XCTAssertEqual(reads, 0)
-        try paste(controller).sendActions(for: .touchUpInside)
-        XCTAssertEqual(reads, 1)
-        XCTAssertEqual(controller.developmentBufferSource.text, "甲" + text + "乙")
-        XCTAssertEqual(controller.layoutProxy.native.text, "宿主原文")
-        XCTAssertTrue(controller.developmentTypingSession.isEmpty)
-        window.layoutIfNeeded()
-        let source = controller.layoutViews.source
-        XCTAssertGreaterThan(source.contentSize.width, source.bounds.width)
-        XCTAssertEqual(source.trailingAccessoryWidth, 44)
-    }
-
-    func testClipboardDenialDoesNotReadOrModifyText() throws {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentBuffer("保留"); controller.developmentClipboardAccess = false
-        var read = false; controller.developmentReadClipboard = { read = true; return "剪贴板" }
-        try paste(controller).sendActions(for: .touchUpInside)
-        XCTAssertFalse(read); XCTAssertEqual(controller.developmentBufferSource.text, "保留")
-        XCTAssertTrue(controller.developmentStatus.contains(L("完全访问", "Full Access")))
-        controller.developmentClipboardAccess = true; controller.developmentReadClipboard = { nil }
-        try paste(controller).sendActions(for: .touchUpInside)
-        XCTAssertEqual(controller.developmentBufferSource.text, "保留")
-    }
-
-    func testSystemPasteProviderInsertsVerbatimAtTheBufferCursor() async throws {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentClipboardAccess = true
-        controller.developmentBuffer("前后"); controller.developmentBufferCursor(1)
-        let button = try paste(controller)
-        let items = [NSItemProvider(object: " 中间\n " as NSString)]
-        XCTAssertTrue(button.canPaste(items))
-        button.paste(itemProviders: items)
-        for _ in 0..<100 where controller.developmentBufferSource.text == "前后" { try await Task.sleep(nanoseconds: 10_000_000) }
-        XCTAssertEqual(controller.developmentBufferSource.text, "前 中间\n 后")
-        XCTAssertTrue(controller.layoutProxy.native.text.isEmpty)
-    }
-
-    func testLateSystemPasteProviderCannotFollowToAnotherField() async throws {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentClipboardAccess = true; controller.developmentBuffer("保留")
-        try paste(controller).paste(itemProviders: [NSItemProvider(object: "迟到" as NSString)])
-        controller.layoutProxy.documentIdentifier = UUID(); controller.textDidChange(nil)
-        try await Task.sleep(nanoseconds: 100_000_000)
-        XCTAssertEqual(controller.developmentBufferSource.text, "保留")
-        XCTAssertTrue(controller.layoutProxy.native.text.isEmpty)
-    }
-
-    func testPasteAlertRestoresExistingDraftAndCursorOnlyForTheSameField() throws {
-        for changesField in [false, true] {
-            let (window, controller) = host(); defer { window.isHidden = true }
-            controller.developmentClipboardAccess = true
-            controller.developmentBuffer("前后"); controller.developmentBufferCursor(1)
-            controller.developmentReadClipboard = {
-                controller.developmentHostResigned()
-                if changesField { controller.layoutProxy.documentIdentifier = UUID() }
-                return " 中间 "
-            }
-            try paste(controller).sendActions(for: .touchUpInside)
-            controller.developmentResume()
-            XCTAssertEqual(controller.developmentBufferSource.text, changesField ? "" : "前 中间 后")
-            XCTAssertTrue(controller.layoutProxy.native.text.isEmpty)
-        }
-    }
-
     func testHostTextIsOfferedToThePinchOnlyWhileTheBufferIsEmptyAndTheFieldHasText() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentBuffer(""); XCTAssertFalse(controller.developmentOffersHostText)
@@ -225,9 +148,6 @@ import RimesCore
     private func setHost(_ text: String, cursor: Int? = nil, controller: KeyboardViewController) {
         controller.layoutProxy.native.text = text
         controller.layoutProxy.native.selectedRange = NSRange(location: cursor ?? text.utf16.count, length: 0)
-    }
-    private func paste(_ controller: KeyboardViewController) throws -> BufferPasteButton {
-        try XCTUnwrap(controller.layoutViews.buffer.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.paste" } as? BufferPasteButton)
     }
     private func host(width: CGFloat = 393) -> (UIWindow, KeyboardViewController) {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 900))
