@@ -48,7 +48,7 @@ final class KeyboardViewController: UIInputViewController {
     /// A dismissed clipboard browser may restore the policy only for later edits.
     private var autoAwaitingOrdinaryEdit = false
     private var defaultDelay = UserDefaults.standard.double(forKey: "defaultBuffer.autoDelay")
-    private let typingStats = UILabel()
+    private let typingStats = TypingStatsView()
     private var typingCardPreview: TypingCardPreview?
     private var typingCardPNG: Data?
     private var typingCardStore = TypingCardStore()
@@ -357,9 +357,6 @@ final class KeyboardViewController: UIInputViewController {
         panel.onPress = { [weak self] in self?.surface.feedback.send(.press) }
         panel.onClose = { [weak self] in self?.closePanel() }
         candidatePanel.addSubview(candidateStrip); candidatePanel.addSubview(bufferButton); candidatePanel.addSubview(moreButton); candidatePanel.addSubview(handPreview); candidatePanel.addSubview(shortcuts)
-        typingStats.font = .monospacedDigitSystemFont(ofSize: 16, weight: .medium)
-        typingStats.textAlignment = .center
-        typingStats.textColor = .secondaryLabel; typingStats.adjustsFontSizeToFitWidth = true; typingStats.minimumScaleFactor = 0.8
         typingStats.accessibilityIdentifier = "keyboard.buffer.metrics"
         typingStats.isUserInteractionEnabled = false
         bufferPanel.addSubview(aiButton); bufferPanel.addSubview(insertionSlot); bufferPanel.addSubview(runButton); bufferPanel.addSubview(settingsButton); bufferPanel.addSubview(statusLight)
@@ -1340,16 +1337,20 @@ final class KeyboardViewController: UIInputViewController {
             if thinking { reveal.stop(); caption.update(incoming) }
             else if !incoming.isEmpty || !buffer.generating { reveal.feed(incoming, finished: !buffer.generating) }
             // Nothing readable yet (no answer, no thinking sentence): pulsing dots, no words.
-            result.waiting = buffer.generating && (incoming.isEmpty || (thinking && caption.current.isEmpty))
+            // A translation that is being redone keeps showing the previous one, only dimmed, until the new text
+            // starts to arrive: no dots over it and no blanking.
+            let keepsPrevious = realtime && buffer.generating && incoming.isEmpty && !result.text.isEmpty
+            result.waiting = buffer.generating && !keepsPrevious && (incoming.isEmpty || (thinking && caption.current.isEmpty))
+            result.alpha = keepsPrevious ? 0.55 : 1
         } else {
-            result.waiting = false
+            result.waiting = false; result.alpha = 1
             let text = isDefaultBuffer ? "" : outputBlocks.joined()
             if result.text != text {
                 let arriving = revealGeneration != nil
                 result.text = text
                 // A finished stream glides back to its first block, the one Send inserts,
                 // unless the reader has taken over the line.
-                if arriving { revealGeneration = nil; if reveal.following { result.setContentOffset(.zero, animated: true) } } else { result.scrollToStart() }
+                if arriving { revealGeneration = nil; if reveal.following { result.setContentOffset(.zero, animated: false) } } else { result.scrollToStart() }
             }
         }
         aiButton.isHidden = !bufferEnabled
@@ -1476,7 +1477,7 @@ final class KeyboardViewController: UIInputViewController {
         if bufferEnabled {
             let bufferRowHeight: CGFloat = landscape ? 28 : 36
             let topLine = CGRect(x: 36, y: 0, width: max(0, bufferPanel.bounds.width - 72), height: bufferRowHeight)
-            typingStats.font = .monospacedDigitSystemFont(ofSize: landscape ? 14 : 16, weight: .medium)
+            typingStats.fontSize = landscape ? 10 : 10.5
             insertionSlot.frame = CGRect(x: bufferPanel.bounds.width - 32, y: 0, width: 32, height: bufferRowHeight)
             // Right column: Send, plugin and the Buffer switch line up above each other;
             // settings sits alone on the left of the candidate row.
@@ -1623,14 +1624,18 @@ final class KeyboardViewController: UIInputViewController {
     /// keys per second, and how long you have paused. Tap it to sign the app's text.
     private func updateTypingStats() {
         let now = uptime
+        // The figures are Chinese while typing Chinese, whatever the phone's language; English input shows English.
+        let zh = !directEnglish
+        func word(_ chinese: String, _ english: String) -> String { zh ? chinese : english }
         var parts: [String] = []
-        if let cpm = liveTyping.charactersPerMinute(at: now) { parts.append("\(Int(cpm.rounded())) " + L("字/分", "cpm")) }
-        if let code = liveTyping.codeLength { parts.append(String(format: "%.2f ", code) + L("触/字", "keys/char")) }
-        if let keys = liveTyping.keysPerSecond { parts.append(String(format: "%.1f ", keys) + L("触/秒", "keys/s")) }
-        if parts.isEmpty { parts = [L("— 字/分", "— cpm"), L("— 触/字", "— keys/char"), L("— 触/秒", "— keys/s")] }
-        if !liveTyping.isEmpty, let idle = liveTyping.idleSeconds(at: now), idle >= 1 { parts.append(L("停 ", "idle ") + "\(Int(idle))s") }
+        if let cpm = liveTyping.charactersPerMinute(at: now) { parts.append("\(Int(cpm.rounded())) " + word("字/分", "cpm")) }
+        if let code = liveTyping.codeLength { parts.append(String(format: "%.2f ", code) + word("触/字", "keys/char")) }
+        if let keys = liveTyping.keysPerSecond { parts.append(String(format: "%.1f ", keys) + word("触/秒", "keys/s")) }
+        if parts.isEmpty { parts = [word("— 字/分", "— cpm"), word("— 触/字", "— keys/char"), word("— 触/秒", "— keys/s")] }
+        if !liveTyping.isEmpty, let idle = liveTyping.idleSeconds(at: now), idle >= 1 { parts.append(word("停 ", "idle ") + "\(Int(idle))s") }
         let enabled = [1.0, 2, 3, 5].contains(defaultDelay) && !autoSuspended
-        typingStats.text = parts.joined(separator: " · ") + (enabled ? String(format: " · %.1fs", max(0, defaultDelay - autoClock.headAge)) : "")
+        if enabled { parts.append(String(format: "%.1fs", max(0, defaultDelay - autoClock.headAge))) }
+        typingStats.update(parts)
     }
     private func refreshDefaultBuffer() {
         typingStats.isHidden = !isDefaultBuffer
@@ -2648,6 +2653,13 @@ final class KeyboardViewController: UIInputViewController {
     func stop() { link?.invalidate(); link = nil; target = []; shown = 0; finished = false }
     func feed(_ text: String, finished done: Bool) {
         let next = Array(text)
+        if done {
+            // The whole answer has arrived: no pacing, no gliding. Show it at once.
+            link?.invalidate(); link = nil
+            target = next; shown = Double(next.count); finished = true
+            if let line, line.text != text { line.text = text }
+            settled(); return
+        }
         if !next.starts(with: target) { shown = min(shown, Double(zip(next, target).prefix { $0 == $1 }.count)) }
         target = next; finished = done
         guard link == nil else { return }

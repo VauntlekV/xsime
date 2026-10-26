@@ -994,3 +994,51 @@ final class PromptLabel: UILabel {
         return CGSize(width: ceil(inner.width) + padding.left + padding.right, height: ceil(inner.height) + padding.top + padding.bottom)
     }
 }
+
+/// The default Buffer's typing figures as small bordered chips, so they read as readings and not as text.
+final class TypingStatsView: UIView {
+    private var chips: [UILabel] = []
+    private var items: [String] = []
+    var fontSize: CGFloat = 10.5 { didSet { if oldValue != fontSize { chips.forEach { $0.font = chipFont }; setNeedsLayout() } } }
+    private var chipFont: UIFont { .monospacedDigitSystemFont(ofSize: fontSize, weight: .medium) }
+    override init(frame: CGRect) { super.init(frame: frame); isUserInteractionEnabled = false }
+    required init?(coder: NSCoder) { fatalError() }
+    /// Joined text of the chips, for tests and accessibility.
+    var text: String { items.joined(separator: " · ") }
+    func update(_ values: [String]) {
+        guard values != items else { return }
+        items = values
+        while chips.count < values.count { chips.append(makeChip()) }
+        while chips.count > values.count { chips.removeLast().removeFromSuperview() }
+        for (chip, value) in zip(chips, values) { chip.text = value }
+        accessibilityLabel = text; setNeedsLayout()
+    }
+    private func makeChip() -> UILabel {
+        let chip = BorderedChipLabel()
+        chip.font = chipFont; chip.textColor = .secondaryLabel; chip.textAlignment = .center
+        chip.layer.cornerRadius = 5; chip.layer.cornerCurve = .continuous
+        chip.layer.borderWidth = 0.8; chip.layer.borderColor = UIColor.separator.cgColor
+        addSubview(chip); return chip
+    }
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous); chips.forEach { $0.layer.borderColor = UIColor.separator.cgColor }
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let gap: CGFloat = 4, height = min(bounds.height, ceil(chipFont.lineHeight) + 8)
+        let widths = chips.map { ceil($0.intrinsicContentSize.width) }
+        let total = widths.reduce(0, +) + gap * CGFloat(max(0, chips.count - 1))
+        // Too many chips for the line: squeeze the gaps before clipping.
+        var x = max(0, (bounds.width - total) / 2), scale: CGFloat = total > bounds.width && total > 0 ? bounds.width / total : 1
+        for (chip, width) in zip(chips, widths) {
+            chip.frame = CGRect(x: x, y: (bounds.height - height) / 2, width: width * scale, height: height)
+            x += width * scale + gap * scale
+        }
+    }
+}
+private final class BorderedChipLabel: UILabel {
+    private let inset: CGFloat = 6
+    override var intrinsicContentSize: CGSize { let s = super.intrinsicContentSize; return CGSize(width: s.width + 2 * inset, height: s.height) }
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: inset, dy: 0)) }
+    override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
+}

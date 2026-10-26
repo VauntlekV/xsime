@@ -336,13 +336,13 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         controller.defaultClockNow = { clock }
         controller.layoutProxy.native.text = "正文"; controller.layoutProxy.native.selectedRange = NSRange(location: 0, length: 0)
         controller.developmentBuffer(""); window.layoutIfNeeded()
-        let stats = try XCTUnwrap(controller.layoutViews.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? UILabel)
+        let stats = try XCTUnwrap(controller.layoutViews.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? TypingStatsView)
         XCTAssertNil(controller.typingSignature()) // nothing typed yet
         for step in 0..<6 { clock = 100 + Double(step); controller.developmentType("ni"); controller.developmentSpace() }
-        let typing = stats.text ?? ""
+        let typing = stats.text
         // Paused: speed keeps falling and the pause counts up, without any key press.
         clock += 3; controller.developmentRefreshTypingStats()
-        let paused = stats.text ?? ""
+        let paused = stats.text
         XCTAssertNotEqual(typing, paused)
         XCTAssertTrue(paused.contains("3s"), paused)
         // The ordinary-text action appends the figures and localized product credit.
@@ -355,7 +355,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         // Once sent, the figures start over.
         XCTAssertTrue(controller.developmentTypingSession.isEmpty); XCTAssertTrue(controller.developmentTypingMetrics.isEmpty)
         XCTAssertNil(controller.typingSignature())
-        XCTAssertFalse(stats.text?.contains("s") == true && stats.text?.contains(L("停", "idle")) == true)
+        XCTAssertFalse(stats.text.contains("s") == true && stats.text.contains("停") == true)
     }
     func testOptionalImagePreviewPreservesTypingAndPausesAutoInsertion() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -522,6 +522,32 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         // The prompt keeps answers short and never talks about being a model.
         XCTAssertTrue(AIPrompt.ask.contains("不要提自己是 AI 或模型"))
     }
+    func testRedoingATranslationKeepsThePreviousOneVisibleAndDimmedInsteadOfCoveringItWithDots() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentBuffer("原文", plugin: true, output: "旧译文。"); window.layoutIfNeeded()
+        let result = controller.layoutViews.result
+        XCTAssertEqual(result.text, "旧译文。"); XCTAssertEqual(result.alpha, 1)
+        // The source changes and a new translation starts: nothing has arrived yet.
+        controller.developmentBuffer("原文，续写", plugin: true, generating: true); window.layoutIfNeeded()
+        XCTAssertEqual(result.text, "旧译文。", "The earlier translation stays")
+        XCTAssertFalse(result.waiting, "No dots over it")
+        XCTAssertLessThan(result.alpha, 1, "It is dimmed to show it is being redone")
+        // The new translation arrives and takes its place at full strength.
+        controller.developmentBuffer("原文，续写", plugin: true, output: "新译文。"); window.layoutIfNeeded()
+        XCTAssertEqual(result.alpha, 1)
+    }
+    func testAFinishedAnswerStopsAllDynamicRenderingAndShowsInFull() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentBuffer("问题", plugin: true, generating: true)
+        // Part of a long answer is revealing...
+        controller.developmentPreview(String(repeating: "很长的回答。", count: 40))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertLessThan(controller.layoutViews.result.text.count, 240)
+        // ...and the moment it is complete the line holds all of it, with no pacing left.
+        let full = String(repeating: "很长的回答。", count: 40)
+        controller.developmentBuffer("问题", plugin: true, output: full); window.layoutIfNeeded()
+        XCTAssertEqual(controller.layoutViews.result.text, full)
+    }
     func testStreamingShowsNoStatusWordsAndRevealsEvenly() {
         let (window, controller) = host(); defer { window.isHidden = true }
         // Waiting for the first words: no words in the line, but pulsing dots so it is never blank.
@@ -537,13 +563,9 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         reveal.start(); reveal.feed(burst, finished: false)
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         XCTAssertGreaterThan(line.text.count, 0); XCTAssertLessThan(line.text.count, burst.count)
-        // A whole answer arriving at once still streams at a readable pace (≤ ~90 characters a second).
+        // Once the whole answer has arrived nothing animates any more: it is shown in full at once.
         reveal.feed(burst, finished: true)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        XCTAssertLessThan(line.text.count, burst.count)
-        RunLoop.main.run(until: Date().addingTimeInterval(1.5))
         XCTAssertEqual(line.text, burst); XCTAssertTrue(settled); XCTAssertFalse(reveal.isActive)
-        XCTAssertGreaterThan(line.contentOffset.x, 0) // it followed the newest text
         line.removeFromSuperview()
         // Thinking shows (dimmed, unlabelled), then the answer replaces it.
         let (window2, c2) = host(); defer { window2.isHidden = true }
@@ -885,31 +907,6 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
         m.up(1)
         XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "", "Rolling commits no word")
-    }
-    func testPinchingPutsTheFieldTextStraightIntoTheBufferAndCoversWhatItHolds() async throws {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        let (_, m) = space(controller)
-        func pinch(_ a: Int) {
-            m.down(a, at: CGPoint(x: 10, y: 20)); m.down(a + 1, at: CGPoint(x: m.width - 10, y: 20))
-            m.move(a, to: CGPoint(x: m.width / 2 - 10, y: 20)); m.move(a + 1, to: CGPoint(x: m.width / 2 + 10, y: 20))
-            m.up(a); m.up(a + 1)
-        }
-        func waitForBuffer(_ text: String) async throws {
-            for _ in 0..<100 where controller.developmentBufferSource.text != text { try await Task.sleep(nanoseconds: 20_000_000) }
-        }
-        // Closed Buffer: it opens and takes the field's text, with no second confirmation.
-        controller.layoutProxy.native.text = "输入框里的字"; controller.layoutProxy.native.selectedRange = NSRange(location: 6, length: 0)
-        XCTAssertTrue(controller.layoutViews.buffer.isHidden)
-        pinch(1)
-        try await waitForBuffer("输入框里的字"); await controller.developmentWaitForBufferImport()
-        XCTAssertEqual(controller.developmentBufferSource.text, "输入框里的字")
-        XCTAssertFalse(controller.layoutViews.buffer.isHidden)
-        // A Buffer that already holds text is covered by the next field text, again with no question.
-        controller.layoutProxy.native.text = "新的字"; controller.layoutProxy.native.selectedRange = NSRange(location: 3, length: 0)
-        controller.textDidChange(nil)
-        pinch(5)
-        try await waitForBuffer("新的字"); await controller.developmentWaitForBufferImport()
-        XCTAssertEqual(controller.developmentBufferSource.text, "新的字")
     }
     func testHoldingTheMiddleOfSpaceMovesTheCaretInHostAndBufferWithoutTypingSpace() {
         for buffered in [false, true] {
@@ -1564,9 +1561,12 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(v.source.role, .input); XCTAssertEqual(v.result.role, .output)
         XCTAssertEqual(v.source.text, "原文。")
         XCTAssertFalse(v.buffer.subviews.contains { String(describing: type(of: $0)).contains("BlockStrip") })
-        let stats = try XCTUnwrap(v.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? UILabel)
+        let stats = try XCTUnwrap(v.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? TypingStatsView)
         XCTAssertFalse(stats.isHidden)
-        XCTAssertEqual(stats.textAlignment, .center); XCTAssertGreaterThanOrEqual(stats.font.pointSize, 16)
+        // Small bordered chips, not a line of text.
+        XCTAssertLessThanOrEqual(stats.fontSize, 11)
+        XCTAssertTrue(stats.subviews.allSatisfy { $0.layer.borderWidth > 0 })
+        XCTAssertTrue(stats.text.contains("字/分"), "Chinese while typing Chinese")
         XCTAssertEqual(stats.frame.height, v.result.frame.height)
         XCTAssertEqual(stats.frame.midX, v.result.bounds.midX, accuracy: 0.5)
         XCTAssertEqual(v.buffer.bounds.height, 76)

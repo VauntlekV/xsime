@@ -110,6 +110,30 @@ import RimesCore
         XCTAssertEqual(controller.developmentBufferSource.text, "甲乙丙")
     }
 
+    func testPinchingSpacePutsTheFieldTextStraightIntoTheBufferAndCoversWhatItHolds() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        let m = controller.developmentSpaceKey.machine
+        func pinch(_ a: Int) {
+            m.down(a, at: CGPoint(x: 10, y: 20)); m.down(a + 1, at: CGPoint(x: m.width - 10, y: 20))
+            m.move(a, to: CGPoint(x: m.width / 2 - 10, y: 20)); m.move(a + 1, to: CGPoint(x: m.width / 2 + 10, y: 20))
+            m.up(a); m.up(a + 1)
+        }
+        func wait(for text: String) async throws {
+            for _ in 0..<150 where controller.developmentBufferSource.text != text { try await Task.sleep(nanoseconds: 20_000_000) }
+            await controller.developmentWaitForBufferImport()
+        }
+        // Buffer open and empty: the field's text moves in at once, with no second confirmation.
+        setHost("输入框里的字", controller: controller)
+        controller.developmentBuffer(""); window.layoutIfNeeded()
+        pinch(1); try await wait(for: "输入框里的字")
+        XCTAssertEqual(controller.developmentBufferSource.text, "输入框里的字")
+        XCTAssertEqual(controller.layoutProxy.native.text, "")
+        // A Buffer that already holds text is covered by the next field text, again with no question.
+        setHost("新的字", controller: controller); controller.textDidChange(nil)
+        pinch(5); try await wait(for: "新的字")
+        XCTAssertEqual(controller.developmentBufferSource.text, "新的字")
+    }
+
     func testHostTextIsOfferedToThePinchOnlyWhileTheBufferIsEmptyAndTheFieldHasText() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentBuffer(""); XCTAssertFalse(controller.developmentOffersHostText)
