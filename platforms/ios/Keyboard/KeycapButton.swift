@@ -173,6 +173,9 @@ struct InsertionPress {
 
 final class InsertKeycapButton: KeycapButton {
     var onPressBegan: (() -> Void)?
+    /// Hold progress for the edge line: began (with the hold length), cancelled by a tap or a slide off, or completed.
+    enum HoldPhase: Equatable { case began(TimeInterval), cancelled, completed }
+    var onHoldProgress: ((HoldPhase) -> Void)?
     var onInsert: ((InsertionPress.Action) -> Void)?
     private var press = InsertionPress()
     private var holdTimer: Timer?
@@ -183,19 +186,20 @@ final class InsertKeycapButton: KeycapButton {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var isEnabled: Bool { didSet { if !isEnabled { cancelPress() } } }
-    func cancelPress() { holdTimer?.invalidate(); holdTimer = nil; press.cancel(); isHighlighted = false }
+    func cancelPress() { holdTimer?.invalidate(); holdTimer = nil; press.cancel(); isHighlighted = false; onHoldProgress?(.cancelled) }
     override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         guard super.beginTracking(touch, with: event) else { return false }
         onPressBegan?()
         let now = ProcessInfo.processInfo.systemUptime
         press.begin(at: now); deadline = now + InsertionPress.holdDuration
+        onHoldProgress?(.began(InsertionPress.holdDuration))
         scheduleHold(); return true
     }
     private func scheduleHold() {
         holdTimer?.invalidate()
         let timer = Timer(timeInterval: max(0.001, deadline - ProcessInfo.processInfo.systemUptime), repeats: false) { [weak self] _ in
             guard let self else { return }
-            if let action = self.press.advance(to: ProcessInfo.processInfo.systemUptime) { self.onInsert?(action) }
+            if let action = self.press.advance(to: ProcessInfo.processInfo.systemUptime) { self.onHoldProgress?(.completed); self.onInsert?(action) }
             else if self.isTracking && self.isEnabled { self.scheduleHold() }
         }
         holdTimer = timer; RunLoop.main.add(timer, forMode: .common)
@@ -208,6 +212,7 @@ final class InsertKeycapButton: KeycapButton {
         holdTimer?.invalidate(); holdTimer = nil
         let action = press.end(at: ProcessInfo.processInfo.systemUptime, inside: touch.map { bounds.contains($0.location(in: self)) } ?? false)
         super.endTracking(touch, with: event)
+        onHoldProgress?(action == .all ? .completed : .cancelled)
         if let action { onInsert?(action) }
     }
     override func cancelTracking(with event: UIEvent?) { cancelPress(); super.cancelTracking(with: event) }

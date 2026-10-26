@@ -995,23 +995,47 @@ final class PromptLabel: UILabel {
     }
 }
 
-/// The default Buffer's typing figures as small bordered chips, so they read as readings and not as text.
+/// The default Buffer's typing figures as small bordered chips: an icon and a number, never a word, so
+/// they read as readings in any language.
 final class TypingStatsView: UIView {
+    struct Item: Equatable {
+        var symbol: String
+        var value: String
+        /// What VoiceOver says for the icon.
+        var spoken: String
+    }
     private var chips: [UILabel] = []
-    private var items: [String] = []
-    var fontSize: CGFloat = 10.5 { didSet { if oldValue != fontSize { chips.forEach { $0.font = chipFont }; setNeedsLayout() } } }
+    private var items: [Item] = []
+    var fontSize: CGFloat = 10.5 { didSet { if oldValue != fontSize { render() } } }
     private var chipFont: UIFont { .monospacedDigitSystemFont(ofSize: fontSize, weight: .medium) }
     override init(frame: CGRect) { super.init(frame: frame); isUserInteractionEnabled = false }
     required init?(coder: NSCoder) { fatalError() }
-    /// Joined text of the chips, for tests and accessibility.
-    var text: String { items.joined(separator: " · ") }
-    func update(_ values: [String]) {
+    /// The numbers, for tests and a plain-text read-out.
+    var text: String { items.map(\.value).joined(separator: " · ") }
+    var symbols: [String] { items.map(\.symbol) }
+    func update(_ values: [Item]) {
         guard values != items else { return }
         items = values
         while chips.count < values.count { chips.append(makeChip()) }
         while chips.count > values.count { chips.removeLast().removeFromSuperview() }
-        for (chip, value) in zip(chips, values) { chip.text = value }
-        accessibilityLabel = text; setNeedsLayout()
+        render()
+        accessibilityLabel = values.map { "\($0.spoken) \($0.value)" }.joined(separator: "，")
+    }
+    private func render() {
+        let config = UIImage.SymbolConfiguration(pointSize: fontSize, weight: .medium)
+        for (chip, item) in zip(chips, items) {
+            let text = NSMutableAttributedString()
+            if let image = UIImage(systemName: item.symbol, withConfiguration: config)?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal) {
+                let attachment = NSTextAttachment(image: image)
+                // Sit the icon on the digits' baseline.
+                attachment.bounds = CGRect(x: 0, y: -1.5, width: image.size.width, height: image.size.height)
+                text.append(NSAttributedString(attachment: attachment)); text.append(NSAttributedString(string: " "))
+            }
+            text.append(NSAttributedString(string: item.value, attributes: [.font: chipFont, .foregroundColor: UIColor.secondaryLabel]))
+            chip.attributedText = text
+            chip.accessibilityLabel = "\(item.spoken) \(item.value)"
+        }
+        setNeedsLayout()
     }
     private func makeChip() -> UILabel {
         let chip = BorderedChipLabel()
@@ -1028,7 +1052,7 @@ final class TypingStatsView: UIView {
         let gap: CGFloat = 4, height = min(bounds.height, ceil(chipFont.lineHeight) + 8)
         let widths = chips.map { ceil($0.intrinsicContentSize.width) }
         let total = widths.reduce(0, +) + gap * CGFloat(max(0, chips.count - 1))
-        // Too many chips for the line: squeeze the gaps before clipping.
+        // Too many chips for the line: squeeze them before clipping.
         var x = max(0, (bounds.width - total) / 2), scale: CGFloat = total > bounds.width && total > 0 ? bounds.width / total : 1
         for (chip, width) in zip(chips, widths) {
             chip.frame = CGRect(x: x, y: (bounds.height - height) / 2, width: width * scale, height: height)
@@ -1041,4 +1065,56 @@ private final class BorderedChipLabel: UILabel {
     override var intrinsicContentSize: CGSize { let s = super.intrinsicContentSize; return CGSize(width: s.width + 2 * inset, height: s.height) }
     override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: inset, dy: 0)) }
     override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
+}
+
+/// The progress of a hold-to-send-all: a thin line along the lower edge of the Buffer fills from left to right while
+/// a send key is held, the way the desktop button fills its icon, then flashes when everything is released.
+final class HoldProgressBar: UIView {
+    static let height: CGFloat = 3
+    private let fill = CALayer()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false; alpha = 0
+        fill.anchorPoint = CGPoint(x: 0, y: 0.5); fill.cornerRadius = Self.height / 2
+        fill.shadowOffset = .zero; fill.shadowRadius = 3; fill.shadowOpacity = 0.7
+        layer.addSublayer(fill); applyColor()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func tintColorDidChange() { super.tintColorDidChange(); applyColor() }
+    private func applyColor() {
+        let color = (tintColor ?? .systemBlue)
+        fill.backgroundColor = color.cgColor; fill.shadowColor = color.cgColor
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        fill.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height); fill.position = CGPoint(x: 0, y: bounds.midY)
+        CATransaction.commit()
+    }
+    /// Whether the line is showing, for tests.
+    private(set) var isShowing = false
+    func begin(duration: TimeInterval) {
+        layer.removeAllAnimations(); fill.removeAllAnimations()
+        alpha = 1; isShowing = true
+        let grow = CABasicAnimation(keyPath: "transform.scale.x")
+        grow.fromValue = 0.001; grow.toValue = 1; grow.duration = duration; grow.timingFunction = CAMediaTimingFunction(name: .linear)
+        grow.fillMode = .both; grow.isRemovedOnCompletion = false
+        fill.add(grow, forKey: "hold")
+    }
+    /// A tap or a slide-off: the line drops away.
+    func cancel() {
+        guard isShowing else { return }
+        isShowing = false
+        UIView.animate(withDuration: 0.18, animations: { self.alpha = 0 }, completion: { _ in
+            if !self.isShowing { self.fill.removeAllAnimations() }
+        })
+    }
+    /// The hold finished: the full line flashes once and fades.
+    func complete() {
+        fill.removeAllAnimations()
+        alpha = 1; isShowing = true
+        UIView.animate(withDuration: 0.4, delay: 0.05, options: [.curveEaseOut], animations: { self.alpha = 0 }, completion: { _ in
+            if self.alpha == 0 { self.isShowing = false }
+        })
+    }
 }

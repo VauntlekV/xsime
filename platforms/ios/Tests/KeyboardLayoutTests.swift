@@ -355,7 +355,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         // Once sent, the figures start over.
         XCTAssertTrue(controller.developmentTypingSession.isEmpty); XCTAssertTrue(controller.developmentTypingMetrics.isEmpty)
         XCTAssertNil(controller.typingSignature())
-        XCTAssertFalse(stats.text.contains("s") == true && stats.text.contains("停") == true)
+        XCTAssertFalse(stats.symbols.contains("hourglass") && stats.text.contains("s"))
     }
     func testOptionalImagePreviewPreservesTypingAndPausesAutoInsertion() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -950,6 +950,41 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
             let enter = key("keyboard.enter") as! KeycapButton
             XCTAssertEqual(enter.titleLabel?.adjustsFontSizeToFitWidth, false, "One label size, no shrinking")
         }
+    }
+    func testHoldingInsertForASecondSendsEverythingWithAnEdgeLineThatTheTapDoesNotShow() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.layoutProxy.native.text = ""
+        controller.developmentBuffer("甲。乙。丙。"); window.layoutIfNeeded()
+        let enter = try XCTUnwrap(controller.developmentStandardFunctions[.enter] as? KeycapButton)
+        let bar = controller.developmentHoldBar
+        XCTAssertEqual(enter.currentTitle, L("上屏", "Insert"))
+        XCTAssertTrue(controller.developmentReturnHold.isEnabled, "The hold is armed while Insert is on the key")
+        XCTAssertEqual(controller.developmentReturnHold.minimumPressDuration, 1, accuracy: 0.01)
+        // The line sits along the Buffer's lower edge and starts filling the moment a finger is down.
+        XCTAssertFalse(bar.isShowing)
+        enter.sendActions(for: .touchDown)
+        XCTAssertTrue(bar.isShowing)
+        XCTAssertEqual(bar.frame.maxY, controller.layoutViews.buffer.bounds.height, accuracy: 0.5)
+        // A tap lets it go and sends one block.
+        enter.sendActions(for: .touchUpInside)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertFalse(bar.isShowing)
+        await controller.developmentWaitForDelivery(); window.layoutIfNeeded()
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。", "A tap sends the next block")
+        // Held a second: everything that is left goes on screen.
+        enter.sendActions(for: .touchDown); XCTAssertTrue(bar.isShowing)
+        controller.developmentReturnHeld()
+        await controller.developmentWaitForDelivery()
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。丙。")
+    }
+    func testHoldProgressBarFillsThenDropsOrFlashes() {
+        // Views outside a window finish their animations at once, so give it one.
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 200, height: 40)); window.makeKeyAndVisible(); defer { window.isHidden = true }
+        let bar = HoldProgressBar(frame: CGRect(x: 0, y: 0, width: 200, height: HoldProgressBar.height)); window.addSubview(bar); bar.layoutIfNeeded()
+        bar.begin(duration: 1); XCTAssertTrue(bar.isShowing)
+        bar.cancel(); RunLoop.main.run(until: Date().addingTimeInterval(0.4)); XCTAssertFalse(bar.isShowing)
+        bar.begin(duration: 1); bar.complete(); XCTAssertTrue(bar.isShowing)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.7)); XCTAssertFalse(bar.isShowing)
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -1566,7 +1601,9 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         // Small bordered chips, not a line of text.
         XCTAssertLessThanOrEqual(stats.fontSize, 11)
         XCTAssertTrue(stats.subviews.allSatisfy { $0.layer.borderWidth > 0 })
-        XCTAssertTrue(stats.text.contains("字/分"), "Chinese while typing Chinese")
+        // Icons and numerals, never words, in any language.
+        XCTAssertFalse(stats.symbols.isEmpty); XCTAssertTrue(stats.symbols.allSatisfy { UIImage(systemName: $0) != nil })
+        XCTAssertNil(stats.text.range(of: "[\\p{Han}A-Za-z]{2,}", options: .regularExpression), "No words: \(stats.text)")
         XCTAssertEqual(stats.frame.height, v.result.frame.height)
         XCTAssertEqual(stats.frame.midX, v.result.bounds.midX, accuracy: 0.5)
         XCTAssertEqual(v.buffer.bounds.height, 76)

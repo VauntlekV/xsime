@@ -49,6 +49,8 @@ final class KeyboardViewController: UIInputViewController {
     private var autoAwaitingOrdinaryEdit = false
     private var defaultDelay = UserDefaults.standard.double(forKey: "defaultBuffer.autoDelay")
     private let typingStats = TypingStatsView()
+    private let holdBar = HoldProgressBar()
+    private lazy var returnHold = UILongPressGestureRecognizer(target: self, action: #selector(returnHeld(_:)))
     private var typingCardPreview: TypingCardPreview?
     private var typingCardPNG: Data?
     private var typingCardStore = TypingCardStore()
@@ -389,6 +391,13 @@ final class KeyboardViewController: UIInputViewController {
         insertButton.accessibilityHint = L("单击逐块上屏，长按一秒插入全部", "Tap for the next block; hold one second to insert all")
         insertButton.addAction(UIAction { [weak self] _ in self?.surface.feedback.send(.press) }, for: .touchDown)
         insertButton.onPressBegan = { [weak self] in self?.pressedInsertion = self?.insertionContext }
+        insertButton.onHoldProgress = { [weak self] phase in
+            switch phase {
+            case .began(let seconds): self?.holdBar.begin(duration: seconds)
+            case .cancelled: self?.holdBar.cancel()
+            case .completed: self?.holdBar.complete()
+            }
+        }
         insertButton.onInsert = { [weak self] action in
             guard let self, self.pressedInsertion == self.insertionContext else { return }
             self.deliver(all: action == .all)
@@ -416,6 +425,7 @@ final class KeyboardViewController: UIInputViewController {
         result.onTapBlock = { [weak self] index in self?.readOutputBlock(index) }
         result.onTapBackground = { [weak self] in if self?.isDefaultBuffer == true { self?.showTypingCard() } }
         result.addSubview(typingStats)
+        bufferPanel.addSubview(holdBar)
         refreshPluginMenu()
         if #available(iOS 26, *) {
             Task { [weak self] in
@@ -509,8 +519,15 @@ final class KeyboardViewController: UIInputViewController {
             if let pressed = self.pressedReturn, pressed != self.returnPressContext { return }
             self.noteTypingKey(); self.enter()
         }
-        enter.addAction(UIAction { [weak self] _ in self?.pressedReturn = self?.returnPressContext }, for: .touchDown)
+        enter.addAction(UIAction { [weak self] _ in
+            self?.pressedReturn = self?.returnPressContext
+            // Insert on the Return key also sends everything when held a second; the edge line shows the hold.
+            if self?.returnAction == .insertBuffer { self?.holdBar.begin(duration: InsertionPress.holdDuration) }
+        }, for: .touchDown)
+        enter.addAction(UIAction { [weak self] _ in self?.holdBar.cancel() }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
         enter.addAction(UIAction { [weak self] _ in self?.pressedReturn = nil }, for: [.touchCancel, .touchUpOutside])
+        returnHold.minimumPressDuration = InsertionPress.holdDuration; returnHold.allowableMovement = 20; returnHold.isEnabled = false
+        enter.addGestureRecognizer(returnHold)
         enter.titleLabel?.adjustsFontSizeToFitWidth = true; enter.titleLabel?.minimumScaleFactor = 0.7
         // Labels never decide a key's width: the width constraints win over the text's own size.
         for key in [globe, numbers, shiftButton, deleteButton, bottomLanguage, enter] { key.setContentCompressionResistancePriority(.defaultLow, for: .horizontal) }
@@ -1090,6 +1107,15 @@ final class KeyboardViewController: UIInputViewController {
         case .english: return "EN"
         }
     }
+    @objc private func returnHeld(_ gesture: UILongPressGestureRecognizer) {
+        if gesture.state == .began { sendEverythingFromReturnHold() }
+    }
+    private func sendEverythingFromReturnHold() {
+        guard returnAction == .insertBuffer, onscreen else { return }
+        // The one-second hold: everything in the Buffer goes on screen, and the release that follows is not a tap.
+        pressedReturn = nil; holdBar.complete()
+        deliver(all: true)
+    }
     private func refreshReturnKey() {
         let title: String, hint: String?
         let selected: Bool, enabled: Bool
@@ -1117,6 +1143,9 @@ final class KeyboardViewController: UIInputViewController {
         returnKey.setImage(nil, for: .normal); returnKey.setTitle(title, for: .normal)
         returnKey.accessibilityLabel = title; returnKey.accessibilityHint = hint
         returnKey.isSelected = selected; returnKey.isEnabled = enabled
+        // A one-second hold on Insert sends everything; on a host's own Return (Send, Search...) it does nothing special.
+        returnHold.isEnabled = returnAction == .insertBuffer && enabled
+        if returnAction != .insertBuffer { holdBar.cancel() }
         insertButton.isSelected = bufferEnabled && insertButton.isEnabled
     }
     private func backspace() {
@@ -1476,6 +1505,8 @@ final class KeyboardViewController: UIInputViewController {
         let landscape = view.bounds.width > 600
         if bufferEnabled {
             let bufferRowHeight: CGFloat = landscape ? 28 : 36
+        holdBar.frame = CGRect(x: 4, y: bufferPanel.bounds.height - HoldProgressBar.height, width: max(0, bufferPanel.bounds.width - 8), height: HoldProgressBar.height)
+        bufferPanel.bringSubviewToFront(holdBar); holdBar.tintColor = preferences.resolvedTheme.palette.accent
             let topLine = CGRect(x: 36, y: 0, width: max(0, bufferPanel.bounds.width - 72), height: bufferRowHeight)
             typingStats.fontSize = landscape ? 10 : 10.5
             insertionSlot.frame = CGRect(x: bufferPanel.bounds.width - 32, y: 0, width: 32, height: bufferRowHeight)
@@ -1624,18 +1655,24 @@ final class KeyboardViewController: UIInputViewController {
     /// keys per second, and how long you have paused. Tap it to sign the app's text.
     private func updateTypingStats() {
         let now = uptime
-        // The figures are Chinese while typing Chinese, whatever the phone's language; English input shows English.
-        let zh = !directEnglish
-        func word(_ chinese: String, _ english: String) -> String { zh ? chinese : english }
-        var parts: [String] = []
-        if let cpm = liveTyping.charactersPerMinute(at: now) { parts.append("\(Int(cpm.rounded())) " + word("字/分", "cpm")) }
-        if let code = liveTyping.codeLength { parts.append(String(format: "%.2f ", code) + word("触/字", "keys/char")) }
-        if let keys = liveTyping.keysPerSecond { parts.append(String(format: "%.1f ", keys) + word("触/秒", "keys/s")) }
-        if parts.isEmpty { parts = [word("— 字/分", "— cpm"), word("— 触/字", "— keys/char"), word("— 触/秒", "— keys/s")] }
-        if !liveTyping.isEmpty, let idle = liveTyping.idleSeconds(at: now), idle >= 1 { parts.append(word("停 ", "idle ") + "\(Int(idle))s") }
+        // Icons and numerals only, so the figures need no translation. Icons: speedometer = characters a minute,
+        // keyboard = keys a character (code length), bolt = keys a second, hourglass = idle, timer = auto-send.
+        typealias Item = TypingStatsView.Item
+        let cpm = Item(symbol: "speedometer", value: "", spoken: L("每分钟字数", "Characters per minute"))
+        let code = Item(symbol: "keyboard", value: "", spoken: L("每字击键数", "Keys per character"))
+        let rate = Item(symbol: "bolt", value: "", spoken: L("每秒击键数", "Keys per second"))
+        func with(_ item: Item, _ value: String) -> Item { var copy = item; copy.value = value; return copy }
+        var items: [Item] = []
+        if let value = liveTyping.charactersPerMinute(at: now) { items.append(with(cpm, "\(Int(value.rounded()))")) }
+        if let value = liveTyping.codeLength { items.append(with(code, String(format: "%.2f", value))) }
+        if let value = liveTyping.keysPerSecond { items.append(with(rate, String(format: "%.1f", value))) }
+        if items.isEmpty { items = [with(cpm, "—"), with(code, "—"), with(rate, "—")] }
+        if !liveTyping.isEmpty, let idle = liveTyping.idleSeconds(at: now), idle >= 1 {
+            items.append(Item(symbol: "hourglass", value: "\(Int(idle))s", spoken: L("停顿秒数", "Idle seconds")))
+        }
         let enabled = [1.0, 2, 3, 5].contains(defaultDelay) && !autoSuspended
-        if enabled { parts.append(String(format: "%.1fs", max(0, defaultDelay - autoClock.headAge))) }
-        typingStats.update(parts)
+        if enabled { items.append(Item(symbol: "timer", value: String(format: "%.1fs", max(0, defaultDelay - autoClock.headAge)), spoken: L("自动上屏倒计时", "Auto-send countdown"))) }
+        typingStats.update(items)
     }
     private func refreshDefaultBuffer() {
         typingStats.isHidden = !isDefaultBuffer
@@ -2562,6 +2599,9 @@ final class KeyboardViewController: UIInputViewController {
     }
     func developmentSaveAssociationHistory() { associationHistoryChanges = max(1, associationHistoryChanges); saveAssociationHistory() }
     var developmentStatus: String { status.text ?? "" }
+    var developmentHoldBar: HoldProgressBar { holdBar }
+    var developmentReturnHold: UILongPressGestureRecognizer { returnHold }
+    func developmentReturnHeld() { sendEverythingFromReturnHold() }
     func developmentImportHostText() { importHostText() }
     var developmentOffersHostText: Bool { offeredHostText != nil }
     func developmentReleaseEdgeTouchDelay() { releaseEdgeTouchDelay() }
