@@ -515,6 +515,8 @@ final class KeyboardViewController: UIInputViewController {
         enter.addAction(UIAction { [weak self] _ in self?.pressedReturn = self?.returnPressContext }, for: .touchDown)
         enter.addAction(UIAction { [weak self] _ in self?.pressedReturn = nil }, for: [.touchCancel, .touchUpOutside])
         enter.titleLabel?.adjustsFontSizeToFitWidth = true; enter.titleLabel?.minimumScaleFactor = 0.7
+        // Labels never decide a key's width: the width constraints win over the text's own size.
+        for key in [globe, numbers, shiftButton, deleteButton, bottomLanguage, enter] { key.setContentCompressionResistancePriority(.defaultLow, for: .horizontal) }
         for item in [globe, numbers, shiftButton, spaceKeys, deleteButton, bottomLanguage, enter] { bottom.addArrangedSubview(item) }
         // The functional widths never depend on the optional globe; its removal widens Space.
         for item in [globe, numbers, shiftButton, deleteButton, bottomLanguage, enter] {
@@ -1249,8 +1251,9 @@ final class KeyboardViewController: UIInputViewController {
                 }
                 button.titleLabel?.font = .systemFont(ofSize: !usesChordLayout && (action == .language || skin == .system) ? nativeSize : 14, weight: !usesChordLayout && skin == .system ? .regular : .medium)
                 button.setPreferredSymbolConfiguration(.init(pointSize: !usesChordLayout && skin == .system ? 21 : 17, weight: .medium), forImageIn: .normal)
-                button.titleHorizontalInset = usesChordLayout ? 6 : 2
-                button.titleLabel?.adjustsFontSizeToFitWidth = usesChordLayout || action == .enter
+                button.titleHorizontalInset = 2
+                // Orthogonal keys keep one label size; the others may shrink a long label.
+                button.titleLabel?.adjustsFontSizeToFitWidth = !usesChordLayout && action == .enter
                 button.titleLabel?.minimumScaleFactor = 0.7
             }
             for button in [moreButton, bufferButton, aiButton, settingsButton, insertButton, stopButton, runButton, globe, chordDelete] { button.legacyKey = legacy; button.theme = theme }
@@ -1373,9 +1376,16 @@ final class KeyboardViewController: UIInputViewController {
         for case let button as KeycapButton in bottom.arrangedSubviews + [spaceKey] where button.compactCap != compactTypingKeys {
             button.compactCap = compactTypingKeys
         }
-        // Orthogonal layout: the four keys either side of Space (123, Shift, language, Return) are narrower, so Space is longer.
-        let sideKeyWidth = compactTypingKeys ? max(0, width - 10) * (0.109 - 1 / 7.5) : -5 * bottom.spacing / 7.5
-        for constraint in bottomKeyWidths { constraint.constant = sideKeyWidth }
+        // Orthogonal layout: fixed key widths, 1U being a column of the grid above. 123 and Return are 1.5U,
+        // Shift and the language key 1U, and Space takes the rest; no width follows a label.
+        let rowWidth = max(0, width - 10)
+        if compactTypingKeys {
+            let unit = rowWidth / 10
+            // Same order as the constraints: globe, 123, Shift, Delete (hidden here), language, Return.
+            for (constraint, factor) in zip(bottomKeyWidths, [1, 1.5, 1, 1, 1, 1.5] as [CGFloat]) { constraint.constant = factor * unit - rowWidth / 7.5 }
+        } else {
+            for constraint in bottomKeyWidths { constraint.constant = -5 * bottom.spacing / 7.5 }
+        }
         candidateStrip.expanded = expanded; candidateStrip.landscape = landscape
         // The height must not depend on presentation state: `onscreen` only turns
         // true in viewWillAppear, after the first height was already requested.

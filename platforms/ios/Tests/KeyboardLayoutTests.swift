@@ -909,22 +909,25 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(m.presses[1]?.role, SplitSpaceMachine.Role.dead)
         m.up(1)
     }
-    func testOrthogonalBottomRowHasNarrowSideKeysAndALongerSpace() {
-        let (window, controller) = host(); defer { window.isHidden = true }
-        controller.developmentChoose(.pinyin); window.layoutIfNeeded()
-        let bottom = controller.layoutViews.bottom
-        func widths() -> (side: CGFloat, space: CGFloat)? {
-            let visible = bottom.arrangedSubviews.filter { !$0.isHidden && $0.frame.width > 0 }
-            guard let space = visible.first(where: { $0.accessibilityIdentifier == "keyboard.spaces" }),
-                  let side = visible.first(where: { $0.accessibilityIdentifier == "keyboard.shift" }) else { return nil }
-            return (side.frame.width, space.frame.width)
+    func testOrthogonalBottomRowUsesFixedUnitWidthsWhateverTheReturnLabelSays() {
+        for width: CGFloat in [320, 393, 852] {
+            let (window, controller) = host(width: width); defer { window.isHidden = true }
+            controller.developmentChoose(.chord); controller.developmentSetLayout(.orthogonal); window.layoutIfNeeded()
+            let bottom = controller.layoutViews.bottom
+            func key(_ id: String) -> UIView { bottom.arrangedSubviews.first { $0.accessibilityIdentifier == id }! }
+            let numbers = bottom.arrangedSubviews.first { !$0.isHidden && $0.accessibilityIdentifier == nil }!
+            let unit = bottom.bounds.width / 10
+            for returnType in [UIReturnKeyType.default, .send, .search, .continue, .done] {
+                controller.layoutProxy.returnKeyType = returnType; controller.developmentContent(); window.layoutIfNeeded()
+                XCTAssertEqual(numbers.frame.width, 1.5 * unit, accuracy: 0.6, "123 is 1.5U")
+                XCTAssertEqual(key("keyboard.enter").frame.width, 1.5 * unit, accuracy: 0.6, "Return is 1.5U for \(returnType)")
+                XCTAssertEqual(key("keyboard.shift").frame.width, unit, accuracy: 0.6, "Shift is 1U")
+                XCTAssertEqual(key("keyboard.mode.bottom").frame.width, unit, accuracy: 0.6, "The language key is 1U")
+            }
+            XCTAssertGreaterThan(key("keyboard.spaces").frame.width, 4.5 * unit)
+            let enter = key("keyboard.enter") as! KeycapButton
+            XCTAssertEqual(enter.titleLabel?.adjustsFontSizeToFitWidth, false, "One label size, no shrinking")
         }
-        controller.developmentChoose(.chord); controller.developmentSetLayout(.orthogonal); window.layoutIfNeeded()
-        let ortho = try! XCTUnwrap(widths())
-        let visible = bottom.arrangedSubviews.filter { !$0.isHidden && $0.frame.width > 0 }
-        XCTAssertEqual(visible.count, 5, "123, Shift, Space, language and Return")
-        XCTAssertLessThan(ortho.side, 0.115 * bottom.bounds.width); XCTAssertGreaterThan(ortho.space, 0.45 * bottom.bounds.width)
-        XCTAssertEqual(visible.filter { $0.accessibilityIdentifier != "keyboard.spaces" }.count, 4)
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -1557,8 +1560,12 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertTrue(views.globe.isHidden)
         controller.layoutNeedsInputModeSwitchKey = true; controller.developmentContent(); window.layoutIfNeeded()
         XCTAssertFalse(views.globe.isHidden); XCTAssertLessThan(space.bounds.width, without)
-        let otherWidths = views.bottom.arrangedSubviews.filter { $0 !== space && !$0.isHidden }.map { $0.bounds.width }
-        XCTAssertTrue(otherWidths.allSatisfy { abs($0 - otherWidths[0]) <= 0.5 }, "Pixel-aligned widths: \(otherWidths)")
+        // Globe, Shift and the language key are 1U; 123 and Return are 1.5U (see the orthogonal bottom-row test).
+        let unit = views.bottom.bounds.width / 10
+        let others = views.bottom.arrangedSubviews.filter { $0 !== space && !$0.isHidden }
+        let expected: [CGFloat] = [1, 1.5, 1, 1, 1.5]
+        XCTAssertEqual(others.count, expected.count)
+        for (view, factor) in zip(others, expected) { XCTAssertEqual(view.bounds.width, factor * unit, accuracy: 0.6, "\(view.accessibilityIdentifier ?? "123")") }
         controller.layoutNeedsInputModeSwitchKey = false; controller.developmentContent(); window.layoutIfNeeded()
         XCTAssertTrue(views.globe.isHidden); XCTAssertEqual(space.bounds.width, without, accuracy: 0.01)
     }
