@@ -182,7 +182,7 @@ final class KeyboardViewController: UIInputViewController {
     /// Built-in Chinese input shows Chinese marks on the standard 123 and #+= pages and types
     /// them as shown. Chord keeps its own number page; imported schemes own their punctuation.
     private var chineseNumberPages: Bool { !directEnglish && importedSchemeSelection == nil && !usesChordLayout }
-    private let status = UILabel(), source = SingleLineTextView(), result = SingleLineTextView(), surface = KeySurface()
+    private let status = PromptLabel(), source = SingleLineTextView(), result = SingleLineTextView(), surface = KeySurface()
     private let bufferPanel = UIView(), insertionSlot = UIView(), candidatePanel = CandidatePanelView()
     private let bufferButton = KeycapButton(), aiButton = KeycapButton(), moreButton = KeycapButton()
     private let deleteButton = RepeatKeycapButton()
@@ -563,7 +563,7 @@ final class KeyboardViewController: UIInputViewController {
         for (id, button) in [("symbols", symbolsKey), ("separator", separatorKey), ("spelling", spellingKey), ("punctuation", punctuationKey)] {
             button.accessibilityIdentifier = "keyboard.nineKey.\(id)"
         }
-        status.font = .systemFont(ofSize: 11); status.textColor = .secondaryLabel; status.numberOfLines = 2
+        status.font = .systemFont(ofSize: 13); status.numberOfLines = 3
         for (item, id) in [(bufferButton, "buffer"), (aiButton, "plugin"), (runButton, "plugin.run"), (settingsButton, "buffer.settings"), (insertButton, "insert"), (stopButton, "stop"), (moreButton, "more"), (globe, "globe"), (spaceKey, "space"), (shiftButton, "shift"), (deleteButton, "delete"), (chordDelete, "delete.chord"), (bottomLanguage, "mode.bottom"), (enter, "enter")] {
             item.accessibilityIdentifier = "keyboard.\(id)"
         }
@@ -1389,7 +1389,6 @@ final class KeyboardViewController: UIInputViewController {
         }
         for constraint in bottomKeyWidths { constraint.constant = -5 * bottom.spacing / 7.5 }
         candidateStrip.expanded = expanded; candidateStrip.landscape = landscape
-        status.isHidden = status.text?.isEmpty != false
         // The height must not depend on presentation state: `onscreen` only turns
         // true in viewWillAppear, after the first height was already requested.
         globe.isHidden = !onscreen || !needsInputModeSwitchKey
@@ -1397,7 +1396,7 @@ final class KeyboardViewController: UIInputViewController {
         let bufferHeight: CGFloat = landscape ? 60 : 76
         let customHeight = surface.usesCustomLayout ? surface.customLayout.map { CGFloat($0.geometry(width: Double(max(1, width - 10)), landscape: landscape).height) } : nil
         let standardHeight = surface.usesStandardLayout ? StandardKeyboardGeometry.height(landscape: landscape, percent: landscape ? preferences.landscapeHeight : preferences.portraitHeight) : nil
-        return [(status, 28), (bufferPanel, bufferHeight),
+        return [(bufferPanel, bufferHeight),
                 (candidatePanel, max(32, candidateStrip.fittingHeight(width: max(0, width - 10)))),
                 (spellingStrip, 34),
                 (surface, customHeight ?? standardHeight ?? KeyboardGeometry.height(layout: surface.chordLayout, chord: surface.chordMode, numeric: surface.numeric, emoji: surface.emojiMode, landscape: landscape, width: max(1, width - 10), profile: surface.profile)), (bottom, landscape ? 34 : 40)].filter { !$0.0.isHidden }
@@ -1470,6 +1469,11 @@ final class KeyboardViewController: UIInputViewController {
             let margin = item === surface ? keyMargin : 5
             y -= rowHeight; item.frame = CGRect(x: margin, y: y, width: max(0, view.bounds.width - 2 * margin), height: rowHeight); y -= item === bottom && compactTypingKeys ? 1 : 4
         }
+        // The prompt floats over the middle of the keys; it owns no row.
+        let promptWidth = view.bounds.width - 40
+        let promptSize = status.sizeThatFits(CGSize(width: promptWidth, height: .greatestFiniteMagnitude))
+        let width = min(promptSize.width, promptWidth)
+        status.frame = CGRect(x: (view.bounds.width - width) / 2, y: surface.frame.midY - promptSize.height / 2, width: width, height: promptSize.height)
         let landscape = view.bounds.width > 600
         if bufferEnabled {
             let bufferRowHeight: CGFloat = landscape ? 28 : 36

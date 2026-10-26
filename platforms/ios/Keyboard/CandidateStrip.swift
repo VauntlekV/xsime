@@ -954,3 +954,43 @@ final class PanelSwitchRow: UIView {
         toggle.accessibilityLabel = label.text
     }
 }
+
+/// A passing prompt. It floats over the keys for a few seconds and then fades, so it never takes a row of its
+/// own or moves the keyboard. Setting `text` shows it; an empty text hides it at once.
+final class PromptLabel: UILabel {
+    private var hideWork: DispatchWorkItem?
+    private let padding = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false; alpha = 0; isHidden = true
+        layer.cornerRadius = 12; layer.cornerCurve = .continuous; layer.masksToBounds = true
+        backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
+        textAlignment = .center; textColor = .label
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (label: PromptLabel, _: UITraitCollection) in
+            label.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
+        }
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var text: String? {
+        didSet {
+            hideWork?.cancel()
+            guard let text, !text.isEmpty else { alpha = 0; isHidden = true; return }
+            isHidden = false
+            UIView.animate(withDuration: 0.15) { self.alpha = 1 }
+            // Long messages stay longer; the full text is also announced to VoiceOver.
+            let work = DispatchWorkItem { [weak self] in
+                UIView.animate(withDuration: 0.3, animations: { self?.alpha = 0 }, completion: { _ in
+                    if self?.alpha == 0 { self?.isHidden = true }
+                })
+            }
+            hideWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(2.4, Double(text.count) * 0.09), execute: work)
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+    }
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.inset(by: padding)) }
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let inner = super.sizeThatFits(CGSize(width: max(0, size.width - padding.left - padding.right), height: .greatestFiniteMagnitude))
+        return CGSize(width: ceil(inner.width) + padding.left + padding.right, height: ceil(inner.height) + padding.top + padding.bottom)
+    }
+}
