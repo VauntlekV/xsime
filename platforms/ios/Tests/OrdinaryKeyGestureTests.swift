@@ -28,6 +28,26 @@ import RimesCore
         XCTAssertFalse(quick.armed); XCTAssertNil(quick.selectedAlternate)
     }
 
+    func testSwipeUpShowsAnApplestyleCalloutThatFollowsTheGestureAndGoesAway() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 400)); window.makeKeyAndVisible(); defer { window.isHidden = true }
+        let root = UIViewController(); window.rootViewController = root
+        let surface = KeySurface(frame: .init(x: 5, y: 120, width: 383, height: 206)); root.view.addSubview(surface)
+        surface.standardMode = .qwerty; surface.longPressSwipeSymbols = true; surface.layoutIfNeeded()
+        XCTAssertFalse(surface.developmentCalloutShown)
+        for key in ["q", "g", "p"] {
+            var shownDuring = false
+            surface.developmentOrdinaryGesture(key: key, duration: 0.6, dy: -30) { shownDuring = surface.developmentCalloutShown }
+            XCTAssertTrue(shownDuring, "The callout rises while the alternate is armed (\(key))")
+            XCTAssertFalse(surface.developmentCalloutShown, "…and is gone after release")
+        }
+        // The outline is one closed balloon: the key, a waist and a bubble over it, inside the callout's own bounds.
+        let key = CGRect(x: 30, y: 60, width: 34, height: 44)
+        let path = KeyCalloutView.path(key: key, bubbleWidth: 58, bubbleHeight: 52)
+        XCTAssertTrue(path.contains(CGPoint(x: key.midX, y: key.midY)))
+        XCTAssertTrue(path.contains(CGPoint(x: key.midX, y: key.minY - 30)), "Inside the bubble")
+        XCTAssertFalse(path.contains(CGPoint(x: key.minX - 10, y: key.minY - 2)), "The waist narrows to the key")
+        XCTAssertTrue(path.bounds.minY >= key.minY - KeyCalloutView.neck - 52 - 0.5)
+    }
     func testSurfaceKeepsTapsAndCancelsGesturesAcrossModeAndSettingChanges() {
         let surface = KeySurface(frame: .init(x: 0, y: 0, width: 383, height: 206))
         surface.standardMode = .qwerty; surface.layoutIfNeeded()

@@ -1624,10 +1624,24 @@ final class KeyboardViewController: UIInputViewController {
     /// closing would cancel the answer on its way.
     private func slideBuffer(open: Bool) {
         guard onscreen else { return }
-        if open { if !bufferEnabled { toggleBuffer() } }
-        else if bufferEnabled {
-            if buffer.generating { status.text = L("正在生成，Buffer 暂不关闭", "Still working; the Buffer stays open"); return }
+        if open {
+            guard !bufferEnabled else { return }
             toggleBuffer()
+            // It rises into place, so the slide reads as bringing the Buffer up.
+            bufferPanel.layoutIfNeeded()
+            bufferPanel.alpha = 0; bufferPanel.transform = CGAffineTransform(translationX: 0, y: 22)
+            UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.5, options: [.allowUserInteraction]) {
+                self.bufferPanel.alpha = 1; self.bufferPanel.transform = .identity
+            }
+        } else if bufferEnabled {
+            if buffer.generating { status.text = L("正在生成，Buffer 暂不关闭", "Still working; the Buffer stays open"); return }
+            // It sinks away first and the Buffer closes as it goes, so the slide reads as putting the Buffer down.
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseIn, .allowUserInteraction], animations: {
+                self.bufferPanel.alpha = 0; self.bufferPanel.transform = CGAffineTransform(translationX: 0, y: 16)
+            }, completion: { _ in
+                if self.bufferEnabled, !self.buffer.generating { self.toggleBuffer() }
+                self.bufferPanel.alpha = 1; self.bufferPanel.transform = .identity
+            })
         }
     }
     /// Pinching two fingers from the sides to the middle puts the field's text straight into the Buffer: no
@@ -1783,7 +1797,7 @@ final class KeyboardViewController: UIInputViewController {
         // while the current schema cannot use nine-key. Orthogonal is a layout of its own.
         let chordAvailable = chordPluginOn
         let selectedLayout: OrdinaryKeyboardLayout = usesChordLayout ? .orthogonal : usesNineKeyEngine ? .nineKey : .qwerty
-        items.append(UIMenu(title: L("键位布局", "Key layout"), children: OrdinaryKeyboardLayout.allCases.filter { $0 != .orthogonal || chordAvailable }.map { layout in
+        items.append(UIMenu(title: L("键位布局", "Key layout"), image: UIImage(systemName: "square.grid.3x3"), children: OrdinaryKeyboardLayout.allCases.filter { $0 != .orthogonal || chordAvailable }.map { layout in
             let supported = layout == .orthogonal ? true : importedSchemeSelection == nil
                 ? layout != .nineKey || scheme == .pinyin
                 : (layout == .nineKey ? importedKeyboardLayouts?.nineKeySchemaID : importedKeyboardLayouts?.qwertySchemaID) != nil
@@ -1799,7 +1813,7 @@ final class KeyboardViewController: UIInputViewController {
             }
         }))
         if !usesChordLayout {
-            items.append(UIMenu(title: L("上滑数字和符号", "Swipe symbols"), children: [
+            items.append(UIMenu(title: L("上滑数字和符号", "Swipe symbols"), image: UIImage(systemName: "arrow.up.square"), children: [
                 (L("关闭", "Off"), 0), (L("长按后上滑", "Hold then swipe"), 1), (L("直接上滑", "Swipe directly"), 2)
             ].map { title, mode in
                 UIAction(title: title, state: (preferences.longPressSwipeSymbols ? (preferences.directSwipeSymbols ? 2 : 1) : 0) == mode ? .on : .off) { [weak self] _ in

@@ -935,6 +935,9 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertTrue(controller.layoutViews.buffer.isHidden)
         slide(60, 20, 1); window.layoutIfNeeded()
         XCTAssertFalse(controller.layoutViews.buffer.isHidden, "Two fingers up open the Buffer")
+        XCTAssertFalse(controller.layoutViews.buffer.layer.animationKeys()?.isEmpty ?? true, "It fades and rises in, not a jump")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        XCTAssertEqual(controller.layoutViews.buffer.alpha, 1); XCTAssertEqual(controller.layoutViews.buffer.transform, .identity)
         slide(60, 20, 3); window.layoutIfNeeded()
         XCTAssertFalse(controller.layoutViews.buffer.isHidden, "Opening twice changes nothing")
         controller.developmentBuffer("原文", plugin: true, generating: true); window.layoutIfNeeded()
@@ -942,8 +945,12 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertFalse(controller.layoutViews.buffer.isHidden, "A Buffer that is still working stays open")
         XCTAssertFalse(controller.developmentStatus.isEmpty)
         controller.developmentBuffer("原文", plugin: false); window.layoutIfNeeded()
-        slide(20, 60, 7); window.layoutIfNeeded()
+        slide(20, 60, 7)
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "It sinks away first, then closes")
+        for _ in 0..<50 where !controller.layoutViews.buffer.isHidden { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        window.layoutIfNeeded()
         XCTAssertTrue(controller.layoutViews.buffer.isHidden, "Two fingers down close it")
+        XCTAssertEqual(controller.layoutViews.buffer.alpha, 1, "Ready for the next time it opens")
     }
     func testHoldingTheMiddleOfSpaceMovesTheCaretInHostAndBufferWithoutTypingSpace() {
         for buffered in [false, true] {
@@ -1025,6 +1032,17 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         bar.cancel(); RunLoop.main.run(until: Date().addingTimeInterval(0.4)); XCTAssertFalse(bar.isShowing)
         bar.begin(duration: 1); bar.complete(); XCTAssertTrue(bar.isShowing)
         RunLoop.main.run(until: Date().addingTimeInterval(0.7)); XCTAssertFalse(bar.isShowing)
+    }
+    func testKeyLayoutAndSwipeSymbolsMenusHaveIcons() throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin); window.layoutIfNeeded()
+        let menu = try XCTUnwrap(controller.layoutViews.settings.menu)
+        func menus(_ m: UIMenu) -> [UIMenu] { m.children.compactMap { $0 as? UIMenu } }
+        let keyLayout = try XCTUnwrap(menus(menu).first { $0.title == L("键位布局", "Key layout") })
+        let swipe = try XCTUnwrap(menus(menu).first { $0.title == L("上滑数字和符号", "Swipe symbols") })
+        XCTAssertNotNil(keyLayout.image); XCTAssertNotNil(swipe.image)
+        // Every top-level submenu carries an icon, like the rest of the keyboard menu.
+        XCTAssertTrue(menus(menu).allSatisfy { $0.image != nil }, "\(menus(menu).filter { $0.image == nil }.map(\.title))")
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
