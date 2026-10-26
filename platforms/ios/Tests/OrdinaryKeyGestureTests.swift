@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 import UIKit
 import RimesCore
 @testable import RIMES
@@ -28,6 +29,18 @@ import RimesCore
         XCTAssertFalse(quick.armed); XCTAssertNil(quick.selectedAlternate)
     }
 
+    func testEveryIOSPluginHasAGalleryCardWithItsOwnIconAndLine() throws {
+        let catalog = try OfficialPluginCatalog.bundled()
+        let ios = catalog.plugins.filter { $0.platforms["ios"] != nil }
+        XCTAssertFalse(ios.isEmpty)
+        for entry in ios {
+            let info = PluginGalleryInfo.info(for: entry.id)
+            XCTAssertNotEqual(info.symbol, "puzzlepiece.extension", "\(entry.id) needs its own icon")
+            XCTAssertNotNil(UIImage(systemName: info.symbol), "\(entry.id): \(info.symbol)")
+            XCTAssertFalse(info.tagline.isEmpty)
+        }
+        XCTAssertEqual(GalleryStatus.notInstalled.title, L("未下载", "Not downloaded"))
+    }
     func testSwipeUpShowsAnApplestyleCalloutThatFollowsTheGestureAndGoesAway() {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 400)); window.makeKeyAndVisible(); defer { window.isHidden = true }
         let root = UIViewController(); window.rootViewController = root
