@@ -68,36 +68,34 @@ enum KeycapStyle {
 }
 
 extension KeycapStyle {
-    /// One Space cap in two halves: a thin straight seam, square inner ends and chamfered outer corners.
+    /// Space is one ordinary cap. Pressing it tints only the half under the finger.
     static func drawSplitSpace(in rect: CGRect, pressed: Set<SpaceHalf>, enabled: Bool = true, compact: Bool = false,
                                theme: StatusSkin, legacy: Bool) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         let palette = theme.palette, system = theme.keyboardStyle == .system
         let snapped = pixelSnapped(rect)
         let box = system ? snapped.insetBy(dx: 0, dy: 0.5) : capRect(in: snapped, pressed: false, compact: compact)
-        // Outer corners round like every other key; the ends at the seam stay square.
-        let seam: CGFloat = 1.5, radius: CGFloat = system ? cornerRadius : (compact ? 3 : cornerRadius)
-        func path(_ half: SpaceHalf, dy: CGFloat = 0) -> UIBezierPath {
-            let edge = half == .left ? box.midX - seam / 2 : box.midX + seam / 2
-            let frame = half == .left ? CGRect(x: box.minX, y: box.minY + dy, width: edge - box.minX, height: box.height)
-                : CGRect(x: edge, y: box.minY + dy, width: box.maxX - edge, height: box.height)
-            return UIBezierPath(roundedRect: frame, byRoundingCorners: half == .left ? [.topLeft, .bottomLeft] : [.topRight, .bottomRight],
-                                cornerRadii: CGSize(width: radius, height: radius))
-        }
+        let radius: CGFloat = system ? cornerRadius : (compact ? 3 : cornerRadius)
         context.saveGState()
         if !enabled { context.setAlpha(0.4) }
-        for half in [SpaceHalf.left, .right] {
-            let down = pressed.contains(half)
-            if legacy {
-                UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0, alpha: 0.6) : UIColor(red: 0.54, green: 0.54, blue: 0.56, alpha: 1) }.setFill()
-                path(half, dy: 1).fill()
+        if legacy {
+            UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0, alpha: 0.6) : UIColor(red: 0.54, green: 0.54, blue: 0.56, alpha: 1) }.setFill()
+            UIBezierPath(roundedRect: box.offsetBy(dx: 0, dy: 1), cornerRadius: radius).fill()
+        }
+        let cap = UIBezierPath(roundedRect: legacy ? box.offsetBy(dx: 0, dy: -0.5) : box, cornerRadius: radius)
+        (system && !legacy ? palette.key.withAlphaComponent(translucentKeyAlpha) : palette.key).setFill(); cap.fill()
+        if !pressed.isEmpty {
+            context.saveGState(); cap.addClip()
+            let half = box.width / 2
+            for side in pressed {
+                palette.accent.setFill()
+                UIBezierPath(rect: CGRect(x: side == .left ? box.minX : box.midX, y: box.minY - 2, width: half, height: box.height + 4)).fill()
             }
-            let tone: UIColor = down ? (system ? palette.accent : palette.accent) : (system && !legacy ? palette.key.withAlphaComponent(translucentKeyAlpha) : palette.key)
-            tone.setFill(); path(half, dy: legacy ? -0.5 : 0).fill()
-            if !system {
-                UIColor.label.withAlphaComponent(down ? 0.15 : 0.10).setStroke()
-                let outline = path(half); outline.lineWidth = 0.7; outline.stroke()
-            }
+            context.restoreGState()
+        }
+        if !system {
+            UIColor.label.withAlphaComponent(pressed.isEmpty ? 0.10 : 0.15).setStroke()
+            cap.lineWidth = 0.7; cap.stroke()
         }
         context.restoreGState()
     }
@@ -248,11 +246,13 @@ struct CursorDrag {
 }
 
 enum SpaceHalf { case left, right }
+/// Where a candidate highlight begins among the visible words.
+enum HighlightStart { case first, middle, last }
 
 /// Gesture logic of the split Space, kept apart from UIKit so it can be driven directly.
 /// A tap on either half is an ordinary space. Holding one half turns the other into a control:
-/// hold right, slide left to move the caret; hold left, slide right up or down to open and close
-/// the candidate matrix and left or right to highlight a word. Without a hold, sliding a half
+/// hold right, slide left to move the caret; hold left, slide right: sideways highlights a word (from the
+/// middle of the visible ones) and up or down turns the single candidate row to the next or previous line. Without a hold, sliding a half
 /// sweeps the candidates (left half from the first, right half from the last one visible).
 /// Releasing commits what is highlighted.
 final class SplitSpaceMachine {
@@ -274,7 +274,10 @@ final class SplitSpaceMachine {
     var onCaretBegan: () -> Bool = { false }
     var onCaretMove: (Int) -> Void = { _ in }
     var onCaretEnded: () -> Void = {}
-    var onHighlightBegan: (SpaceHalf) -> Bool = { _ in false }
+    var onHighlightBegan: (HighlightStart) -> Bool = { _ in false }
+    /// Points of sideways travel per word while the other half is held; the controller scales it so one
+    /// sweep of the half covers a whole line.
+    var selectorStep = SplitSpaceMachine.highlightStep
     /// Signed candidate steps from where the highlight began.
     var onHighlightMove: (Int) -> Void = { _ in }
     var onHighlightEnded: (Bool) -> Void = { _ in }
@@ -289,7 +292,7 @@ final class SplitSpaceMachine {
         if let holder = presses.first(where: { $0.value.role == .holder && $0.value.half != half }) {
             presses[holder.key]?.served = true
             if holder.value.half == .right { press.role = onCaretBegan() ? .caret : .dead }
-            else { press.role = .selector; press.highlighting = onHighlightBegan(.left) }
+            else { press.role = .selector; press.highlighting = onHighlightBegan(.middle) }
         }
         presses[id] = press; onChange()
     }
@@ -299,12 +302,12 @@ final class SplitSpaceMachine {
     }
     func move(_ id: Int, to point: CGPoint) {
         guard var press = presses[id] else { return }
-        func horizontalSteps() -> Int { Int(((point.x - press.start.x) / Self.highlightStep).rounded(.towardZero)) }
+        func horizontalSteps(_ step: CGFloat = SplitSpaceMachine.highlightStep) -> Int { Int(((point.x - press.start.x) / step).rounded(.towardZero)) }
         switch press.role {
         case .undecided:
             guard hypot(point.x - press.start.x, point.y - press.start.y) > Self.slop else { return }
             press.slid = true
-            if onHighlightBegan(press.half) { press.role = .sweep; press.highlighting = true } else { press.role = .dead }
+            if onHighlightBegan(press.half == .left ? .first : .last) { press.role = .sweep; press.highlighting = true } else { press.role = .dead }
         case .sweep:
             let steps = horizontalSteps()
             if steps != press.steps { press.steps = steps; onHighlightMove(steps) }
@@ -312,7 +315,7 @@ final class SplitSpaceMachine {
             let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
             if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCaretMove(count) }
         case .selector:
-            let steps = horizontalSteps()
+            let steps = horizontalSteps(selectorStep)
             if press.highlighting, steps != press.steps { press.steps = steps; onHighlightMove(steps) }
             let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
             if rows != 0 {
@@ -359,7 +362,7 @@ final class SpaceCursorButton: KeycapButton {
     var onCursorBegan: (() -> Bool)?
     var onCursorMove: ((Int) -> Void)?
     var onCursorEnded: (() -> Void)?
-    var onHighlightBegan: ((SpaceHalf) -> Bool)?
+    var onHighlightBegan: ((HighlightStart) -> Bool)?
     var onHighlightMove: ((Int) -> Void)?
     var onHighlightEnded: ((Bool) -> Void)?
     var onSlide: ((Int) -> Void)?

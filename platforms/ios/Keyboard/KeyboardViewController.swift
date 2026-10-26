@@ -481,10 +481,10 @@ final class KeyboardViewController: UIInputViewController {
                 self.noteTypingKey(); self.space()
             }
             key.accessibilityLabel = L("空格", "Space")
-            key.accessibilityHint = L("点按输入空格；按住右半，在左半滑动移动光标；按住左半，在右半滑动展开候选或选词；单独滑动一半可选词", "Tap for space. Hold the right half and slide the left to move the cursor. Hold the left half and slide the right to open candidates or pick a word. Slide one half alone to sweep the candidates.")
+            key.accessibilityHint = L("点按输入空格；按住右半，在左半滑动移动光标；按住左半，在右半上下换行、左右选词；单独滑动一半可选词", "Tap for space. Hold the right half and slide the left to move the cursor. Hold the left half and slide the right to turn to the next line of candidates or pick a word. Slide one half alone to sweep the candidates.")
             key.onCursorBegan = { [weak self] in self?.beginCaretDrag(selecting: false) ?? false }
             key.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
-            key.onHighlightBegan = { [weak self] half in self?.beginCandidateHighlight(half) ?? false }
+            key.onHighlightBegan = { [weak self] start in self?.beginCandidateHighlight(start) ?? false }
             key.onHighlightMove = { [weak self] steps in self?.moveCandidateHighlight(steps) }
             key.onHighlightEnded = { [weak self] commit in self?.endCandidateHighlight(commit: commit) }
             key.onSlide = { [weak self] direction in self?.slideCandidateMatrix(direction) }
@@ -1552,11 +1552,19 @@ final class KeyboardViewController: UIInputViewController {
         caretSteps += 1; surface.feedback.send(.selection, combination: String(caretSteps))
     }
     // MARK: Space-bar candidate control
-    /// Starts a highlight on the visible candidates: the left half from the first, the right half from the last visible.
-    private func beginCandidateHighlight(_ half: SpaceHalf) -> Bool {
+    /// Starts a highlight on the visible candidates: a lone left half from the first, a lone right half from the
+    /// last visible, and the half beside a held one from the middle, with a step that lets one sweep cover the line.
+    private func beginCandidateHighlight(_ start: HighlightStart) -> Bool {
         guard onscreen, !candidateStrip.isHidden, candidateStrip.count > 0 else { return false }
         surface.cancel()
-        highlightStart = half == .left ? 0 : (candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1)
+        switch start {
+        case .first: highlightStart = candidateStrip.firstVisibleIndex ?? 0
+        case .last: highlightStart = candidateStrip.lastVisibleIndex ?? candidateStrip.count - 1
+        case .middle:
+            highlightStart = candidateStrip.middleVisibleIndex ?? candidateStrip.count / 2
+            let visible = max(1, (candidateStrip.lastVisibleIndex ?? highlightStart) - (candidateStrip.firstVisibleIndex ?? highlightStart) + 1)
+            spaceKey.machine.selectorStep = max(10, spaceKey.bounds.width / 2 / CGFloat(visible))
+        }
         highlightSteps = 0; highlightIndex = highlightStart; candidateStrip.setHighlight(highlightStart)
         surface.feedback.send(.selection, combination: "highlight-begin")
         return true
@@ -1574,24 +1582,25 @@ final class KeyboardViewController: UIInputViewController {
         guard commit, let index, candidateStrip.buttons.indices.contains(index) else { return }
         candidateStrip.onSelect?(index)
     }
-    /// Down opens the matrix. Once open, down and up move the highlight across rows, so a word on any line
-    /// can be picked; with nothing highlighted they scroll. Up from the first row closes the matrix.
+    /// With the single row showing, down and up turn it to the next or previous line of words and the
+    /// highlight lands in the middle of the new line. If the matrix was opened with its button, they move the
+    /// highlight across its rows instead, and up from the first row closes it.
     private func slideCandidateMatrix(_ direction: Int) {
         guard onscreen, candidateStrip.count > 0 else { return }
         func moveHighlight(to index: Int) {
             // Later sideways travel continues from the new word, not from where the finger started.
             highlightStart = index - highlightSteps; highlightIndex = index; candidateStrip.setHighlight(index)
         }
-        if direction > 0 {
-            if !expanded { expanded = true; resize() }
-            else if let current = highlightIndex, let next = candidateStrip.index(inRowOffset: 1, from: current) { moveHighlight(to: next) }
+        if !expanded {
+            guard candidateStrip.turnPage(direction > 0 ? 1 : -1) else { return }
+            if let middle = candidateStrip.middleVisibleIndex { moveHighlight(to: middle) }
+        } else if direction > 0 {
+            if let current = highlightIndex, let next = candidateStrip.index(inRowOffset: 1, from: current) { moveHighlight(to: next) }
             else if highlightIndex == nil { candidateStrip.scrollRows(1) }
-        } else if expanded {
-            if let current = highlightIndex {
-                if let previous = candidateStrip.index(inRowOffset: -1, from: current) { moveHighlight(to: previous) }
-                else { expanded = false; resize(); candidateStrip.setHighlight(current) }
-            } else if candidateStrip.isAtTop { expanded = false; resize() } else { candidateStrip.scrollRows(-1) }
-        }
+        } else if let current = highlightIndex {
+            if let previous = candidateStrip.index(inRowOffset: -1, from: current) { moveHighlight(to: previous) }
+            else { expanded = false; resize(); candidateStrip.setHighlight(current) }
+        } else if candidateStrip.isAtTop { expanded = false; resize() } else { candidateStrip.scrollRows(-1) }
         surface.feedback.send(.selection, combination: "slide-\(direction)-\(expanded)-\(highlightIndex ?? -1)")
     }
     /// Expanded candidates are a one-shot view: choosing or typing returns to one row.

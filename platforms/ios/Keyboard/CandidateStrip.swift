@@ -93,6 +93,36 @@ final class CandidateStrip: UIView {
                 : frame.maxX <= visible.maxX + 0.5 && frame.minX >= visible.minX - 0.5
         }
     }
+    var firstVisibleIndex: Int? {
+        let visible = scroll.bounds
+        return buttons.indices.first { buttons[$0].frame.minX >= visible.minX - 0.5 && buttons[$0].frame.maxX <= visible.maxX + 0.5 }
+    }
+    /// The word in the middle of those fully visible, where a Space-bar highlight starts.
+    var middleVisibleIndex: Int? {
+        guard let first = firstVisibleIndex, let last = lastVisibleIndex, last >= first else { return nil }
+        return (first + last) / 2
+    }
+    /// The lines the matrix would wrap the words into. In the single row each is one page.
+    private func pages() -> [Range<Int>] {
+        guard !texts.isEmpty else { return [] }
+        let layout = CandidateLayout.measure(texts, comments: comments, width: max(1, scroll.bounds.width), expanded: true, landscape: landscape)
+        var result: [Range<Int>] = [], start = 0
+        for index in layout.frames.indices.dropFirst() where layout.frames[index].minY != layout.frames[index - 1].minY {
+            result.append(start..<index); start = index
+        }
+        result.append(start..<layout.frames.count)
+        return result
+    }
+    /// Shows the next (+1) or previous (-1) line of words in the single row; false past either end.
+    @discardableResult func turnPage(_ delta: Int) -> Bool {
+        guard !expanded, buttons.count == texts.count else { return false }
+        let pages = pages()
+        let current = pages.lastIndex { buttons[$0.lowerBound].frame.minX <= scroll.contentOffset.x + 1 } ?? 0
+        guard pages.indices.contains(current + delta) else { return false }
+        let limit = max(0, scroll.contentSize.width - scroll.bounds.width)
+        scroll.setContentOffset(CGPoint(x: min(limit, buttons[pages[current + delta].lowerBound].frame.minX), y: 0), animated: false)
+        return true
+    }
     func setHighlight(_ index: Int?) {
         if let old = highlightedIndex, buttons.indices.contains(old) { buttons[old].isSweepTarget = false }
         highlightedIndex = index.flatMap { buttons.indices.contains($0) ? $0 : nil }

@@ -883,45 +883,42 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         m.up(3)
         XCTAssertEqual(strip.highlightedIndex, nil)
     }
-    func testHoldingLeftHalfLetsRightHalfSlideOpenAndCloseTheMatrixAndHighlight() {
+
+    func testHoldingLeftHalfLetsRightHalfTurnSingleRowLinesFromTheMiddle() {
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentChoose(.pinyin)
         controller.developmentType("shi"); window.layoutIfNeeded()
         let m = controller.developmentSpaceKey.machine, strip = controller.layoutViews.candidates
-        XCTAssertGreaterThan(strip.count, 20)
-        let fourth = try! XCTUnwrap(strip.buttons[3].currentTitle)
-        XCTAssertFalse(strip.expanded)
+        XCTAssertGreaterThan(strip.count, 20); XCTAssertFalse(strip.expanded)
         m.down(1, half: .left, at: CGPoint(x: 40, y: 20)); m.holdElapsed(1)
         m.down(2, half: .right, at: CGPoint(x: 150, y: 20))
-        // Up while collapsed does nothing; down opens the matrix.
-        m.move(2, to: CGPoint(x: 150, y: 20 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
+        // The highlight starts on the middle of the visible words, and the row stays a single row.
+        let middle = try! XCTUnwrap(strip.middleVisibleIndex)
+        XCTAssertEqual(strip.highlightedIndex, middle)
+        XCTAssertGreaterThan(middle, 0)
+        XCTAssertGreaterThan(m.selectorStep, 0)
+        // Down turns to the next line of words: the row scrolls and the highlight lands mid-line.
+        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
         XCTAssertFalse(strip.expanded)
-        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
-        XCTAssertTrue(controller.layoutViews.candidates.expanded)
-        // Down and up now carry the highlight across rows (and scroll to keep it visible).
-        let firstRow = strip.buttons[0].frame.minY
-        let start = try! XCTUnwrap(strip.highlightedIndex)
-        XCTAssertEqual(strip.buttons[start].frame.minY, firstRow)
-        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep * 2)); window.layoutIfNeeded()
-        let second = try! XCTUnwrap(strip.highlightedIndex)
-        XCTAssertGreaterThan(strip.buttons[second].frame.minY, firstRow, "Down moves to the next line")
-        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep * 3)); window.layoutIfNeeded()
-        let third = try! XCTUnwrap(strip.highlightedIndex)
-        XCTAssertGreaterThan(strip.buttons[third].frame.minY, strip.buttons[second].frame.minY)
-        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep * 2)); window.layoutIfNeeded()
-        XCTAssertEqual(strip.highlightedIndex, second, "Up returns to the line above")
-        m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
-        XCTAssertEqual(strip.buttons[try! XCTUnwrap(strip.highlightedIndex)].frame.minY, firstRow)
-        XCTAssertTrue(strip.expanded)
-        // Up from the first line closes the matrix.
+        XCTAssertGreaterThan(strip.scroll.contentOffset.x, 0)
+        let page2 = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertGreaterThan(page2, middle)
+        XCTAssertEqual(page2, strip.middleVisibleIndex)
+        // Up returns to the first line; up again does nothing (no matrix to close).
         m.move(2, to: CGPoint(x: 150, y: 20)); window.layoutIfNeeded()
-        XCTAssertFalse(strip.expanded)
-        // Sliding sideways highlights; releasing commits it.
+        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
+        XCTAssertEqual(strip.highlightedIndex, strip.middleVisibleIndex)
+        m.move(2, to: CGPoint(x: 150, y: 20 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
+        XCTAssertFalse(strip.expanded); XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
+        // Sideways travel is scaled so a sweep of the half covers the line; releasing commits.
         controller.layoutProxy.native.text = ""
-        m.move(2, to: CGPoint(x: 150 + SplitSpaceMachine.highlightStep * 3, y: 20))
-        XCTAssertEqual(strip.highlightedIndex, 3)
+        let from = try! XCTUnwrap(strip.highlightedIndex)
+        m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20 - SplitSpaceMachine.slideStep))
+        let to = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertEqual(to, from + 2)
+        let expected = try! XCTUnwrap(strip.buttons[to].currentTitle)
         m.up(2); m.up(1)
-        XCTAssertEqual(controller.layoutProxy.native.text, fourth)
+        XCTAssertEqual(controller.layoutProxy.native.text, expected)
     }
 
     func testChordModeSwapsLanguageToggleAndDelete() throws {
