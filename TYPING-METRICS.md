@@ -34,7 +34,16 @@
 ## 文库与隐私
 
 内置六篇约 400–600 字的原创中文文章、两篇约 150–200 词的原创英文文章。
-原文只读，支持选篇、随机和同篇重练。本轮不提供在线题库或正文上传。
+原文只读，支持选篇、随机和同篇重练。不提供在线题库或正文上传。
+
+macOS 页面左侧是素材栏（内置文章 + 我的书籍：书 → 章 → 段），右侧是练习/成绩区。
+可导入 EPUB（按钮或拖入 `.epub`）：包内 ZIP 只在内存中读取，不解压到磁盘；DRM/加密、Zip64
+会被拒绝。正文按章节清理标记后，按句子切成约 380 字（英文约 560 字符）的练习段，单段硬上限
+低于测速会话的 2,048 字符。目录、版权、导航页被跳过；章名取自首个 h1–h3。
+导入的书是用户自己的素材，仅以切好的段落保存在本机 `typing-library/<书ID>.json`（书ID = 文件
+SHA-256 前 16 位；最多 40 本，单本 ≤ 12 MiB / 6,000 段），不上传、不同步。切分点随书保存，
+段落编号 `epub.<书ID>.<n>` 不会因日后切分规则变化而移动；成绩历史仍只含该 ID，移除书后成绩保留、
+原文不再可选。
 练习正文、逐字符对齐和组字仅在本页内存中存在；持久化只包含题目 ID/版本、输入配置身份、
 结果计数及有界聚合速度样本，不包含用户输入正文或逐键时间线。
 输入使用原生 NSTextView/IME，marked text 不进入判分；粘贴、拖入和自动文本替换不能冒充手打。
@@ -56,6 +65,6 @@
 
 Debug/Release 构建后运行 `typing-test-smoke`、`typing-test-ui-smoke`、
 `typing-practice-telemetry-smoke`、`statistics-dashboard-smoke`、
-`daily-metrics-migration-smoke`，并回归 `typing-speed-smoke`、`stats-smoke`、
+`daily-metrics-migration-smoke`、`typing-test-library-smoke`（EPUB 导入；可追加真实 `.epub` 路径做只读探测），并回归 `typing-speed-smoke`、`stats-smoke`、
 `input-telemetry-smoke`、`plugin-platform-smoke` 与 `settings-routing-smoke`。
 真实安装验收需要覆盖中文组字/候选选择、并击同拍/分拍、组字内退格、上屏回改、输入源与焦点切换。

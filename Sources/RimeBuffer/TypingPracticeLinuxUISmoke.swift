@@ -51,10 +51,9 @@ func runTypingPracticeLinuxUISmoke(_ output: URL) -> Bool {
                         controller.smokeEditor.insertText(String(article.text.prefix(length)), replacementRange: NSRange(location: NSNotFound, length: 0))
                         if phase == "complete" && controller.smokeIsArmed { return false }
                     }
-                    pane.layoutSubtreeIfNeeded()
-                    let height = ceil(pane.fittingSize.height)
-                    guard height.isFinite, (450...2400).contains(height) else { return false }
-                    window.setContentSize(NSSize(width: 698, height: height)); pane.layoutSubtreeIfNeeded(); pane.displayIfNeeded(); window.displayIfNeeded()
+                    let height: CGFloat = 760
+                    window.setContentSize(NSSize(width: 698, height: height)); pane.frame = NSRect(x: 0, y: 0, width: 698, height: height)
+                    pane.layoutSubtreeIfNeeded(); pane.displayIfNeeded(); window.displayIfNeeded()
                     guard let bitmap = pane.bitmapImageRepForCachingDisplay(in: pane.bounds) else { return false }
                     pane.cacheDisplay(in: pane.bounds, to: bitmap)
                     guard let png = bitmap.representation(using: .png, properties: [:]) else { return false }

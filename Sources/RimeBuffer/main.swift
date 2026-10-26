@@ -1271,6 +1271,10 @@ if let index = CommandLine.arguments.firstIndex(of: "statistics-dashboard-smoke"
         ? URL(fileURLWithPath: CommandLine.arguments[index + 1]) : nil
     exit(runStatisticsDashboardSmokeTest(outputURL: output) ? 0 : 1)
 }
+if let index = CommandLine.arguments.firstIndex(of: "typing-test-library-smoke") {
+    let files = CommandLine.arguments.dropFirst(index + 1).map { URL(fileURLWithPath: $0) }
+    exit(runTypingTestLibrarySmokeTest(probing: files) ? 0 : 1)
+}
 if let index = CommandLine.arguments.firstIndex(of: "typing-test-ui-smoke") {
     let output = CommandLine.arguments.indices.contains(index + 1)
         ? URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true) : nil

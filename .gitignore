@@ -91,6 +91,8 @@ platforms/ios/RIMES.xcodeproj/-Xcc/
 /Sources/RimeBuffer/TypingSpeedStore.swift
 /Sources/RimeBuffer/TypingTestArticles.swift
 /Sources/RimeBuffer/TypingTestHistoryStore.swift
+/Sources/RimeBuffer/TypingTestLibrary.swift
+/Sources/RimeBuffer/TypingTestMaterialColumn.swift
 /Sources/RimeBuffer/TypingTestSession.swift
 /Sources/RimeBuffer/TypingTestTextView.swift
 /Sources/RimeBuffer/YearHistoryHeatmapView.swift
