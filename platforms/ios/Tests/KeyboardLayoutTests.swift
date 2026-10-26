@@ -816,16 +816,15 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
     private func space(_ controller: KeyboardViewController) -> (SpaceCursorButton, SplitSpaceMachine) {
         let key = controller.developmentSpaceKey; return (key, key.machine)
     }
-    func testSpaceMachineTapSweepRollCursorSpreadAndPinch() {
+    func testSpaceMachineTapSweepRollCursorAndPinch() {
         let m = SplitSpaceMachine(); m.width = 300
-        var events: [String] = [], places: [CGFloat] = [], rolls: [Int] = [], caret: [Int] = [], spread: [(Int, Int)] = []
+        var events: [String] = [], places: [CGFloat] = [], rolls: [Int] = [], caret: [Int] = []
         m.onTap = { events.append("tap") }
         m.onSweepBegan = { events.append("sweep+"); return true }
         m.onSweepMove = { places.append($0) }; m.onSweepEnded = { events.append("sweep-\($0)") }
         m.onRollerBegan = { events.append("roll+"); return true }; m.onRoll = { rolls.append($0) }; m.onRollerEnded = { events.append("roll-") }
         m.onCursorBegan = { events.append("cursor+"); return true }; m.onCursorMove = { caret.append($0) }; m.onCursorEnded = { events.append("cursor-") }
-        m.onSpreadBegan = { events.append("spread+"); return true }; m.onSpreadMove = { spread.append(($0, $1)) }; m.onSpreadEnded = { events.append("spread-") }
-        m.onPinch = { events.append("pinch") }
+                m.onPinch = { events.append("pinch") }
         // Tap.
         m.down(1, at: CGPoint(x: 40, y: 20)); m.up(1)
         XCTAssertEqual(events, ["tap"]); events = []
@@ -845,11 +844,6 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(caret, [3]); XCTAssertEqual(events, ["cursor+", "cursor-"]); events = []
         m.down(1, at: CGPoint(x: 20, y: 20)); m.holdElapsed(1); m.up(1)
         XCTAssertEqual(events, ["tap"], "A long press on a side is still just a space"); events = []
-        // Two fingers spreading from the middle select; the left finger pulls backwards, the right forwards.
-        m.down(1, at: CGPoint(x: 140, y: 20)); m.down(2, at: CGPoint(x: 160, y: 20))
-        m.move(1, to: CGPoint(x: 100, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
-        XCTAssertEqual(events, ["spread+"]); XCTAssertEqual(spread.last?.0, 4); XCTAssertEqual(spread.last?.1, 4)
-        m.up(1); m.up(2); XCTAssertEqual(events, ["spread+", "spread-"]); XCTAssertEqual(rolls.count, 2); events = []
         // Pinching from both sides to the middle pulls text into the Buffer, once, and types nothing.
         m.down(1, at: CGPoint(x: 20, y: 20)); m.down(2, at: CGPoint(x: 280, y: 20))
         m.move(1, to: CGPoint(x: 80, y: 20)); m.move(2, to: CGPoint(x: 220, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
@@ -918,26 +912,6 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
         XCTAssertEqual(m.presses[1]?.role, SplitSpaceMachine.Role.dead)
         m.up(1)
-    }
-    func testSpreadingTwoFingersSelectsBufferTextAndExplainsOnceInAppFields() {
-        UserDefaults.standard.removeObject(forKey: "rimes.keyboard.hostSelectionNoteShown")
-        let (window, controller) = host(); defer { window.isHidden = true }
-        let (_, m) = space(controller)
-        controller.developmentBuffer("abcdef")
-        let cursor = controller.developmentBufferCursor
-        m.down(1, at: CGPoint(x: m.width / 2 - 10, y: 20)); m.down(2, at: CGPoint(x: m.width / 2 + 10, y: 20))
-        m.move(1, to: CGPoint(x: m.width / 2 - 10 - 20, y: 20)); m.move(2, to: CGPoint(x: m.width / 2 + 10 + 10, y: 20))
-        let selection = try! XCTUnwrap(controller.developmentBufferSelection)
-        XCTAssertEqual(selection.lowerBound, max(0, cursor - 2)); XCTAssertEqual(selection.upperBound, min(6, cursor + 1))
-        m.up(1); m.up(2)
-        // An app's own field cannot be selected by a keyboard: one explanation, no selection.
-        controller.developmentBuffer(nil)
-        controller.layoutProxy.native.text = "hello"; controller.layoutProxy.native.selectedRange = NSRange(location: 5, length: 0)
-        m.down(3, at: CGPoint(x: m.width / 2 - 10, y: 20)); m.down(4, at: CGPoint(x: m.width / 2 + 10, y: 20))
-        m.move(3, to: CGPoint(x: 10, y: 20)); m.move(4, to: CGPoint(x: m.width - 10, y: 20))
-        XCTAssertFalse(controller.developmentStatus.isEmpty)
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: "rimes.keyboard.hostSelectionNoteShown"))
-        m.up(3); m.up(4)
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }

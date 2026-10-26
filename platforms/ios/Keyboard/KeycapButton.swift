@@ -247,14 +247,13 @@ enum SpaceZone { case left, center, right }
 ///   either side and right to left all work. Lifting commits the highlighted word.
 /// - Slide up or down with one finger: the candidate lines roll (finger up is the next line) with no word
 ///   selected; lifting leaves the row on that line.
-/// - Hold the middle for 1.5 s: cursor mode; sliding sideways moves the caret.
-/// - Two fingers spreading from the middle: select text. Two fingers pinching to the middle: pull the field's
-///   text into the Buffer.
+/// - Hold the middle for 1 s: cursor mode; sliding sideways moves the caret.
+/// - Two fingers pinching to the middle: pull the field's text into the Buffer.
 final class SplitSpaceMachine {
-    static let cursorHold: TimeInterval = 1.5
+    static let cursorHold: TimeInterval = 1.0
     static let slop: CGFloat = 8
-    static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, spreadStep: CGFloat = 10, pairSlop: CGFloat = 16
-    enum Role { case undecided, sweep, roller, cursor, spread, pinch, dead }
+    static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, pairSlop: CGFloat = 16
+    enum Role { case undecided, sweep, roller, cursor, pinch, dead }
     struct Press {
         var start: CGPoint
         var last: CGPoint
@@ -277,10 +276,6 @@ final class SplitSpaceMachine {
     var onCursorBegan: () -> Bool = { false }
     var onCursorMove: (Int) -> Void = { _ in }
     var onCursorEnded: () -> Void = {}
-    /// Spread: how many characters each finger has pulled the selection out on its side.
-    var onSpreadBegan: () -> Bool = { false }
-    var onSpreadMove: (_ before: Int, _ after: Int) -> Void = { _, _ in }
-    var onSpreadEnded: () -> Void = {}
     var onPinch: () -> Void = {}
     var onChange: () -> Void = {}
     var isActive: Bool { !presses.isEmpty }
@@ -330,57 +325,38 @@ final class SplitSpaceMachine {
         case .cursor:
             let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
             if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCursorMove(count) }
-        case .spread:
-            presses[id] = press
-            reportSpread()
-            return
         case .pinch, .dead: break
         }
         presses[id] = press; onChange()
     }
+    /// Two undecided fingers moving toward each other pinch; the Buffer pulls the field's text in, once.
     private func evaluatePair(_ a: Int, _ b: Int) {
         guard let p = presses[a], let q = presses[b] else { return }
         let before = abs(p.start.x - q.start.x), now = abs(p.last.x - q.last.x)
-        if now - before > Self.pairSlop {
-            if onSpreadBegan() { presses[a]?.role = .spread; presses[b]?.role = .spread; presses[a]?.slid = true; presses[b]?.slid = true; reportSpread() }
-            else { presses[a]?.role = .dead; presses[b]?.role = .dead }
-        } else if before - now > Self.pairSlop {
+        if before - now > Self.pairSlop {
             presses[a]?.role = .pinch; presses[b]?.role = .pinch; presses[a]?.slid = true; presses[b]?.slid = true
             onPinch()
         }
         onChange()
     }
-    private func reportSpread() {
-        let fingers = presses.values.filter { $0.role == .spread }.sorted { $0.start.x < $1.start.x }
-        guard fingers.count == 2 else { return }
-        // The left finger pulls the selection out backwards, the right finger forwards.
-        let before = max(0, Int(((fingers[0].start.x - fingers[0].last.x) / Self.spreadStep).rounded(.towardZero)))
-        let after = max(0, Int(((fingers[1].last.x - fingers[1].start.x) / Self.spreadStep).rounded(.towardZero)))
-        onSpreadMove(before, after)
-    }
     func up(_ id: Int) {
         guard let press = presses.removeValue(forKey: id) else { return }
         switch press.role {
-        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .spread && $0.role != .pinch }) { onTap() }
+        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .pinch }) { onTap() }
         case .sweep: onSweepEnded(true)
         case .roller: onRollerEnded()
         case .cursor: onCursorEnded()
-        case .spread:
-            onSpreadEnded()
-            for key in presses.keys where presses[key]?.role == .spread { presses[key]?.role = .dead }
         case .pinch, .dead: break
         }
         onChange()
     }
     func cancelAll() {
         let all = presses; presses = [:]
-        var spreadEnded = false
         for press in all.values {
             switch press.role {
             case .sweep: onSweepEnded(false)
             case .roller: onRollerEnded()
             case .cursor: onCursorEnded()
-            case .spread: if !spreadEnded { spreadEnded = true; onSpreadEnded() }
             default: break
             }
         }

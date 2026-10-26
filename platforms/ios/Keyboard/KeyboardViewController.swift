@@ -231,7 +231,6 @@ final class KeyboardViewController: UIInputViewController {
     private var highlightIndex: Int?
     private var caretSteps = 0
     /// Set while the left Space is extending a Buffer selection on hold.
-    private var selectingText = false
     /// Associated words offered after a Chinese commit, shown while nothing is composed.
     private var associations: [String] = []
     /// Last Chinese commit, so the next consecutive one can be learned as its successor.
@@ -478,9 +477,9 @@ final class KeyboardViewController: UIInputViewController {
                 self.noteTypingKey(); self.space()
             }
             key.accessibilityLabel = L("空格", "Space")
-            key.accessibilityHint = L("点按输入空格；左右滑动选词，松手上屏；上下滑动换行；按住中间 1.5 秒移动光标；双指向两侧展开选择文字，向中间合拢把输入框文字移入 Buffer", "Tap for space. Slide sideways to pick a word and lift to commit. Slide up or down to turn candidate lines. Hold the middle for 1.5 seconds to move the cursor. Spread two fingers to select text; pinch to move the field's text into the Buffer.")
+            key.accessibilityHint = L("点按输入空格；左右滑动选词，松手上屏；上下滑动换行；按住中间 1 秒移动光标；双指向中间合拢把输入框文字移入 Buffer", "Tap for space. Slide sideways to pick a word and lift to commit. Slide up or down to turn candidate lines. Hold the middle for 1 second to move the cursor. Pinch two fingers together to move the field's text into the Buffer.")
             let m = key.machine
-            m.onCursorBegan = { [weak self] in self?.beginCaretDrag(selecting: false) ?? false }
+            m.onCursorBegan = { [weak self] in self?.beginCaretDrag() ?? false }
             m.onCursorMove = { [weak self] steps in self?.moveCaret(steps) }
             m.onSweepBegan = { [weak self] in self?.beginSweep() ?? false }
             m.onSweepMove = { [weak self] place in self?.moveSweep(place) }
@@ -488,8 +487,6 @@ final class KeyboardViewController: UIInputViewController {
             m.onRollerBegan = { [weak self] in self?.beginRoller() ?? false }
             m.onRoll = { [weak self] direction in self?.rollCandidateLines(direction) }
             m.onRollerEnded = { [weak self] in self?.candidateStrip.endWheel() }
-            m.onSpreadBegan = { [weak self] in self?.beginSpread() ?? false }
-            m.onSpreadMove = { [weak self] before, after in self?.moveSpread(before: before, after: after) }
             m.onPinch = { [weak self] in self?.pinchHostTextIntoBuffer() }
             spaceKeys.addArrangedSubview(key)
         }
@@ -1315,7 +1312,7 @@ final class KeyboardViewController: UIInputViewController {
         // Default shows its delivery blocks in the input line (caret block outlined);
         // plugins send their result, so their output line shows those blocks instead.
         let display = BufferComposition(source: buffer.source, cursor: buffer.cursor, preedit: compositionText,
-                                        font: .systemFont(ofSize: view.bounds.width > 600 ? 14 : 15), selection: buffer.selection,
+                                        font: .systemFont(ofSize: view.bounds.width > 600 ? 14 : 15),
                                         blocks: isDefaultBuffer ? buffer.blocks : nil, accent: preferences.resolvedTheme.palette.accentText)
         source.setBlocks(display.blockRanges, active: display.activeBlock)
         source.attributedText = display.text; source.caretLocation = display.caretRange.location
@@ -1530,26 +1527,17 @@ final class KeyboardViewController: UIInputViewController {
     /// Space hold starts caret movement only when nothing is being composed.
     /// Selecting works only in the Buffer: iOS gives keyboards no way to select
     /// host text, so there the left Space moves the caret like the right Space.
-    private func beginCaretDrag(selecting: Bool = false) -> Bool {
+    private func beginCaretDrag() -> Bool {
         guard onscreen, !hasComposition, engine.rawInput.isEmpty else { return false }
         if !bufferEnabled { guard let target = currentDocument, target == DocumentIdentity.read(textDocumentProxy) else { return false } }
         cancelDeletes(); insertButton.cancelPress(); surface.cancel(); breakAssociationChain()
-        selectingText = selecting && bufferEnabled
-        if selectingText { buffer.beginSelection() } else if bufferEnabled { buffer.clearSelection() }
-        if selecting && !bufferEnabled { showHostSelectionNoteOnce() }
         surface.feedback.send(.press); render(); return true
-    }
-    private static let hostSelectionNoteKey = "rimes.keyboard.hostSelectionNoteShown"
-    private func showHostSelectionNoteOnce() {
-        guard !UserDefaults.standard.bool(forKey: Self.hostSelectionNoteKey) else { return }
-        UserDefaults.standard.set(true, forKey: Self.hostSelectionNoteKey)
-        status.text = L("iOS 不允许键盘在应用中选择文字；打开 Buffer 即可选择", "iOS doesn't let keyboards select text in apps; turn on Buffer to select")
     }
     private func moveCaret(_ steps: Int) {
         guard onscreen, steps != 0 else { return }
         if bufferEnabled {
             let before = buffer.cursor
-            if selectingText { buffer.extendSelection(steps) } else { buffer.moveCursor(steps) }
+            buffer.moveCursor(steps)
             guard buffer.cursor != before else { return }
             render()
         } else {
@@ -1559,7 +1547,6 @@ final class KeyboardViewController: UIInputViewController {
     }
     // MARK: Space-bar gestures
     private var sweepRange = 0...0
-    private var spreadOrigin = 0
     /// Sweeping: the finger's place across Space maps onto the visible words.
     private func beginSweep() -> Bool {
         guard onscreen, !candidateStrip.isHidden, candidateStrip.count > 0 else { return false }
@@ -1596,22 +1583,6 @@ final class KeyboardViewController: UIInputViewController {
         surface.feedback.send(.selection, combination: "roll-\(direction)-\(caretSteps)")
         caretSteps += 1
     }
-    /// Spreading two fingers selects text in the Buffer; iOS gives a keyboard no selection in an app's field.
-    private func beginSpread() -> Bool {
-        guard onscreen, !hasComposition else { return false }
-        guard bufferEnabled else { showHostSelectionNoteOnce(); return false }
-        cancelDeletes(); surface.cancel(); breakAssociationChain()
-        spreadOrigin = buffer.cursor
-        surface.feedback.send(.press)
-        return true
-    }
-    private func moveSpread(before: Int, after: Int) {
-        guard onscreen, bufferEnabled else { return }
-        buffer.moveCursor(spreadOrigin - before - buffer.cursor)
-        buffer.beginSelection(); buffer.extendSelection(before + after)
-        selectingText = true; render()
-        caretSteps += 1; surface.feedback.send(.selection, combination: "spread-\(caretSteps)")
-    }
     /// Pinching two fingers in moves the field's text into the Buffer, opening it first if needed.
     private func pinchHostTextIntoBuffer() {
         guard onscreen, !hasComposition else { return }
@@ -1633,11 +1604,7 @@ final class KeyboardViewController: UIInputViewController {
         if punctuationOpen { punctuationOpen = false; render() }
         // A key press hides associations; Delete also ends the learning chain.
         if backspace { breakAssociationChain() } else { associations = [] }
-        if !backspace {
-            collapseCandidates()
-            // Only Delete acts on a selection; any other key just clears it.
-            if buffer.selectionAnchor != nil { buffer.clearSelection(); renderBuffer() }
-        }
+        if !backspace { collapseCandidates() }
         guard isDefaultBuffer else { return }
         liveTyping.noteKey(at: uptime, isRepeat: false, isBackspace: backspace); session.noteKey(at: uptime)
     }
@@ -2588,7 +2555,6 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
     }
-    var developmentBufferSelection: Range<Int>? { buffer.selection }
     var developmentAssociations: [String] { showingAssociations ? associations : [] }
     func developmentClearAssociationHistory() { applyAssociationReset(UUID()); render() }
     func developmentApplyAssociationReset(_ revision: UUID?) { applyAssociationReset(revision); render() }
