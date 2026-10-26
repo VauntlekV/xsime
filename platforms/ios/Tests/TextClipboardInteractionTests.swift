@@ -123,7 +123,7 @@ import RimesCore
         controller.layoutProxy.native.selectedRange = NSRange(location: 2, length: 0)
         controller.developmentBuffer(""); controller.developmentAutoDelay(1)
         controller.developmentOpenClipboard()
-        try hostImportPrompt(controller).sendActions(for: .touchUpInside)
+        controller.developmentImportHostText()
         // Close before the import task can finish its asynchronous host checks.
         controller.developmentClosePanel()
         await controller.developmentWaitForBufferImport()
@@ -150,7 +150,7 @@ import RimesCore
         controller.layoutProxy.native.text = "A。"
         controller.layoutProxy.native.selectedRange = NSRange(location: 2, length: 0)
         controller.developmentBuffer(""); controller.developmentOpenClipboard()
-        try hostImportPrompt(controller).sendActions(for: .touchUpInside)
+        controller.developmentImportHostText()
         controller.developmentClosePanel(); await controller.developmentWaitForBufferImport()
         XCTAssertEqual(controller.developmentBufferSource.text, "A。")
         XCTAssertTrue(controller.layoutProxy.native.text.isEmpty)
@@ -175,7 +175,7 @@ import RimesCore
             controller.layoutProxy.native.selectedRange = NSRange(location: 9, length: 0)
             controller.textDidChange(nil)
         }
-        try hostImportPrompt(controller).sendActions(for: .touchUpInside)
+        controller.developmentImportHostText()
         controller.developmentClosePanel(); await controller.developmentWaitForBufferImport()
         XCTAssertEqual(controller.layoutProxy.native.text, "new field")
         XCTAssertEqual(controller.developmentBufferSource.text, "A。")
@@ -256,11 +256,6 @@ import RimesCore
 
     private func waitForCollection() async throws {
         for _ in 0..<100 where TextClipboardStore(root: root).load().isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
-    }
-    private func hostImportPrompt(_ controller: KeyboardViewController) throws -> BufferImportPrompt {
-        try XCTUnwrap(controller.layoutViews.buffer.subviews.first {
-            $0.accessibilityIdentifier == "keyboard.buffer.importHost"
-        } as? BufferImportPrompt)
     }
     private func host(width: CGFloat = 393) -> (UIWindow, KeyboardViewController) {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 900))

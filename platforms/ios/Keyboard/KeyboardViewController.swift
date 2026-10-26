@@ -90,7 +90,7 @@ final class KeyboardViewController: UIInputViewController {
     }
     /// Bound to the same field, Buffer and plugin across iOS's paste alert.
     private var pendingPaste: PendingPaste?
-    private let importPrompt = BufferImportPrompt(), pasteButton = BufferPasteButton()
+    private let pasteButton = BufferPasteButton()
     private var clipboardStore = TextClipboardStore()
     private let clipboardView = TextClipboardPanel()
     private var clipboardEntries: [TextClipboardStore.Entry] = []
@@ -378,7 +378,6 @@ final class KeyboardViewController: UIInputViewController {
         settingsButton.symbol("slider.horizontal.3", label: L("插件与 Buffer 设置", "Plugin and Buffer settings"))
         settingsButton.accessibilityHint = L("打开插件与 Buffer 设置", "Open plugin and Buffer settings")
         configure(runButton, "") { [weak self] in self?.runSelectedPlugin() }
-        source.onTapBackground = { [weak self] in self?.importHostText() }
         runButton.symbol("play.fill", label: L("执行插件", "Run plugin"))
         shortcuts.onPress = { [weak self] in self?.surface.feedback.send(.press) }
         shortcuts.onSelect = { [weak self] plugin in self?.openPlugin(plugin) }
@@ -419,14 +418,12 @@ final class KeyboardViewController: UIInputViewController {
         }
         source.role = .input; result.role = .output
         source.trailingAccessoryWidth = 44
-        importPrompt.isHidden = true
-        importPrompt.addAction(UIAction { [weak self] _ in self?.importHostText() }, for: .touchUpInside)
         pasteButton.onPaste = { [weak self] in self?.pasteIntoBuffer(itemProviders: $0) }
         pasteButton.onNeedsAccess = { [weak self] in self?.explainClipboardAccess() }
         #if KEYBOARD_LAYOUT_TESTS
         pasteButton.addAction(UIAction { [weak self] _ in self?.developmentPasteClipboard() }, for: .touchUpInside)
         #endif
-        bufferPanel.addSubview(importPrompt); bufferPanel.addSubview(pasteButton)
+        bufferPanel.addSubview(pasteButton)
         // Tapping an output block reads it aloud without sending it; tap again to hear it again.
         result.onTapBlock = { [weak self] index in self?.readOutputBlock(index) }
         result.onTapBackground = { [weak self] in if self?.isDefaultBuffer == true { self?.showTypingCard() } }
@@ -1494,8 +1491,6 @@ final class KeyboardViewController: UIInputViewController {
             // readout drops below it. Plugins send their output, which stays on top.
             if isDefaultBuffer { source.frame = topLine; result.frame = bottomLine } else { result.frame = topLine; source.frame = bottomLine }
             pasteButton.frame = CGRect(x: source.frame.maxX - 44, y: source.frame.minY, width: 44, height: bufferRowHeight)
-            importPrompt.frame = CGRect(x: source.frame.minX + 3, y: source.frame.minY + 2, width: max(0, source.frame.width - 50), height: max(0, bufferRowHeight - 4))
-            importPrompt.font = source.font
             typingStats.frame = CGRect(x: 8, y: 0, width: max(0, result.bounds.width - 16), height: bufferRowHeight)
             result.font = .systemFont(ofSize: landscape ? 14 : 15)
         }
@@ -1620,11 +1615,14 @@ final class KeyboardViewController: UIInputViewController {
     /// Pinching two fingers in moves the field's text into the Buffer, opening it first if needed.
     private func pinchHostTextIntoBuffer() {
         guard onscreen, !hasComposition else { return }
-        if !bufferEnabled { toggleBuffer() }
+        let wasOpen = bufferEnabled
+        if !wasOpen { toggleBuffer() }
         guard bufferEnabled, buffer.source.isEmpty else {
             status.text = L("Buffer 中已有文字，请先上屏或清空", "The Buffer already has text; send or clear it first"); return
         }
-        importHostText()
+        // A Buffer that has just opened is still asking the field for its text.
+        if wasOpen { importHostText() }
+        else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.importHostText() } }
     }
     /// Expanded candidates are a one-shot view: choosing or typing returns to one row.
     private func collapseCandidates() {
@@ -1915,14 +1913,13 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
         offeredHostText = canOffer ? currentDocument.flatMap { delivery.hostTextSnapshot(target: $0) }.flatMap { $0.text.isEmpty ? nil : $0 } : nil
-        importPrompt.update(text: offeredHostText?.text)
-        source.placeholder = offeredHostText == nil ? selectedPlugin?.placeholder ?? "" : ""
-        source.caretLocation = visible && offeredHostText == nil ? BufferComposition(source: buffer.source, cursor: buffer.cursor, preedit: compositionText, font: source.font).caretRange.location : nil
+        source.placeholder = selectedPlugin?.placeholder ?? ""
+        source.caretLocation = visible ? BufferComposition(source: buffer.source, cursor: buffer.cursor, preedit: compositionText, font: source.font).caretRange.location : nil
     }
     private func cancelBufferImport() {
         bufferImportEpoch = UUID(); hostImportTask?.cancel(); hostImportTask = nil
         wasOfferingHostText = false
-        offeredHostText = nil; importPrompt.update(text: nil)
+        offeredHostText = nil
     }
     private func importHostText() {
         guard onscreen, bufferEnabled, buffer.source.isEmpty, !hasComposition,
@@ -2600,6 +2597,8 @@ final class KeyboardViewController: UIInputViewController {
     }
     func developmentSaveAssociationHistory() { associationHistoryChanges = max(1, associationHistoryChanges); saveAssociationHistory() }
     var developmentStatus: String { status.text ?? "" }
+    func developmentImportHostText() { importHostText() }
+    var developmentOffersHostText: Bool { offeredHostText != nil }
     func developmentReleaseEdgeTouchDelay() { releaseEdgeTouchDelay() }
     func developmentNumeric() { numbers.sendActions(for: .touchUpInside) }
     var developmentBufferCursor: Int { buffer.cursor }

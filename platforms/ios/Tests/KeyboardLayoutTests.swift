@@ -515,7 +515,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(controller.layoutViews.source.placeholder, KeyboardPlugin.ask.placeholder)
         let paste = try XCTUnwrap(controller.layoutViews.buffer.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.paste" } as? BufferPasteButton)
         XCTAssertFalse(controller.developmentPluginControls.run.isHidden)
-        XCTAssertNotNil(controller.layoutViews.source.onTapBackground)
+        XCTAssertNil(controller.layoutViews.source.onTapBackground, "Tapping the input line no longer imports host text")
         controller.developmentClipboardAccess = false
         paste.sendActions(for: .touchUpInside)
         XCTAssertTrue(controller.developmentStatus.contains(L("完全访问", "Full Access")))
