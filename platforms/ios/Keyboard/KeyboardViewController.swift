@@ -1381,7 +1381,9 @@ final class KeyboardViewController: UIInputViewController {
         for case let button as KeycapButton in bottom.arrangedSubviews + [spaceKey] where button.compactCap != compactTypingKeys {
             button.compactCap = compactTypingKeys
         }
-        for constraint in bottomKeyWidths { constraint.constant = -5 * bottom.spacing / 7.5 }
+        // Orthogonal layout: the four keys either side of Space (123, Shift, language, Return) are narrower, so Space is longer.
+        let sideKeyWidth = compactTypingKeys ? max(0, width - 10) * (0.109 - 1 / 7.5) : -5 * bottom.spacing / 7.5
+        for constraint in bottomKeyWidths { constraint.constant = sideKeyWidth }
         candidateStrip.expanded = expanded; candidateStrip.landscape = landscape
         // The height must not depend on presentation state: `onscreen` only turns
         // true in viewWillAppear, after the first height was already requested.

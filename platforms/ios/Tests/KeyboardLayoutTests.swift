@@ -913,6 +913,23 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(m.presses[1]?.role, SplitSpaceMachine.Role.dead)
         m.up(1)
     }
+    func testOrthogonalBottomRowHasNarrowSideKeysAndALongerSpace() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin); window.layoutIfNeeded()
+        let bottom = controller.layoutViews.bottom
+        func widths() -> (side: CGFloat, space: CGFloat)? {
+            let visible = bottom.arrangedSubviews.filter { !$0.isHidden && $0.frame.width > 0 }
+            guard let space = visible.first(where: { $0.accessibilityIdentifier == "keyboard.spaces" }),
+                  let side = visible.first(where: { $0.accessibilityIdentifier == "keyboard.shift" }) else { return nil }
+            return (side.frame.width, space.frame.width)
+        }
+        controller.developmentChoose(.chord); controller.developmentSetLayout(.orthogonal); window.layoutIfNeeded()
+        let ortho = try! XCTUnwrap(widths())
+        let visible = bottom.arrangedSubviews.filter { !$0.isHidden && $0.frame.width > 0 }
+        XCTAssertEqual(visible.count, 5, "123, Shift, Space, language and Return")
+        XCTAssertLessThan(ortho.side, 0.115 * bottom.bounds.width); XCTAssertGreaterThan(ortho.space, 0.45 * bottom.bounds.width)
+        XCTAssertEqual(visible.filter { $0.accessibilityIdentifier != "keyboard.spaces" }.count, 4)
+    }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         let v = controller.layoutViews
