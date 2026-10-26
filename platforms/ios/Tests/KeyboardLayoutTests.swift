@@ -964,7 +964,10 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertFalse(bar.isShowing)
         enter.sendActions(for: .touchDown)
         XCTAssertTrue(bar.isShowing)
-        XCTAssertEqual(bar.frame.maxY, controller.layoutViews.buffer.bounds.height, accuracy: 0.5)
+        let box = controller.layoutViews.source
+        XCTAssertEqual(bar.frame, box.frame, "The line belongs to the input box alone")
+        XCTAssertEqual(bar.layer.cornerRadius, box.layer.cornerRadius); XCTAssertTrue(bar.layer.masksToBounds, "Clipped to the box's rounded corners")
+        XCTAssertLessThan(bar.frame.height, controller.layoutViews.buffer.bounds.height, "Not the whole bottom of the Buffer")
         // A tap lets it go and sends one block.
         enter.sendActions(for: .touchUpInside)
         RunLoop.main.run(until: Date().addingTimeInterval(0.4))

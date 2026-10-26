@@ -1505,8 +1505,6 @@ final class KeyboardViewController: UIInputViewController {
         let landscape = view.bounds.width > 600
         if bufferEnabled {
             let bufferRowHeight: CGFloat = landscape ? 28 : 36
-        holdBar.frame = CGRect(x: 4, y: bufferPanel.bounds.height - HoldProgressBar.height, width: max(0, bufferPanel.bounds.width - 8), height: HoldProgressBar.height)
-        bufferPanel.bringSubviewToFront(holdBar); holdBar.tintColor = preferences.resolvedTheme.palette.accent
             let topLine = CGRect(x: 36, y: 0, width: max(0, bufferPanel.bounds.width - 72), height: bufferRowHeight)
             typingStats.fontSize = landscape ? 10 : 10.5
             insertionSlot.frame = CGRect(x: bufferPanel.bounds.width - 32, y: 0, width: 32, height: bufferRowHeight)
@@ -1524,6 +1522,9 @@ final class KeyboardViewController: UIInputViewController {
             // readout drops below it. Plugins send their output, which stays on top.
             if isDefaultBuffer { source.frame = topLine; result.frame = bottomLine } else { result.frame = topLine; source.frame = bottomLine }
             typingStats.frame = CGRect(x: 8, y: 0, width: max(0, result.bounds.width - 16), height: bufferRowHeight)
+            // The hold line lives on the input box alone, clipped to its rounded corners.
+            holdBar.frame = source.frame; holdBar.layer.cornerRadius = source.layer.cornerRadius
+            holdBar.tintColor = preferences.resolvedTheme.palette.accent; bufferPanel.bringSubviewToFront(holdBar)
             result.font = .systemFont(ofSize: landscape ? 14 : 15)
         }
         bufferButton.frame = CGRect(x: candidatePanel.bounds.width - 32, y: 0, width: 32, height: 32)

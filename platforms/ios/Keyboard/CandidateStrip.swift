@@ -1067,28 +1067,31 @@ private final class BorderedChipLabel: UILabel {
     override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
 }
 
-/// The progress of a hold-to-send-all: a thin line along the lower edge of the Buffer fills from left to right while
-/// a send key is held, the way the desktop button fills its icon, then flashes when everything is released.
+/// The progress of a hold-to-send-all: a thin line along the lower edge of the Buffer's input box fills from left to
+/// right while a send key is held, the way the desktop button fills its icon, then flashes when everything is
+/// released. The view takes the box's frame and corner radius and clips the line to them, so it follows the rounded
+/// corners with clean edges.
 final class HoldProgressBar: UIView {
     static let height: CGFloat = 3
     private let fill = CALayer()
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false; alpha = 0
-        fill.anchorPoint = CGPoint(x: 0, y: 0.5); fill.cornerRadius = Self.height / 2
-        fill.shadowOffset = .zero; fill.shadowRadius = 3; fill.shadowOpacity = 0.7
+        layer.cornerCurve = .continuous; layer.masksToBounds = true; layer.cornerRadius = 7
+        fill.anchorPoint = CGPoint(x: 0, y: 0.5)
         layer.addSublayer(fill); applyColor()
     }
     required init?(coder: NSCoder) { fatalError() }
     override func tintColorDidChange() { super.tintColorDidChange(); applyColor() }
     private func applyColor() {
         let color = (tintColor ?? .systemBlue)
-        fill.backgroundColor = color.cgColor; fill.shadowColor = color.cgColor
+        fill.backgroundColor = color.cgColor
     }
     override func layoutSubviews() {
         super.layoutSubviews()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        fill.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height); fill.position = CGPoint(x: 0, y: bounds.midY)
+        // The line sits on the box's bottom edge; the view's rounded clip shapes its ends at the corners.
+        fill.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: Self.height); fill.position = CGPoint(x: 0, y: bounds.height - Self.height / 2)
         CATransaction.commit()
     }
     /// Whether the line is showing, for tests.
