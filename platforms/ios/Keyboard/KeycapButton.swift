@@ -241,41 +241,37 @@ enum SpaceHalf { case left, right }
 enum HighlightStart { case first, middle, last }
 
 /// Gesture logic of the split Space, kept apart from UIKit so it can be driven directly.
-/// A tap on either half is an ordinary space. Holding one half turns the other into a control:
-/// hold right, slide left to move the caret; hold left, slide right: sideways highlights a word (from the
-/// middle of the visible ones) and up or down turns the single candidate row to the next or previous line. Without a hold, sliding a half
-/// sweeps the candidates (left half from the first, right half from the last one visible).
-/// Releasing commits what is highlighted.
+/// - A tap on either half is an ordinary space.
+/// - Hold the right half and slide the left quickly: the caret moves.
+/// - Hold both halves (or hold one and slide the other): candidate mode. The left thumb slides up and
+///   down to roll the candidate lines (finger up is the next line); the right thumb slides sideways to
+///   pick a word on the line. Lifting both thumbs commits the highlighted word.
+/// - Slide one half alone: the left half sweeps the candidates from the first, the right half from
+///   the last visible one; releasing commits.
 final class SplitSpaceMachine {
     static let holdDuration: TimeInterval = 0.35
     static let slop: CGFloat = 8
-    /// Points of travel per highlighted candidate, per caret step, per matrix row.
+    /// Points of travel per highlighted candidate, per caret step, per line.
     static let highlightStep: CGFloat = 22, caretStep: CGFloat = 10, slideStep: CGFloat = 24
-    enum Role { case undecided, holder, caret, sweep, selector, dead }
-    /// While the other half is held, sideways and vertical travel never mix: one axis is chosen from the
-    /// first clear movement and kept until the finger pauses or clearly turns the other way.
-    enum Axis { case none, horizontal, vertical }
-    static let pause: TimeInterval = 0.22, axisSlop: CGFloat = 8, axisSwitch: CGFloat = 40
+    enum Role { case undecided, holder, caret, sweep, roller, selector, dead }
     struct Press {
         var half: SpaceHalf
         var start: CGPoint
         var anchor: CGPoint
-        var axis = Axis.none
-        var origin = CGPoint.zero
-        var lastMove: TimeInterval = 0
-        var baseSteps = 0
         var role = Role.undecided
         var steps = 0
         var served = false, slid = false, highlighting = false
     }
     private(set) var presses: [Int: Press] = [:]
+    /// Whether the thumbs in candidate mode have moved anything; a pure hold-and-release commits nothing.
+    private var modeMoved = false
     var onTap: () -> Void = {}
     var onCaretBegan: () -> Bool = { false }
     var onCaretMove: (Int) -> Void = { _ in }
     var onCaretEnded: () -> Void = {}
     var onHighlightBegan: (HighlightStart) -> Bool = { _ in false }
-    /// Points of sideways travel per word while the other half is held; the controller scales it so one
-    /// sweep of the half covers a whole line.
+    /// Points of sideways travel per word in candidate mode; the controller scales it so one sweep of the
+    /// right half covers a whole line.
     var selectorStep = SplitSpaceMachine.highlightStep
     /// Signed candidate steps from where the highlight began.
     var onHighlightMove: (Int) -> Void = { _ in }
@@ -285,66 +281,73 @@ final class SplitSpaceMachine {
     var onChange: () -> Void = {}
     var pressedHalves: Set<SpaceHalf> { Set(presses.values.map(\.half)) }
     var isHolding: Bool { presses.values.contains { $0.role == .holder } }
+    var inCandidateMode: Bool { presses.values.contains { $0.role == .roller || $0.role == .selector } }
 
+    private func holder(opposite half: SpaceHalf) -> (key: Int, value: Press)? {
+        presses.first { $0.value.role == .holder && $0.value.half != half }
+    }
     func down(_ id: Int, half: SpaceHalf, at point: CGPoint) {
-        var press = Press(half: half, start: point, anchor: point)
-        press.origin = point
-        if let holder = presses.first(where: { $0.value.role == .holder && $0.value.half != half }) {
-            presses[holder.key]?.served = true
-            if holder.value.half == .right { press.role = onCaretBegan() ? .caret : .dead }
-            else { press.role = .selector; press.highlighting = onHighlightBegan(.middle) }
-        }
-        presses[id] = press; onChange()
+        presses[id] = Press(half: half, start: point, anchor: point)
+        // Joining a held half: it is now being used, so releasing it types nothing.
+        if let held = holder(opposite: half) { presses[held.key]?.served = true }
+        onChange()
     }
     func holdElapsed(_ id: Int) {
         guard var press = presses[id], press.role == .undecided, !press.slid else { return }
-        press.role = .holder; presses[id] = press; onChange()
+        press.role = .holder; presses[id] = press
+        if let other = holder(opposite: press.half) { enterCandidateMode(between: id, and: other.key) }
+        onChange()
+    }
+    private func enterCandidateMode(between a: Int, and b: Int) {
+        guard presses[a] != nil, presses[b] != nil else { return }
+        let left = presses[a]!.half == .left ? a : b, right = left == a ? b : a
+        modeMoved = false
+        for id in [a, b] { presses[id]?.served = true }
+        guard onHighlightBegan(.middle) else { return }   // nothing to pick: the holds just type nothing
+        presses[left]?.role = .roller; presses[right]?.role = .selector
+        presses[left]?.highlighting = true; presses[right]?.highlighting = true
+        if let start = presses[left]?.start { presses[left]?.anchor = start }
     }
     func move(_ id: Int, to point: CGPoint, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
         guard var press = presses[id] else { return }
-        func horizontalSteps(_ step: CGFloat = SplitSpaceMachine.highlightStep) -> Int { Int(((point.x - press.start.x) / step).rounded(.towardZero)) }
-        switch press.role {
-        case .undecided:
+        if press.role == .undecided {
             guard hypot(point.x - press.start.x, point.y - press.start.y) > Self.slop else { return }
             press.slid = true
-            if onHighlightBegan(press.half == .left ? .first : .last) { press.role = .sweep; press.highlighting = true } else { press.role = .dead }
+            if let held = holder(opposite: press.half) {
+                if held.value.half == .right {
+                    // Hold right, slide left quickly: move the caret.
+                    press.role = onCaretBegan() ? .caret : .dead
+                } else {
+                    // Hold left, slide right: candidate mode, with this finger as the selector.
+                    presses[id] = press
+                    enterCandidateMode(between: id, and: held.key)
+                    press = presses[id]!
+                    press.start = point
+                    presses[id] = press
+                    onChange(); return
+                }
+            } else if onHighlightBegan(press.half == .left ? .first : .last) { press.role = .sweep; press.highlighting = true }
+            else { press.role = .dead }
+        }
+        switch press.role {
         case .sweep:
-            let steps = horizontalSteps()
+            let steps = Int(((point.x - press.start.x) / Self.highlightStep).rounded(.towardZero))
             if steps != press.steps { press.steps = steps; onHighlightMove(steps) }
         case .caret:
             let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
             if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCaretMove(count) }
+        case .roller:
+            // Left thumb: only vertical travel counts. Finger up turns to the next line, as dragging a list up does.
+            let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
+            if rows != 0 {
+                press.anchor.y += CGFloat(rows) * Self.slideStep; modeMoved = true
+                for _ in 0..<abs(rows) { onSlide(rows < 0 ? 1 : -1) }
+            }
         case .selector:
-            if press.axis != .none && time - press.lastMove > Self.pause { press.axis = .none; press.origin = point }
-            press.lastMove = time
-            func lock(_ axis: Axis) {
-                press.axis = axis; press.origin = point
-                if axis == .horizontal { press.baseSteps = press.steps; press.anchor.x = point.x } else { press.anchor.y = point.y }
-            }
-            let dx = point.x - press.origin.x, dy = point.y - press.origin.y
-            switch press.axis {
-            case .none:
-                guard hypot(dx, dy) > Self.axisSlop else { break }
-                // The axis is decided from where this movement began, so the slop travel still counts.
-                let from = press.origin
-                lock(abs(dx) >= abs(dy) ? .horizontal : .vertical)
-                if press.axis == .horizontal { press.anchor.x = from.x } else { press.anchor.y = from.y }
-            case .horizontal where abs(dy) > Self.axisSwitch && abs(dy) > 2 * abs(dx): lock(.vertical)
-            case .vertical where abs(dx) > Self.axisSwitch && abs(dx) > 2 * abs(dy): lock(.horizontal)
-            default: break
-            }
-            if press.axis == .horizontal, press.highlighting {
-                let steps = press.baseSteps + Int(((point.x - press.anchor.x) / selectorStep).rounded(.towardZero))
-                if steps != press.steps { press.steps = steps; onHighlightMove(steps) }
-            } else if press.axis == .vertical {
-                let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
-                if rows != 0 {
-                    press.anchor.y += CGFloat(rows) * Self.slideStep
-                    // Finger up turns to the next line, as dragging a list up does.
-                    for _ in 0..<abs(rows) { onSlide(rows < 0 ? 1 : -1) }
-                }
-            }
-        case .holder, .dead: break
+            // Right thumb: only sideways travel counts.
+            let steps = Int(((point.x - press.start.x) / selectorStep).rounded(.towardZero))
+            if steps != press.steps { press.steps = steps; modeMoved = true; onHighlightMove(steps) }
+        case .undecided, .holder, .dead: break
         }
         presses[id] = press
     }
@@ -355,23 +358,26 @@ final class SplitSpaceMachine {
         case .holder:
             // A hold nobody used is just a slow tap.
             if !press.served { onTap() }
-            for (key, other) in presses where other.role == .caret || other.role == .selector {
-                presses[key]?.role = .dead
-                if other.role == .caret { onCaretEnded() } else if other.highlighting { onHighlightEnded(other.steps != 0) }
+            for (key, other) in presses where other.role == .caret {
+                presses[key]?.role = .dead; onCaretEnded()
             }
         case .sweep: onHighlightEnded(true)
         case .caret: onCaretEnded()
-        case .selector: if press.highlighting { onHighlightEnded(press.steps != 0) }
+        case .roller, .selector:
+            // Candidate mode lasts until both thumbs are up; then the highlighted word goes on screen.
+            if !inCandidateMode { onHighlightEnded(modeMoved) }
         case .dead: break
         }
         onChange()
     }
     func cancelAll() {
         let all = presses; presses = [:]
+        var ended = false
         for press in all.values {
             switch press.role {
             case .caret: onCaretEnded()
-            case .sweep, .selector: if press.highlighting { onHighlightEnded(false) }
+            case .sweep: if press.highlighting { onHighlightEnded(false) }
+            case .roller, .selector: if !ended { ended = true; onHighlightEnded(false) }
             default: break
             }
         }

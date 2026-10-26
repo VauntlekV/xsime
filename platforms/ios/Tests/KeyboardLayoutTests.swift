@@ -839,6 +839,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         let m = controller.developmentSpaceKey.machine
         m.down(1, half: .right, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1)
         m.down(2, half: .left, at: CGPoint(x: 40, y: 20))
+        m.move(2, to: CGPoint(x: 10, y: 20))
         XCTAssertEqual(m.presses[2]?.role, SplitSpaceMachine.Role.dead)
         m.up(2); m.up(1)
     }
@@ -884,47 +885,45 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(strip.highlightedIndex, nil)
     }
 
-    func testHoldingLeftHalfLetsRightHalfTurnSingleRowLinesFromTheMiddle() {
+    func testHoldingBothHalvesRollsLinesWithTheLeftThumbPicksWithTheRightAndCommitsWhenBothLiftOff() {
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentChoose(.pinyin)
         controller.developmentType("shi"); window.layoutIfNeeded()
         let m = controller.developmentSpaceKey.machine, strip = controller.layoutViews.candidates
         XCTAssertGreaterThan(strip.count, 20); XCTAssertFalse(strip.expanded)
-        m.down(1, half: .left, at: CGPoint(x: 40, y: 20)); m.holdElapsed(1)
-        m.down(2, half: .right, at: CGPoint(x: 150, y: 20))
-        XCTAssertTrue(strip.isWheelActive, "Holding the left half shows the candidate drum")
-        // The highlight starts on the middle of the visible words, and the row stays a single row.
+        controller.layoutProxy.native.text = ""
+        // Press and hold both halves: candidate mode begins, with the drum showing and the middle word highlighted.
+        m.down(1, half: .left, at: CGPoint(x: 40, y: 20)); m.down(2, half: .right, at: CGPoint(x: 150, y: 20))
+        m.holdElapsed(1); XCTAssertFalse(strip.isWheelActive, "One held half is not enough")
+        m.holdElapsed(2)
+        XCTAssertTrue(strip.isWheelActive, "Holding both halves shows the candidate drum")
         let middle = try! XCTUnwrap(strip.middleVisibleIndex)
-        XCTAssertEqual(strip.highlightedIndex, middle)
-        XCTAssertGreaterThan(middle, 0)
+        XCTAssertEqual(strip.highlightedIndex, middle); XCTAssertGreaterThan(middle, 0)
         XCTAssertGreaterThan(m.selectorStep, 0)
-        // Finger up turns to the next line of words (as dragging a list up does): the row scrolls and the highlight lands mid-line.
-        var t: TimeInterval = 10
-        m.move(2, to: CGPoint(x: 150, y: 20), at: t)
-        t += 0.05; m.move(2, to: CGPoint(x: 150, y: 20 - SplitSpaceMachine.slideStep), at: t); window.layoutIfNeeded()
-        XCTAssertFalse(strip.expanded)
+        // The right thumb only slides sideways: vertical wobble there does nothing.
+        m.move(2, to: CGPoint(x: 150, y: 20 - 60)); window.layoutIfNeeded()
+        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
+        XCTAssertEqual(strip.highlightedIndex, middle)
+        // The left thumb only rolls: finger up is the next line; sideways wobble there selects nothing.
+        m.move(1, to: CGPoint(x: 40 + 80, y: 20)); XCTAssertEqual(strip.highlightedIndex, middle)
+        m.move(1, to: CGPoint(x: 40, y: 20 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
         XCTAssertGreaterThan(strip.scroll.contentOffset.x, 0)
         let page2 = try! XCTUnwrap(strip.highlightedIndex)
-        XCTAssertGreaterThan(page2, middle)
-        XCTAssertEqual(page2, strip.middleVisibleIndex)
-        // Finger down returns to the previous line; at the first line it does nothing further.
-        t += 0.05; m.move(2, to: CGPoint(x: 150, y: 20), at: t); window.layoutIfNeeded()
+        XCTAssertGreaterThan(page2, middle); XCTAssertEqual(page2, strip.middleVisibleIndex)
+        XCTAssertFalse(strip.expanded)
+        // Finger down returns to the previous line.
+        m.move(1, to: CGPoint(x: 40, y: 20)); window.layoutIfNeeded()
         XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
-        XCTAssertEqual(strip.highlightedIndex, strip.middleVisibleIndex)
-        t += 0.05; m.move(2, to: CGPoint(x: 150, y: 20 + SplitSpaceMachine.slideStep), at: t); window.layoutIfNeeded()
-        XCTAssertFalse(strip.expanded); XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
-        // Sideways and vertical travel are decoupled: while sliding sideways, vertical wobble turns no lines.
-        controller.layoutProxy.native.text = ""
-        t += 0.6 // a pause frees the axis
+        // The right thumb picks sideways, scaled so a sweep of the half covers the line.
         let from = try! XCTUnwrap(strip.highlightedIndex)
-        m.move(2, to: CGPoint(x: 150, y: 20), at: t)
-        t += 0.05; m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20 + 2), at: t)
-        t += 0.05; m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20 - SplitSpaceMachine.slideStep * 1.5), at: t)
-        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5, "Wobble during a sideways slide does not flip the line")
+        m.move(2, to: CGPoint(x: 150 + m.selectorStep * 2, y: 20))
         let to = try! XCTUnwrap(strip.highlightedIndex)
         XCTAssertEqual(to, from + 2)
         let expected = try! XCTUnwrap(strip.buttons[to].currentTitle)
-        m.up(2); m.up(1)
+        // Lifting one thumb keeps the mode; lifting both commits.
+        m.up(1)
+        XCTAssertTrue(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "")
+        m.up(2)
         XCTAssertEqual(controller.layoutProxy.native.text, expected)
         XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(strip.scroll.alpha, 1)
     }
@@ -949,34 +948,32 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         let word = strip.buttons[0].convert(strip.buttons[0].bounds, to: controller.view)
         XCTAssertTrue(controller.view.hitTest(CGPoint(x: word.midX, y: word.midY), with: nil) === strip.buttons[0])
     }
-    func testHeldHalfAxesLockPauseAndSwitchLikeIntermittentThumbSliding() {
+    func testCandidateModeNeedsBothHalvesAndACleanHoldCommitsNothing() {
         let m = SplitSpaceMachine()
-        var slides: [Int] = [], moves: [Int] = []
-        m.onHighlightBegan = { _ in true }; m.onSlide = { slides.append($0) }; m.onHighlightMove = { moves.append($0) }
-        m.selectorStep = 20
-        m.down(1, half: .left, at: .zero); m.holdElapsed(1)
-        m.down(2, half: .right, at: CGPoint(x: 100, y: 50))
-        var t: TimeInterval = 1
-        // Finger up is the next line (+1); finger down the previous (-1).
-        m.move(2, to: CGPoint(x: 100, y: 50), at: t)
-        t += 0.05; m.move(2, to: CGPoint(x: 100, y: 50 - 24), at: t)
-        XCTAssertEqual(slides, [1])
-        t += 0.05; m.move(2, to: CGPoint(x: 100, y: 50), at: t)
-        XCTAssertEqual(slides, [1, -1])
-        // Locked vertical: sideways jitter selects nothing.
-        t += 0.05; m.move(2, to: CGPoint(x: 120, y: 50), at: t)
-        XCTAssertTrue(moves.isEmpty)
-        // After a pause the sideways slide takes over, and vertical wobble then does nothing.
-        t += 0.5; m.move(2, to: CGPoint(x: 120, y: 50), at: t)
-        t += 0.05; m.move(2, to: CGPoint(x: 160, y: 52), at: t)
+        var began: [HighlightStart] = [], ended: [Bool] = [], taps = 0
+        m.onHighlightBegan = { began.append($0); return true }; m.onHighlightEnded = { ended.append($0) }; m.onTap = { taps += 1 }
+        // Both halves held, then released without moving: no word is committed and no space typed.
+        m.down(1, half: .left, at: .zero); m.down(2, half: .right, at: CGPoint(x: 100, y: 0))
+        m.holdElapsed(1); m.holdElapsed(2)
+        XCTAssertEqual(began, [.middle]); XCTAssertTrue(m.inCandidateMode)
+        m.up(1); m.up(2)
+        XCTAssertEqual(ended, [false]); XCTAssertEqual(taps, 0)
+        // Hold left, then slide the right half at once: the same mode, with the slide counted.
+        began = []; ended = []
+        var moves: [Int] = []; m.onHighlightMove = { moves.append($0) }; m.selectorStep = 20
+        m.down(3, half: .left, at: .zero); m.holdElapsed(3)
+        m.down(4, half: .right, at: CGPoint(x: 100, y: 0))
+        m.move(4, to: CGPoint(x: 100 + SplitSpaceMachine.slop + 2, y: 0))
+        XCTAssertEqual(began, [.middle])
+        m.move(4, to: CGPoint(x: 150, y: 0))
         XCTAssertEqual(moves.last, 2)
-        t += 0.05; m.move(2, to: CGPoint(x: 160, y: 30), at: t)
-        XCTAssertEqual(slides, [1, -1])
-        // A pause, then vertical again, resumes line turning.
-        t += 0.5; m.move(2, to: CGPoint(x: 160, y: 30), at: t)
-        t += 0.05; m.move(2, to: CGPoint(x: 160, y: 30 - 24), at: t)
-        XCTAssertEqual(slides, [1, -1, 1])
-        m.up(2); m.up(1)
+        m.up(4); XCTAssertTrue(ended.isEmpty); m.up(3)
+        XCTAssertEqual(ended, [true])
+        // A quick tap on the other half while one is held types one space and leaves the hold unused.
+        m.down(5, half: .right, at: CGPoint(x: 100, y: 0)); m.holdElapsed(5)
+        m.down(6, half: .left, at: .zero); m.up(6)
+        XCTAssertEqual(taps, 1)
+        m.up(5); XCTAssertEqual(taps, 1, "The hold was joined, so releasing it types nothing")
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
