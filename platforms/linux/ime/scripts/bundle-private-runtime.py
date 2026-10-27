@@ -27,7 +27,8 @@ def main():
     notices = args.root / 'usr/share/doc/fcitx5-rimes/third-party'
     private.mkdir(parents=True, exist_ok=True)
     notices.mkdir(parents=True, exist_ok=True)
-    allowed = re.compile(r'lib(?:icu[a-z]+|boost_[a-z_]+|glog|gflags|yaml-cpp|opencc|leveldb|marisa|snappy|unwind)\.so\..+')
+    # icui18n contains digits in its name and is used by EPUB segmentation.
+    allowed = re.compile(r'lib(?:icu[a-z0-9]+|boost_[a-z_]+|glog|gflags|yaml-cpp|opencc|leveldb|marisa|snappy|unwind)\.so\..+')
     libraries = {}
     for file in (args.root / 'usr').rglob('*'):
         if not file.is_file() or file.is_symlink():
