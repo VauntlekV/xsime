@@ -31,7 +31,7 @@
     "native/macos/BufferMusicSession.swift": "3cc3724842619779721a50aed62770cb5f36fc7a7a73ef4d4dc331588a92d7fe",
     "native/macos/BufferMusicTheory.swift": "eff9cc1112ff9685606b52553eba76e59623478abf4fe0203afb89d4fff3437e",
     "native/macos/BufferMusicView.swift": "d25baf82cd809d0ce6f83f18d1f4ac1a35cdd47ba5ffcf2728c8de011b374fa5",
-    "native/macos/BuiltInPlugins.swift": "21c5e6f5370aca14fd69216afde1b5eb64492fb733b0a893ae06dcd54afb0e68",
+    "native/macos/BuiltInPlugins.swift": "a0b606a30220956fd5bff7ec8f82965a4f31855f7cfa7f5ec3b6f063ea743888",
     "native/macos/CapsuleModules.swift": "d78809394546e6ea3daa863eed25f29dd0824435cc68311f60ec62ac9661038e",
     "native/macos/ChordController.swift": "d3443ce99dcb26caa8eb3ea8506670f3813c9b7b74dc209e00a7e27cd6ae92fe",
     "native/macos/ChordExtension.swift": "fa732e5fd6fb7f6116dc875d6f255bd4268b8c492ff17f0290b33d9962355732",
@@ -62,12 +62,12 @@
     "native/macos/StreamInputPlugin.swift": "a6f1035e43b92d8db21599525fa6d4e2d022432f4d598f6dc5060f8198c73872",
     "native/macos/Translation/AppleTranslationAvailabilityGate.swift": "6d97c9a17082fb885e8fa862d606b0aaee02cfc5d7e94fed4e1f785187820de8",
     "native/macos/Translation/AppleTranslationSessionBridge.swift": "a8bec450633056e880f7756807c7f5b8083dd157bbf53746fa0f2ed83a994eb6",
-    "native/macos/TypingSpeedSettingsViewController.swift": "110bc1c4e1ecb8f7ec025291fbe52f2e906be85f21a804cfe9b0aea4ae5e1099",
+    "native/macos/TypingSpeedSettingsViewController.swift": "63ed1d81fb782a818d9a6fd652cb536bcb525aba61da5965aa8d29b2d214c9a2",
     "native/macos/TypingSpeedStore.swift": "df84c25cfbb82c9e0fcd58ebcafa78939dc69913e073ab3de70d668a1679359b",
     "native/macos/TypingTestArticles.swift": "6767c66059be140f46c2b114321b0943340049cc75f97c97858bb7bb83d4fba6",
     "native/macos/TypingTestHistoryStore.swift": "b1381a010bee67b368dfcf08dd43a3b088ea722f3b9969291ffb87e3ba1a37d5",
     "native/macos/TypingTestLibrary.swift": "0b6c5b92e77e57defa46a83613649a5dd9680a3d4647752a89fc8613fb1dbed0",
-    "native/macos/TypingTestMaterialColumn.swift": "f93f4ce566cb48632ec58186387562046f46a14cdb4f5cd399ad5c8f83be3af7",
+    "native/macos/TypingTestMaterialColumn.swift": "823c10bf9b3bfe373f16c1432f2777f0a01811ba1069068690e055a5b219b75c",
     "native/macos/TypingTestSession.swift": "c8be4b4b6276ed59f3a52e000f64b27ca49ed0af204eab378cb40c3c04536ae3",
     "native/macos/TypingTestTextView.swift": "178dcbb834a7dc2238068c7eebfe401f81d60b24df3a37f2489d3f331f12f7c8",
     "native/macos/YearHistoryHeatmapView.swift": "516de52a2376cec08dc532f7834b6c72de9411b049ff2107038ebb816558a1f0",
@@ -119,6 +119,6 @@
     "source-map.json": "5c899a49343b47dae02dfbdc17a8a9c0e08414fb6b0466871299d90fcb7799e8"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "e844b68d9018732230cb5ddefc5fa00864cd700d",
+  "revision": "ad7ed9d31bb738c81ba756e694a9d4fa4ed1ecf7",
   "schemaVersion": 1
 }

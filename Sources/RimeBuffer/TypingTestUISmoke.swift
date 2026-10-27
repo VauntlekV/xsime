@@ -199,6 +199,43 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
                 window.close()
             }
         }
+        // Folding the material column and the stat cells gives the text the room.
+        do {
+            let controller = TypingSpeedSettingsViewController(subpageID: "overview", historyStore: store,
+                                                               library: TypingTestLibraryStore(storageRoot: root.appendingPathComponent("library-fold")),
+                                                               contextProvider: { TypingTestContext(schemaID: "smoke-fold") }, telemetryEnabled: false)
+            let size = NSSize(width: 770, height: 500)
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = RimeUI.appKitAppearance
+            let backdrop = TypingTestSmokeBackdrop(frame: NSRect(origin: .zero, size: size))
+            window.contentView = backdrop
+            let pane = controller.view
+            backdrop.addSubview(pane)
+            pane.frame = backdrop.bounds
+            pane.autoresizingMask = [.width, .height]
+            controller.prepareForSmoke(articleID: article.id, committedText: String(article.text.prefix(78)))
+            pane.layoutSubtreeIfNeeded()
+            guard let targetScroll = controller.smokeTargetScroll else { return fail("fold: target panel missing") }
+            let before = targetScroll.frame.height, widthBefore = controller.smokeMaterials.smokeWidth
+            guard widthBefore > 100 else { return fail("fold: material column should start open, width \(widthBefore)") }
+            controller.smokeToggleMaterials()
+            controller.smokeToggleCells()
+            pane.layoutSubtreeIfNeeded()
+            guard controller.smokeCellsHidden, controller.smokeMaterials.smokeWidth == 0 else {
+                return fail("fold: column width \(controller.smokeMaterials.smokeWidth), cellsHidden \(controller.smokeCellsHidden)")
+            }
+            guard targetScroll.frame.height > before + 60, targetScroll.frame.width > 450 else {
+                return fail("fold: text panel should grow once cells and column fold: \(before) -> \(targetScroll.frame.height), width \(targetScroll.frame.width)")
+            }
+            if let outputDirectory, let bitmap = backdrop.bitmapImageRepForCachingDisplay(in: backdrop.bounds) {
+                backdrop.cacheDisplay(in: backdrop.bounds, to: bitmap)
+                if let png = bitmap.representation(using: .png, properties: [:]) {
+                    try png.write(to: outputDirectory.appendingPathComponent("typing-test-overview-folded.png"), options: .atomic)
+                }
+            }
+            window.close()
+        }
         // Imported books: real import through the controller, then the column and
         // an imported passage rendered at the default size.
         do {
