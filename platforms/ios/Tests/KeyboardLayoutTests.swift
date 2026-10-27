@@ -100,6 +100,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
     let native = UITextView()
     var keyboardAppearance: UIKeyboardAppearance = .default
     var returnKeyType: UIReturnKeyType = .default
+    var enablesReturnKeyAutomatically = false
     var documentIdentifier = UUID()
     var identityAvailable = true
     override func responds(to selector: Selector!) -> Bool {
@@ -335,13 +336,13 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         controller.defaultClockNow = { clock }
         controller.layoutProxy.native.text = "正文"; controller.layoutProxy.native.selectedRange = NSRange(location: 0, length: 0)
         controller.developmentBuffer(""); window.layoutIfNeeded()
-        let stats = try XCTUnwrap(controller.layoutViews.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? UILabel)
+        let stats = try XCTUnwrap(controller.layoutViews.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? TypingStatsView)
         XCTAssertNil(controller.typingSignature()) // nothing typed yet
         for step in 0..<6 { clock = 100 + Double(step); controller.developmentType("ni"); controller.developmentSpace() }
-        let typing = stats.text ?? ""
+        let typing = stats.text
         // Paused: speed keeps falling and the pause counts up, without any key press.
         clock += 3; controller.developmentRefreshTypingStats()
-        let paused = stats.text ?? ""
+        let paused = stats.text
         XCTAssertNotEqual(typing, paused)
         XCTAssertTrue(paused.contains("3s"), paused)
         // The ordinary-text action appends the figures and localized product credit.
@@ -354,7 +355,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         // Once sent, the figures start over.
         XCTAssertTrue(controller.developmentTypingSession.isEmpty); XCTAssertTrue(controller.developmentTypingMetrics.isEmpty)
         XCTAssertNil(controller.typingSignature())
-        XCTAssertFalse(stats.text?.contains("s") == true && stats.text?.contains(L("停", "idle")) == true)
+        XCTAssertFalse(stats.symbols.contains("hourglass") && stats.text.contains("s"))
     }
     func testOptionalImagePreviewPreservesTypingAndPausesAutoInsertion() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -505,25 +506,47 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertTrue(try XCTUnwrap(find("keyboard.panel.speak", as: PanelToggle.self)).isOn) // saved
         toggle.sendActions(for: .touchUpInside)
     }
-    func testQuickAskUsesSharedPasteButtonAndSurvivesAlerts() throws {
+    func testQuickAskOpensTheBufferAndSurvivesAlerts() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentBuffer("", plugin: false); window.layoutIfNeeded()
         let bar = controller.developmentShortcuts
         try XCTUnwrap(bar.buttons.first { $0.plugin == .ask }).button.sendActions(for: .touchUpInside); window.layoutIfNeeded()
         XCTAssertEqual(controller.developmentSelectedPlugin, .ask)
         XCTAssertEqual(controller.layoutViews.source.placeholder, KeyboardPlugin.ask.placeholder)
-        let paste = try XCTUnwrap(controller.layoutViews.buffer.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.paste" } as? BufferPasteButton)
         XCTAssertFalse(controller.developmentPluginControls.run.isHidden)
-        XCTAssertNotNil(controller.layoutViews.source.onTapBackground)
-        controller.developmentClipboardAccess = false
-        paste.sendActions(for: .touchUpInside)
-        XCTAssertTrue(controller.developmentStatus.contains(L("完全访问", "Full Access")))
+        XCTAssertNil(controller.layoutViews.source.onTapBackground, "Tapping the input line no longer imports host text")
         // A system alert briefly takes focus: the Buffer and the plugin stay open.
         controller.developmentHostResigned()
         XCTAssertEqual(controller.developmentSelectedPlugin, .ask)
         XCTAssertFalse(controller.layoutViews.buffer.isHidden)
         // The prompt keeps answers short and never talks about being a model.
         XCTAssertTrue(AIPrompt.ask.contains("不要提自己是 AI 或模型"))
+    }
+    func testRedoingATranslationKeepsThePreviousOneVisibleAndDimmedInsteadOfCoveringItWithDots() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentBuffer("原文", plugin: true, output: "旧译文。"); window.layoutIfNeeded()
+        let result = controller.layoutViews.result
+        XCTAssertEqual(result.text, "旧译文。"); XCTAssertEqual(result.alpha, 1)
+        // The source changes and a new translation starts: nothing has arrived yet.
+        controller.developmentBuffer("原文，续写", plugin: true, generating: true); window.layoutIfNeeded()
+        XCTAssertEqual(result.text, "旧译文。", "The earlier translation stays")
+        XCTAssertFalse(result.waiting, "No dots over it")
+        XCTAssertLessThan(result.alpha, 1, "It is dimmed to show it is being redone")
+        // The new translation arrives and takes its place at full strength.
+        controller.developmentBuffer("原文，续写", plugin: true, output: "新译文。"); window.layoutIfNeeded()
+        XCTAssertEqual(result.alpha, 1)
+    }
+    func testAFinishedAnswerStopsAllDynamicRenderingAndShowsInFull() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentBuffer("问题", plugin: true, generating: true)
+        // Part of a long answer is revealing...
+        controller.developmentPreview(String(repeating: "很长的回答。", count: 40))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertLessThan(controller.layoutViews.result.text.count, 240)
+        // ...and the moment it is complete the line holds all of it, with no pacing left.
+        let full = String(repeating: "很长的回答。", count: 40)
+        controller.developmentBuffer("问题", plugin: true, output: full); window.layoutIfNeeded()
+        XCTAssertEqual(controller.layoutViews.result.text, full)
     }
     func testStreamingShowsNoStatusWordsAndRevealsEvenly() {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -540,13 +563,9 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         reveal.start(); reveal.feed(burst, finished: false)
         RunLoop.main.run(until: Date().addingTimeInterval(0.25))
         XCTAssertGreaterThan(line.text.count, 0); XCTAssertLessThan(line.text.count, burst.count)
-        // A whole answer arriving at once still streams at a readable pace (≤ ~90 characters a second).
+        // Once the whole answer has arrived nothing animates any more: it is shown in full at once.
         reveal.feed(burst, finished: true)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        XCTAssertLessThan(line.text.count, burst.count)
-        RunLoop.main.run(until: Date().addingTimeInterval(1.5))
         XCTAssertEqual(line.text, burst); XCTAssertTrue(settled); XCTAssertFalse(reveal.isActive)
-        XCTAssertGreaterThan(line.contentOffset.x, 0) // it followed the newest text
         line.removeFromSuperview()
         // Thinking shows (dimmed, unlabelled), then the answer replaces it.
         let (window2, c2) = host(); defer { window2.isHidden = true }
@@ -694,6 +713,29 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(settled.count, 2)
         if settled.count == 2 { XCTAssertLessThanOrEqual(settled[0].maxX, settled[1].minX + 0.5) }
     }
+    func testEntranceBarFollowsTheUsersAssistantPresetsAndOrder() throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        let bar = controller.developmentShortcuts
+        var library = AssistantLibrary()
+        let sleep = AssistantPreset(name: "哄睡", symbol: "moon.stars", instruction: "温柔地哄对方入睡", placeholder: "写下对方的情况")
+        library.save(sleep)
+        controller.developmentAssistantLibrary(library)
+        XCTAssertEqual(bar.buttons.map(\.plugin), [.translate, .ask, .polish, .poem, .art], "a new preset stays off the bar until added")
+        library.setOnEntrance(sleep.entryID, true); library.setOnEntrance("ai.polish", false); library.setOnEntrance("ai.art", false)
+        controller.developmentAssistantLibrary(library)
+        XCTAssertEqual(bar.buttons.map(\.plugin.rawValue), ["apple.translation", "ai.ask", "ai.poem", sleep.entryID])
+        let button = try XCTUnwrap(bar.buttons.last)
+        XCTAssertEqual(button.plugin.title, "哄睡"); XCTAssertEqual(button.plugin.symbol, "moon.stars")
+        XCTAssertTrue(button.button.isEnabled, "presets run on the Ask plugin, which is on")
+        button.button.sendActions(for: .touchUpInside); window.layoutIfNeeded()
+        XCTAssertEqual(controller.developmentSelectedPlugin, button.plugin)
+        XCTAssertEqual(controller.layoutViews.source.placeholder, "写下对方的情况")
+        XCTAssertEqual(button.plugin.presetInstruction, "温柔地哄对方入睡")
+        // Deleting the open preset in the app closes it on the keyboard.
+        library.remove(sleep.id); controller.developmentAssistantLibrary(library)
+        XCTAssertNil(controller.developmentSelectedPlugin)
+        XCTAssertEqual(bar.buttons.map(\.plugin.rawValue), ["apple.translation", "ai.ask", "ai.poem"])
+    }
     func testEmptyCandidateRowOpensPluginsWithoutRunningThem() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
         let bar = controller.developmentShortcuts, controls = controller.developmentPluginControls
@@ -811,30 +853,248 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(drag.steps(to: 100 - CursorDrag.step * 0.9), 0) // less than one step: no move
         drag.cancel(); XCTAssertEqual(drag.steps(to: 0), 0)
     }
-    func testSpaceHoldDragMovesCaretInHostAndBufferWithoutTypingSpace() {
+    // MARK: Space gestures
+    private func space(_ controller: KeyboardViewController) -> (SpaceCursorButton, SplitSpaceMachine) {
+        let key = controller.developmentSpaceKey; return (key, key.machine)
+    }
+    func testSpaceMachineTapSweepRollCursorAndPinch() {
+        let m = SplitSpaceMachine(); m.width = 300
+        var events: [String] = [], places: [CGFloat] = [], rolls: [Int] = [], caret: [Int] = []
+        m.onTap = { events.append("tap") }
+        m.onSweepBegan = { events.append("sweep+"); return true }
+        m.onSweepMove = { places.append($0) }; m.onSweepEnded = { events.append("sweep-\($0)") }
+        m.onRollerBegan = { events.append("roll+"); return true }; m.onRoll = { rolls.append($0) }; m.onRollerEnded = { events.append("roll-") }
+        m.onCursorBegan = { events.append("cursor+"); return true }; m.onCursorMove = { caret.append($0) }; m.onCursorEnded = { events.append("cursor-") }
+                m.onPinch = { events.append("pinch") }
+        // Tap.
+        m.down(1, at: CGPoint(x: 40, y: 20)); m.up(1)
+        XCTAssertEqual(events, ["tap"]); events = []
+        // Sideways slide: absolute place across the cap, from the middle to the left and back; lifting commits.
+        m.down(1, at: CGPoint(x: 150, y: 20)); m.move(1, to: CGPoint(x: 140, y: 22))
+        XCTAssertEqual(places.last!, 140 / 300, accuracy: 0.001)
+        m.move(1, to: CGPoint(x: 3, y: 22)); XCTAssertEqual(places.last!, 0.01, accuracy: 0.001)
+        m.move(1, to: CGPoint(x: 400, y: 22)); XCTAssertEqual(places.last!, 1, accuracy: 0.001)
+        m.up(1); XCTAssertEqual(events, ["sweep+", "sweep-true"]); events = []
+        // Vertical slide rolls lines (finger up = next) and selects nothing.
+        m.down(1, at: CGPoint(x: 150, y: 60)); m.move(1, to: CGPoint(x: 152, y: 60 - SplitSpaceMachine.slideStep))
+        m.move(1, to: CGPoint(x: 152, y: 60))
+        m.up(1)
+        XCTAssertEqual(rolls, [1, -1]); XCTAssertEqual(events, ["roll+", "roll-"]); events = []
+        // The middle held for the cursor delay starts cursor mode; the sides do not.
+        m.down(1, at: CGPoint(x: 150, y: 20)); m.holdElapsed(1); m.move(1, to: CGPoint(x: 150 + 30, y: 20)); m.up(1)
+        XCTAssertEqual(caret, [3]); XCTAssertEqual(events, ["cursor+", "cursor-"]); events = []
+        m.down(1, at: CGPoint(x: 20, y: 20)); m.holdElapsed(1); m.up(1)
+        XCTAssertEqual(events, ["tap"], "A long press on a side is still just a space"); events = []
+        // Pinching from both sides to the middle pulls text into the Buffer, once, and types nothing.
+        m.down(1, at: CGPoint(x: 20, y: 20)); m.down(2, at: CGPoint(x: 280, y: 20))
+        m.move(1, to: CGPoint(x: 80, y: 20)); m.move(2, to: CGPoint(x: 220, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
+        m.up(1); m.up(2)
+        XCTAssertEqual(events, ["pinch"])
+        // Two fingers sliding up together open the Buffer, down close it (once each, no space).
+        var slides: [Int] = []; m.onPairSlide = { slides.append($0) }
+        events = []
+        m.down(1, at: CGPoint(x: 100, y: 60)); m.down(2, at: CGPoint(x: 200, y: 60))
+        m.move(1, to: CGPoint(x: 100, y: 40)); m.move(2, to: CGPoint(x: 200, y: 40)); m.move(1, to: CGPoint(x: 100, y: 20)); m.move(2, to: CGPoint(x: 200, y: 20))
+        m.up(1); m.up(2); XCTAssertEqual(slides, [1]); XCTAssertTrue(events.isEmpty)
+        m.down(1, at: CGPoint(x: 100, y: 20)); m.down(2, at: CGPoint(x: 200, y: 20))
+        m.move(1, to: CGPoint(x: 100, y: 50)); m.move(2, to: CGPoint(x: 200, y: 50)); m.up(1); m.up(2)
+        XCTAssertEqual(slides, [1, -1])
+        // Thumbs that drift together while sliding up still slide: the larger movement decides.
+        m.down(1, at: CGPoint(x: 100, y: 60)); m.down(2, at: CGPoint(x: 200, y: 60))
+        m.move(1, to: CGPoint(x: 108, y: 20)); m.move(2, to: CGPoint(x: 192, y: 20)); m.up(1); m.up(2)
+        XCTAssertEqual(slides, [1, -1, 1]); XCTAssertFalse(events.contains("pinch"))
+        // And a pinch with a little vertical wobble is still a pinch.
+        m.down(1, at: CGPoint(x: 20, y: 30)); m.down(2, at: CGPoint(x: 280, y: 30))
+        m.move(1, to: CGPoint(x: 90, y: 22)); m.move(2, to: CGPoint(x: 210, y: 22)); m.up(1); m.up(2)
+        XCTAssertEqual(slides.count, 3); XCTAssertEqual(events.filter { $0 == "pinch" }.count, 1)
+        // A slide with no candidates types no space.
+        events = []; m.onSweepBegan = { false }
+        m.down(1, at: CGPoint(x: 40, y: 20)); m.move(1, to: CGPoint(x: 120, y: 20)); m.up(1)
+        XCTAssertTrue(events.isEmpty)
+    }
+    func testSweepingSpaceHighlightsByPlaceAndLiftingCommitsTheWord() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin)
+        controller.developmentType("shi"); window.layoutIfNeeded()
+        let (_, m) = space(controller); let strip = controller.layoutViews.candidates
+        controller.layoutProxy.native.text = ""
+        let first = try! XCTUnwrap(strip.firstVisibleIndex), last = try! XCTUnwrap(strip.lastVisibleIndex), width = m.width
+        // Start in the middle and slide left: the highlight begins at the middle word and runs to the first.
+        m.down(1, at: CGPoint(x: width / 2, y: 20)); m.move(1, to: CGPoint(x: width / 2 - SplitSpaceMachine.slop - 1, y: 20))
+        let middle = try! XCTUnwrap(strip.highlightedIndex)
+        XCTAssertEqual(middle, first + Int(((width / 2 - 9) / width * CGFloat(last - first)).rounded()))
+        m.move(1, to: CGPoint(x: 1, y: 20)); XCTAssertEqual(strip.highlightedIndex, first)
+        // Left to right reaches the last visible word; right to left comes back.
+        m.move(1, to: CGPoint(x: width - 1, y: 20)); XCTAssertEqual(strip.highlightedIndex, last)
+        m.move(1, to: CGPoint(x: width * 0.25, y: 20))
+        let pick = try! XCTUnwrap(strip.highlightedIndex)
+        let title = try! XCTUnwrap(strip.buttons[pick].currentTitle)
+        XCTAssertEqual(controller.layoutProxy.native.text, "")
+        m.up(1)
+        XCTAssertEqual(controller.layoutProxy.native.text, title); XCTAssertNil(strip.highlightedIndex)
+    }
+    func testRollingSpaceTurnsLinesWithTheDrumAndSelectsNothing() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin)
+        controller.developmentType("shi"); window.layoutIfNeeded()
+        let (_, m) = space(controller); let strip = controller.layoutViews.candidates
+        controller.layoutProxy.native.text = ""
+        m.down(1, at: CGPoint(x: 60, y: 40)); m.move(1, to: CGPoint(x: 60, y: 40 - SplitSpaceMachine.slideStep)); window.layoutIfNeeded()
+        XCTAssertTrue(strip.isWheelActive); XCTAssertNil(strip.highlightedIndex)
+        XCTAssertGreaterThan(strip.scroll.contentOffset.x, 0)
+        XCTAssertFalse(strip.expanded)
+        m.move(1, to: CGPoint(x: 60, y: 40)); window.layoutIfNeeded()
+        XCTAssertEqual(strip.scroll.contentOffset.x, 0, accuracy: 0.5)
+        m.up(1)
+        XCTAssertFalse(strip.isWheelActive); XCTAssertEqual(controller.layoutProxy.native.text, "", "Rolling commits no word")
+    }
+    func testTwoFingersSlidingUpOpenTheBufferAndDownCloseItUnlessItIsStillWorking() {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        let (_, m) = space(controller)
+        func slide(_ from: CGFloat, _ to: CGFloat, _ a: Int) {
+            m.down(a, at: CGPoint(x: m.width / 2 - 30, y: from)); m.down(a + 1, at: CGPoint(x: m.width / 2 + 30, y: from))
+            m.move(a, to: CGPoint(x: m.width / 2 - 30, y: to)); m.move(a + 1, to: CGPoint(x: m.width / 2 + 30, y: to)); m.up(a); m.up(a + 1)
+        }
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden)
+        slide(60, 20, 1); window.layoutIfNeeded()
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "Two fingers up open the Buffer")
+        XCTAssertFalse(controller.layoutViews.buffer.layer.animationKeys()?.isEmpty ?? true, "It fades and rises in, not a jump")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        XCTAssertEqual(controller.layoutViews.buffer.alpha, 1); XCTAssertEqual(controller.layoutViews.buffer.transform, .identity)
+        slide(60, 20, 3); window.layoutIfNeeded()
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "Opening twice changes nothing")
+        controller.developmentBuffer("原文", plugin: true, generating: true); window.layoutIfNeeded()
+        slide(20, 60, 5); window.layoutIfNeeded()
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "A Buffer that is still working stays open")
+        XCTAssertFalse(controller.developmentStatus.isEmpty)
+        controller.developmentBuffer("原文", plugin: false); window.layoutIfNeeded()
+        slide(20, 60, 7)
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "It sinks away first, then closes")
+        for _ in 0..<50 where !controller.layoutViews.buffer.isHidden { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        window.layoutIfNeeded()
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "Two fingers down close it")
+        XCTAssertEqual(controller.layoutViews.buffer.alpha, 1, "Ready for the next time it opens")
+    }
+    func testHoldingTheMiddleOfSpaceMovesTheCaretInHostAndBufferWithoutTypingSpace() {
         for buffered in [false, true] {
             let (window, controller) = host(); defer { window.isHidden = true }
             controller.developmentChoose(.english)
-            let space = controller.developmentSpaceKey
+            let (_, m) = space(controller)
             if buffered { controller.developmentBuffer("ab😀cd") }
             else { controller.layoutProxy.native.text = "ab😀cd"; controller.layoutProxy.native.selectedRange = NSRange(location: 6, length: 0) }
             func caret() -> Int { buffered ? controller.developmentBufferCursor : controller.layoutProxy.native.selectedRange.location }
             let start = caret()
-            space.beginCursor(requireTracking: false); XCTAssertTrue(space.isMovingCursor)
-            space.moveCursor(to: -CursorDrag.step * 3) // three characters left, including the emoji
+            m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
+            m.move(1, to: CGPoint(x: m.width / 2 - SplitSpaceMachine.caretStep * 3, y: 20)) // three characters, including the emoji
             XCTAssertEqual(caret(), buffered ? start - 3 : 2)
-            space.moveCursor(to: -CursorDrag.step * 2)
-            XCTAssertEqual(caret(), buffered ? start - 2 : 4)
-            space.finish(); XCTAssertFalse(space.isMovingCursor)
-            XCTAssertFalse(space.consumeTap()) // release after a hold types nothing
-            XCTAssertTrue(space.consumeTap())
+            m.up(1)
             XCTAssertEqual(buffered ? controller.developmentBufferSource.text : controller.layoutProxy.native.text, "ab😀cd")
         }
-        // Holding during composition does not start caret movement.
+        // During composition the hold does nothing.
         let (window, controller) = host(); defer { window.isHidden = true }
         controller.developmentType("ni")
-        controller.developmentSpaceKey.beginCursor(requireTracking: false)
-        XCTAssertFalse(controller.developmentSpaceKey.isMovingCursor)
+        let (_, m) = space(controller)
+        m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
+        XCTAssertEqual(m.presses[1]?.role, SplitSpaceMachine.Role.dead)
+        m.up(1)
+    }
+    func testOrthogonalBottomRowUsesFixedUnitWidthsWhateverTheReturnLabelSays() {
+        for width: CGFloat in [320, 393, 852] {
+            let (window, controller) = host(width: width); defer { window.isHidden = true }
+            controller.developmentChoose(.chord); controller.developmentSetLayout(.orthogonal); window.layoutIfNeeded()
+            let bottom = controller.layoutViews.bottom
+            func key(_ id: String) -> UIView { bottom.arrangedSubviews.first { $0.accessibilityIdentifier == id }! }
+            let numbers = bottom.arrangedSubviews.first { !$0.isHidden && $0.accessibilityIdentifier == nil }!
+            let unit = bottom.bounds.width / 10
+            for returnType in [UIReturnKeyType.default, .send, .search, .continue, .done] {
+                controller.layoutProxy.returnKeyType = returnType; controller.developmentContent(); window.layoutIfNeeded()
+                XCTAssertEqual(numbers.frame.width, 1.5 * unit, accuracy: 0.6, "123 is 1.5U")
+                XCTAssertEqual(key("keyboard.enter").frame.width, 1.5 * unit, accuracy: 0.6, "Return is 1.5U for \(returnType)")
+                XCTAssertEqual(key("keyboard.shift").frame.width, unit, accuracy: 0.6, "Shift is 1U")
+                XCTAssertEqual(key("keyboard.mode.bottom").frame.width, unit, accuracy: 0.6, "The language key is 1U")
+            }
+            XCTAssertGreaterThan(key("keyboard.spaces").frame.width, 4.5 * unit)
+            let enter = key("keyboard.enter") as! KeycapButton
+            XCTAssertEqual(enter.titleLabel?.adjustsFontSizeToFitWidth, false, "One label size, no shrinking")
+        }
+    }
+    func testHoldingInsertForASecondSendsEverythingWithAnEdgeLineThatTheTapDoesNotShow() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.layoutProxy.native.text = ""
+        controller.developmentBuffer("甲。乙。丙。"); window.layoutIfNeeded()
+        let enter = try XCTUnwrap(controller.developmentStandardFunctions[.enter] as? KeycapButton)
+        let bar = controller.developmentHoldBar
+        XCTAssertEqual(enter.currentTitle, L("上屏", "Insert"))
+        XCTAssertTrue(controller.developmentReturnHold.isEnabled, "The hold is armed while Insert is on the key")
+        XCTAssertEqual(controller.developmentReturnHold.minimumPressDuration, 1, accuracy: 0.01)
+        // The line sits along the Buffer's lower edge and starts filling the moment a finger is down.
+        XCTAssertFalse(bar.isShowing)
+        enter.sendActions(for: .touchDown)
+        XCTAssertTrue(bar.isShowing)
+        let box = controller.layoutViews.source
+        XCTAssertEqual(bar.frame, box.frame, "The line belongs to the input box alone")
+        XCTAssertEqual(bar.layer.cornerRadius, box.layer.cornerRadius); XCTAssertTrue(bar.layer.masksToBounds, "Clipped to the box's rounded corners")
+        XCTAssertLessThan(bar.frame.height, controller.layoutViews.buffer.bounds.height, "Not the whole bottom of the Buffer")
+        // A tap lets it go and sends one block.
+        enter.sendActions(for: .touchUpInside)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertFalse(bar.isShowing)
+        await controller.developmentWaitForDelivery(); window.layoutIfNeeded()
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。", "A tap sends the next block")
+        // Held a second: everything that is left goes on screen.
+        enter.sendActions(for: .touchDown); XCTAssertTrue(bar.isShowing)
+        controller.developmentReturnHeld()
+        await controller.developmentWaitForDelivery()
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。丙。")
+        // Everything is out and the Buffer is empty, so it closes.
+        for _ in 0..<60 where !controller.layoutViews.buffer.isHidden { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "The Buffer closes once a hold has sent everything")
+    }
+    func testSendingTheLastBlockByTapClosesTheBufferButEarlierBlocksAndAutoSendDoNot() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.layoutProxy.native.text = ""
+        controller.developmentBuffer("甲。乙。"); window.layoutIfNeeded()
+        let enter = try XCTUnwrap(controller.developmentStandardFunctions[.enter] as? KeycapButton)
+        enter.sendActions(for: .touchUpInside)
+        await controller.developmentWaitForDelivery(); window.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。")
+        XCTAssertFalse(controller.layoutViews.buffer.isHidden, "A block is still waiting, so the Buffer stays")
+        enter.sendActions(for: .touchUpInside)
+        await controller.developmentWaitForDelivery()
+        for _ in 0..<60 where !controller.layoutViews.buffer.isHidden { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。")
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden, "The last block went out by hand: the Buffer closes")
+    }
+    func testHoldingTheSendButtonSendsEverythingAndThenClosesTheBufferButATapKeepsItOpen() async throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.layoutProxy.native.text = ""
+        controller.developmentBuffer("甲。乙。丙。"); window.layoutIfNeeded()
+        controller.developmentHoldInsertButton()
+        await controller.developmentWaitForDelivery()
+        XCTAssertEqual(controller.layoutProxy.native.text, "甲。乙。丙。")
+        for _ in 0..<60 where !controller.layoutViews.buffer.isHidden { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(controller.layoutViews.buffer.isHidden)
+    }
+    func testHoldProgressBarFillsThenDropsOrFlashes() {
+        // Views outside a window finish their animations at once, so give it one.
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 200, height: 40)); window.makeKeyAndVisible(); defer { window.isHidden = true }
+        let bar = HoldProgressBar(frame: CGRect(x: 0, y: 0, width: 200, height: HoldProgressBar.height)); window.addSubview(bar); bar.layoutIfNeeded()
+        bar.begin(duration: 1); XCTAssertTrue(bar.isShowing)
+        bar.cancel(); RunLoop.main.run(until: Date().addingTimeInterval(0.4)); XCTAssertFalse(bar.isShowing)
+        bar.begin(duration: 1); bar.complete(); XCTAssertTrue(bar.isShowing)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.7)); XCTAssertFalse(bar.isShowing)
+    }
+    func testKeyLayoutAndSwipeSymbolsMenusHaveIcons() throws {
+        let (window, controller) = host(); defer { window.isHidden = true }
+        controller.developmentChoose(.pinyin); window.layoutIfNeeded()
+        let menu = try XCTUnwrap(controller.layoutViews.settings.menu)
+        func menus(_ m: UIMenu) -> [UIMenu] { m.children.compactMap { $0 as? UIMenu } }
+        let keyLayout = try XCTUnwrap(menus(menu).first { $0.title == L("键位布局", "Key layout") })
+        let swipe = try XCTUnwrap(menus(menu).first { $0.title == L("上滑数字和符号", "Swipe symbols") })
+        XCTAssertNotNil(keyLayout.image); XCTAssertNotNil(swipe.image)
+        // Every top-level submenu carries an icon, like the rest of the keyboard menu.
+        XCTAssertTrue(menus(menu).allSatisfy { $0.image != nil }, "\(menus(menu).filter { $0.image == nil }.map(\.title))")
     }
     func testChordModeSwapsLanguageToggleAndDelete() throws {
         let (window, controller) = host(); defer { window.isHidden = true }
@@ -872,100 +1132,6 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         controller.developmentReleaseEdgeTouchDelay()
         XCTAssertFalse(edge.delaysTouchesBegan); XCTAssertFalse(ancestor.delaysTouchesBegan)
         XCTAssertTrue(edge.isEnabled) // system gestures still work
-    }
-    func testChordSpaceSplitsLeftSelectsInBufferRightMoves() throws {
-        UserDefaults.standard.removeObject(forKey: "rimes.keyboard.hostSelectionNoteShown")
-        let (window, controller) = host(); defer { window.isHidden = true }
-        let left = controller.developmentSpaceKey, right = controller.developmentRightSpaceKey
-        XCTAssertTrue(right.isHidden)
-        controller.developmentChoose(.chord); window.layoutIfNeeded()
-        XCTAssertFalse(right.isHidden)
-        func hold(_ key: SpaceCursorButton, steps: Int) {
-            key.moveCursor(to: 0) // each real press starts from its own touch point
-            key.beginCursor(requireTracking: false)
-            key.moveCursor(to: CursorDrag.step * CGFloat(steps)); key.finish()
-            XCTAssertFalse(key.consumeTap()) // a hold never types a space
-        }
-        // Buffer: the left Space selects from the cursor; Delete removes the selection.
-        controller.developmentBuffer("ab😀cd")
-        hold(left, steps: -3)
-        XCTAssertEqual(controller.developmentBufferSelection, 2..<5)
-        let highlighted = controller.layoutViews.source.attributedText!
-        var selectedText = ""
-        highlighted.enumerateAttribute(.backgroundColor, in: NSRange(location: 0, length: highlighted.length)) { value, range, _ in
-            if let color = value as? UIColor, color != UIColor.systemTeal.withAlphaComponent(0.1) { selectedText += (highlighted.string as NSString).substring(with: range) }
-        }
-        XCTAssertEqual(selectedText, "😀cd")
-        controller.developmentBackspace()
-        XCTAssertEqual(controller.developmentBufferSource.text, "ab"); XCTAssertNil(controller.developmentBufferSelection)
-        // The right Space only moves; any typing key clears a selection without deleting it.
-        hold(right, steps: -1); XCTAssertNil(controller.developmentBufferSelection); XCTAssertEqual(controller.developmentBufferCursor, 1)
-        hold(left, steps: 1); XCTAssertEqual(controller.developmentBufferSelection, 1..<2)
-        controller.layoutViews.keys.onTypingPress?()
-        XCTAssertNil(controller.developmentBufferSelection); XCTAssertEqual(controller.developmentBufferSource.text, "ab")
-        // Host field: iOS allows no selection, so the left Space moves the caret and explains once.
-        controller.developmentBuffer(nil)
-        controller.layoutProxy.native.text = "hello"; controller.layoutProxy.native.selectedRange = NSRange(location: 5, length: 0)
-        hold(left, steps: -2)
-        XCTAssertEqual(controller.layoutProxy.native.selectedRange, NSRange(location: 3, length: 0))
-        XCTAssertFalse(controller.developmentStatus.isEmpty)
-        controller.developmentContent(); XCTAssertTrue(UserDefaults.standard.bool(forKey: "rimes.keyboard.hostSelectionNoteShown"))
-        // Ordinary layouts restore their single Space control.
-        controller.developmentChoose(.pinyin); XCTAssertTrue(right.isHidden)
-        XCTAssertTrue(left.superview === controller.layoutViews.keys)
-    }
-    func testChordSpacesHaveSeparateCapsHitTargetsAndActionsAcrossLayoutSwitches() async throws {
-        for width: CGFloat in [320, 393, 852] {
-            let (window, controller) = host(width: width); defer { window.isHidden = true }
-            try await Task.sleep(nanoseconds: 80_000_000)
-            let left = controller.developmentSpaceKey, right = controller.developmentRightSpaceKey
-            for layout in ChordLayout.allCases {
-                for needsGlobe in [false, true] {
-                    controller.layoutNeedsInputModeSwitchKey = needsGlobe
-                    controller.developmentChoose(.chord); controller.developmentSetLayout(layout)
-                    window.layoutIfNeeded()
-                    let group = try XCTUnwrap(left.superview as? UIStackView)
-                    XCTAssertTrue(right.superview === group)
-                    XCTAssertEqual(group.arrangedSubviews.count, 2)
-                    XCTAssertFalse(left.isHidden); XCTAssertFalse(right.isHidden)
-                    XCTAssertGreaterThan(left.bounds.width, 35)
-                    XCTAssertEqual(left.bounds.width, right.bounds.width, accuracy: 0.5)
-                    XCTAssertEqual(right.frame.minX - left.frame.maxX, 2, accuracy: 0.5)
-                    for key in [left, right] {
-                        let center = CGPoint(x: key.frame.midX, y: key.frame.midY)
-                        XCTAssertTrue(group.hitTest(center, with: nil) === key)
-                    }
-                    let gap = CGPoint(x: (left.frame.maxX + right.frame.minX) / 2, y: group.bounds.midY)
-                    XCTAssertTrue(group.hitTest(gap, with: nil) === group)
-                    for skin: StatusSkin in [.apple, .rhino] {
-                        controller.developmentSkin(skin)
-                        XCTAssertEqual(left.theme, skin); XCTAssertEqual(right.theme, skin)
-                        left.isHighlighted = true; XCTAssertFalse(right.isHighlighted)
-                        left.isHighlighted = false; right.isHighlighted = true; XCTAssertFalse(left.isHighlighted)
-                        right.isHighlighted = false
-                    }
-                    controller.layoutProxy.native.text = ""
-                    left.sendActions(for: .touchUpInside); right.sendActions(for: .touchUpInside)
-                    await controller.developmentWaitForDelivery()
-                    XCTAssertEqual(controller.layoutProxy.native.text, "  ")
-                    for key in [left, right] {
-                        let before = controller.layoutProxy.native.text ?? ""
-                        controller.developmentType("ni")
-                        let candidate = try XCTUnwrap(controller.layoutViews.candidates.buttons.first?.currentTitle)
-                        key.sendActions(for: .touchUpInside)
-                        await controller.developmentWaitForDelivery()
-                        XCTAssertTrue(controller.developmentRaw.isEmpty)
-                        XCTAssertEqual(controller.layoutProxy.native.text, before + candidate)
-                    }
-                    // Moving the ordinary Space into the managed layout and back
-                    // must not leave an extra control or a broken stack constraint.
-                    controller.developmentChoose(.pinyin)
-                    controller.developmentOrdinaryAppearance(layout: .nineKey)
-                    XCTAssertTrue(right.isHidden)
-                    XCTAssertTrue(left.superview === controller.layoutViews.keys)
-                }
-            }
-        }
     }
     func testBufferBlocksAndOverlayCaretKeepTextLayout() throws {
         let font = UIFont.systemFont(ofSize: 15)
@@ -1431,7 +1597,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         keys.developmentPress("a", end: "s")
         tap(script); tap(emoji)
         XCTAssertEqual(toggles, 0); XCTAssertFalse(keys.emojiMode)
-        XCTAssertFalse(script.accessibilityActivate()); XCTAssertEqual(emoji.alpha, 0.3, accuracy: 0.001)
+        XCTAssertFalse(script.accessibilityActivate()); XCTAssertEqual(emoji.alpha, 1, "controls blocked mid-chord are not dimmed")
         keys.retire(); keys.layoutIfNeeded()
         script.sendActions(for: .touchDown); keys.retire(); script.sendActions(for: .touchUpInside)
         XCTAssertEqual(toggles, 0)
@@ -1492,9 +1658,9 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertGreaterThan(frame(v.candidates.scroll).minX, frame(v.settings).maxX)
         XCTAssertEqual(candidateFrame.minY, frame(controller.view).minY + 5, accuracy: 0.5)
         let schemes = try XCTUnwrap(v.settings.menu?.children.first as? UIMenu)
-        // Chord is a layout now, not a scheme: it is no longer listed, and the scheme underneath is Ziranma.
-        XCTAssertEqual(schemes.children.count, InputScheme.allCases.count - 1)
-        XCTAssertEqual((schemes.children.compactMap { $0 as? UIAction }.first { $0.state == .on })?.title, InputScheme.ziranma.title)
+        // isaac2026 is listed while the chord plugin is on, and is the selected scheme.
+        XCTAssertEqual(schemes.children.count, InputScheme.allCases.count)
+        XCTAssertEqual((schemes.children.compactMap { $0 as? UIAction }.first { $0.state == .on })?.title, "isaac2026")
         let toggle = try XCTUnwrap(v.candidates.superview?.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer" })
         XCTAssertGreaterThan(frame(toggle).minX, frame(v.candidates.scroll).maxX)
         XCTAssertEqual(frame(toggle).maxX, frame(controller.view).maxX - 5)
@@ -1540,9 +1706,14 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertEqual(v.source.role, .input); XCTAssertEqual(v.result.role, .output)
         XCTAssertEqual(v.source.text, "原文。")
         XCTAssertFalse(v.buffer.subviews.contains { String(describing: type(of: $0)).contains("BlockStrip") })
-        let stats = try XCTUnwrap(v.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? UILabel)
+        let stats = try XCTUnwrap(v.result.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer.metrics" } as? TypingStatsView)
         XCTAssertFalse(stats.isHidden)
-        XCTAssertEqual(stats.textAlignment, .center); XCTAssertGreaterThanOrEqual(stats.font.pointSize, 16)
+        // Small bordered chips, not a line of text.
+        XCTAssertLessThanOrEqual(stats.fontSize, 11)
+        XCTAssertTrue(stats.subviews.allSatisfy { $0.layer.borderWidth > 0 })
+        // Icons and numerals, never words, in any language.
+        XCTAssertFalse(stats.symbols.isEmpty); XCTAssertTrue(stats.symbols.allSatisfy { UIImage(systemName: $0) != nil })
+        XCTAssertNil(stats.text.range(of: "[\\p{Han}A-Za-z]{2,}", options: .regularExpression), "No words: \(stats.text)")
         XCTAssertEqual(stats.frame.height, v.result.frame.height)
         XCTAssertEqual(stats.frame.midX, v.result.bounds.midX, accuracy: 0.5)
         XCTAssertEqual(v.buffer.bounds.height, 76)
@@ -1561,8 +1732,12 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertTrue(views.globe.isHidden)
         controller.layoutNeedsInputModeSwitchKey = true; controller.developmentContent(); window.layoutIfNeeded()
         XCTAssertFalse(views.globe.isHidden); XCTAssertLessThan(space.bounds.width, without)
-        let otherWidths = views.bottom.arrangedSubviews.filter { $0 !== space && !$0.isHidden }.map { $0.bounds.width }
-        XCTAssertTrue(otherWidths.allSatisfy { abs($0 - otherWidths[0]) <= 0.5 }, "Pixel-aligned widths: \(otherWidths)")
+        // Globe, Shift and the language key are 1U; 123 and Return are 1.5U (see the orthogonal bottom-row test).
+        let unit = views.bottom.bounds.width / 10
+        let others = views.bottom.arrangedSubviews.filter { $0 !== space && !$0.isHidden }
+        let expected: [CGFloat] = [1, 1.5, 1, 1, 1.5]
+        XCTAssertEqual(others.count, expected.count)
+        for (view, factor) in zip(others, expected) { XCTAssertEqual(view.bounds.width, factor * unit, accuracy: 0.6, "\(view.accessibilityIdentifier ?? "123")") }
         controller.layoutNeedsInputModeSwitchKey = false; controller.developmentContent(); window.layoutIfNeeded()
         XCTAssertTrue(views.globe.isHidden); XCTAssertEqual(space.bounds.width, without, accuracy: 0.01)
     }

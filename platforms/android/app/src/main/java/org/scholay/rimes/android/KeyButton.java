@@ -23,7 +23,7 @@ final class KeyButton extends Button {
     private KeyboardTheme.Palette palette;
     private KeyboardTheme currentTheme;
     private int currentUiMode=-1;
-    private boolean functional,compact,accent,plain,classic,shortcut;
+    private boolean functional,compact,accent,plain,classic,shortcut,flat;
     private KeyboardIcon icon;
     private float iconSize=20;
     private boolean iconWithText;
@@ -56,7 +56,8 @@ final class KeyButton extends Button {
         this.functional=functional; this.compact=compact; this.accent=accent; updateTextColors(); invalidate();
     }
     void classic(boolean value) { if(classic!=value) { classic=value; updateTextColors(); invalidate(); } }
-    private boolean systemCaps() { return palette.system && !classic; }
+    void flat(boolean value) { if(flat!=value) { flat=value; updateTextColors(); invalidate(); } }
+    private boolean systemCaps() { return (palette.system || flat) && !classic; }
     /** Visible iOS frame inside this button's larger touch cell, in dp. */
     void capFrame(float x,float y,float width,float height) {
         if(frameX==x && frameY==y && frameWidth==width && frameHeight==height) return;
@@ -151,7 +152,7 @@ final class KeyButton extends Button {
             if(!isEnabled()) paint.setAlpha(Math.round(paint.getAlpha()*0.4f));
             canvas.drawRoundRect(cap,7*density,7*density,paint);
         } else if(plain) {
-            if(pressed) {
+            if(pressed || selected) {
                 cap.set(x,y,x+width,y+height); paint.setColor(palette.accent); paint.setAlpha(alpha);
                 canvas.drawRoundRect(cap,4*density,4*density,paint);
             }

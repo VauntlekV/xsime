@@ -72,10 +72,6 @@ private final class SettingsPluginDownloadButton: SettingsPointingButton {
     var pluginKey = PluginKey(domain: .builtIn, rawID: "")
 }
 
-private final class SettingsBrandLinkButton: SettingsPointingButton {
-    var destination: URL?
-}
-
 private final class SettingsThemeDetailsButton: SettingsPointingButton {
     var mode: RimeAppearanceMode = .night
 }
@@ -766,7 +762,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
     private var encodingRadios: [InputEncoding: RimeFixedAccentChoiceButton] = [:]
     private var externalSchemaRadios: [String: RimeFixedAccentChoiceButton] = [:]
     private var externalSchemaChoiceIDs: [String] = []
-    private var chordSchemaStatusRow: NSView?
+    private var chordSchemaRadio: RimeFixedAccentChoiceButton?
     private let appearancePopUp = RimeFixedAccentPopUpButton()
     private let alignToInputBoxCheck = RimeFixedAccentSwitch(frame: .zero)
     private let alignToInputBoxStatusLabel = NSTextField(wrappingLabelWithString: "")
@@ -872,8 +868,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
     private let heatmapView = KeyboardHeatmapView()
     private let pluginRowsStack = NSStackView()
     private let pluginStatusLabel = NSTextField(labelWithString: "")
-    private let settingsStatusLabel = NSTextField(labelWithString: "")
-    private let settingsRouteLabel = NSTextField(labelWithString: "")
+    private let settingsStatusLabel = SettingsStatusLabel(labelWithString: "")
     private var pluginDownloadInProgress = false
     private var pluginRefreshScheduled = false
     private var chordExtensionDeploymentInProgress = false
@@ -1538,13 +1533,12 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
     }
 
     /// Keep the off-screen renderer useful as an assembly smoke, not merely a
-    /// screenshot command. Every route retains navigation, heading and body,
+    /// screenshot command. Every route retains navigation and body,
     /// with status embedded in the top navigation rather than a footer.
     private func validatePreviewStructure(in content: NSView) -> Bool {
         let required: [(String, CGFloat?)] = [
             ("settings.sidebar", nil),
             ("settings.subpage-bar", 46),
-            ("settings.page-heading", 84),
             ("settings.page-scroll", nil),
             ("settings.status-bar", 30),
         ]
@@ -1650,7 +1644,6 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         let regionIDs = [
             "settings.sidebar",
             "settings.subpage-bar",
-            "settings.page-heading",
             "settings.page-scroll",
         ]
         let scaleX = CGFloat(bitmap.pixelsWide) / content.bounds.width
@@ -1971,7 +1964,6 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         sidebarScrollView.backgroundColor = SettingsVisualStyle.background
         pluginConfigurationSheet?.appearance = RimeUI.appKitAppearance
         settingsStatusLabel.textColor = RimeUI.textMuted
-        settingsRouteLabel.textColor = RimeUI.textMuted
         installStatus.textColor = RimeUI.textMuted
         statsTopKey.textColor = RimeUI.textSecondary
         candidateMetricSliders.values.forEach { $0.trackFillColor = RimeUI.accentGreen }
@@ -2199,11 +2191,6 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         settingsStatusLabel.textColor = RimeUI.textMuted
         settingsStatusLabel.lineBreakMode = .byTruncatingTail
         settingsStatusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        settingsRouteLabel.font = .systemFont(ofSize: 9)
-        settingsRouteLabel.textColor = RimeUI.textMuted
-        settingsRouteLabel.setContentHuggingPriority(.required, for: .horizontal)
-        settingsRouteLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        settingsRouteLabel.lineBreakMode = .byTruncatingMiddle
 
         pluginRowsStack.orientation = .vertical
         pluginRowsStack.alignment = .width
@@ -2464,40 +2451,11 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
                                            constant: -24),
         ])
 
-        let selectedSubpage = route.subpages.first { $0.id == navigation.selectedSubpage() }
-        let heading = route.id == SettingsCoreRoute.rimes.id
-            ? (selectedSubpage?.id.rawValue == "about" ? "关于 \(ProductBrand.name)" : selectedSubpage?.title ?? "\(ProductBrand.name)")
-            : route.title
-        let headingTitle = NSTextField(labelWithString: heading)
-        headingTitle.font = .systemFont(ofSize: 20, weight: .bold)
-        headingTitle.textColor = RimeUI.textPrimary
-        headingTitle.lineBreakMode = .byTruncatingTail
-        headingTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        var headingViews: [NSView] = [headingTitle, flexSpacer()]
-        if let configure = headerConfigurationButton(for: route) {
-            headingViews.append(configure)
-        }
-        let headingRow = NSStackView(views: headingViews)
-        headingRow.orientation = .horizontal
-        headingRow.alignment = .centerY
-        headingRow.spacing = 16
-        headingRow.translatesAutoresizingMaskIntoConstraints = false
-        let headingBar = SettingsChromeView(fill: .settings, border: .none)
-        headingBar.identifier = NSUserInterfaceItemIdentifier("settings.page-heading")
-        headingBar.translatesAutoresizingMaskIntoConstraints = false
-        headingBar.addSubview(headingRow)
-        NSLayoutConstraint.activate([
-            headingBar.heightAnchor.constraint(equalToConstant: 84),
-            headingRow.leadingAnchor.constraint(equalTo: headingBar.leadingAnchor, constant: 24),
-            headingRow.trailingAnchor.constraint(equalTo: headingBar.trailingAnchor, constant: -24),
-            headingRow.centerYAnchor.constraint(equalTo: headingBar.centerYAnchor),
-            headingTitle.widthAnchor.constraint(lessThanOrEqualToConstant: 650),
-        ])
-
         let bodyHost: NSView
-        if body is NSScrollView {
-            // Page-owned plugin controllers may preserve their own scroll positions;
+        if body is NSScrollView || body is SettingsSelfScrollingPage {
+            // Page-owned plugin controllers may preserve their own scroll positions (or
+            // scroll only part of the page); a view that is not itself a scroll view
+            // marks that with SettingsSelfScrollingPage.
             // do not nest them in another scroll view with zero intrinsic height.
             bodyHost = body
         } else {
@@ -2526,16 +2484,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         bodyHost.identifier = NSUserInterfaceItemIdentifier("settings.page-scroll")
 
         settingsStatusLabel.removeFromSuperview()
-        settingsRouteLabel.removeFromSuperview()
-        let subpageTitle = route.subpages.first { $0.id == navigation.selectedSubpage() }?.title
-        settingsRouteLabel.stringValue = subpageTitle.map {
-            $0 == route.title ? route.title : "\(route.title) · \($0)"
-        } ?? route.title
-        settingsRouteLabel.toolTip = "\(route.id.rawValue) · \(navigation.selectedSubpage()?.rawValue ?? "")"
-        settingsRouteLabel.isHidden = route.id == SettingsCoreRoute.rimes.id
-        let statusRow = NSStackView(
-            views: [settingsStatusLabel, flexSpacer(), settingsRouteLabel]
-        )
+        let statusRow = NSStackView(views: [settingsStatusLabel])
         statusRow.orientation = .horizontal
         statusRow.alignment = .centerY
         statusRow.spacing = 7
@@ -2544,10 +2493,25 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         statusBar.identifier = NSUserInterfaceItemIdentifier("settings.status-bar")
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         statusBar.addSubview(statusRow)
+        settingsStatusLabel.onVisibilityChange = { [weak statusBar] hidden in statusBar?.isHidden = hidden }
+        statusBar.isHidden = settingsStatusLabel.isHidden
         tabsBar.addSubview(statusBar)
+        // The page has no title row of its own; a plugin's configuration button
+        // sits at the end of the navigation bar.
+        var statusTrailing = tabsBar.trailingAnchor
+        var statusTrailingInset: CGFloat = -12
+        if let configure = headerConfigurationButton(for: route) {
+            tabsBar.addSubview(configure)
+            NSLayoutConstraint.activate([
+                configure.trailingAnchor.constraint(equalTo: tabsBar.trailingAnchor, constant: -16),
+                configure.centerYAnchor.constraint(equalTo: tabsBar.centerYAnchor),
+            ])
+            statusTrailing = configure.leadingAnchor
+            statusTrailingInset = -8
+        }
         NSLayoutConstraint.activate([
             statusBar.leadingAnchor.constraint(equalTo: tabs.trailingAnchor, constant: 16),
-            statusBar.trailingAnchor.constraint(equalTo: tabsBar.trailingAnchor, constant: -12),
+            statusBar.trailingAnchor.constraint(equalTo: statusTrailing, constant: statusTrailingInset),
             statusBar.centerYAnchor.constraint(equalTo: tabsBar.centerYAnchor),
             statusBar.heightAnchor.constraint(equalToConstant: 30),
             statusRow.leadingAnchor.constraint(equalTo: statusBar.leadingAnchor, constant: 12),
@@ -2555,13 +2519,12 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             statusRow.centerYAnchor.constraint(equalTo: statusBar.centerYAnchor),
         ])
 
-        let root = NSStackView(views: [tabsBar, headingBar, bodyHost])
+        let root = NSStackView(views: [tabsBar, bodyHost])
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 0
         root.identifier = NSUserInterfaceItemIdentifier("settings.page-shell")
         tabsBar.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
-        headingBar.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
         bodyHost.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
         bodyHost.setContentHuggingPriority(.defaultLow, for: .vertical)
         bodyHost.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
@@ -2604,7 +2567,16 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
     }
 
     private func rimesPage(subpageID: String) -> NSView {
-        if subpageID != "about" { return rimesLinkPage(subpageID: subpageID) }
+        switch subpageID {
+        case "readme": return rimesReadmePage()
+        case "license": return rimesLicensePage()
+        default: return rimesAboutPage()
+        }
+    }
+
+    /// Home page: identity, version with update controls, and where to reach us.
+    /// Everything is written out in place; nothing here opens another app.
+    private func rimesAboutPage() -> NSView {
         let logo = NSImageView()
         let logoURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -2646,8 +2618,17 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         hero.identifier = .init("settings.rimes.hero")
         hero.translatesAutoresizingMaskIntoConstraints = false
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let update = ApplicationUpdateSettingsView()
+        update.identifier = .init("settings.rimes.update")
         let credit = caption("\(version.map { "\(ProductBrand.name) \($0) · " } ?? "")学术海 · librime")
-        let column = contentColumn([hero, spacer(4), credit])
+        let column = contentColumn([
+            hero, spacer(6),
+            sectionLabel("版本与更新"), update, spacer(8),
+            sectionLabel("官网与联系"),
+            infoRow("官网", "xsime.com", url: "https://xsime.com", id: "website"),
+            infoRow("邮箱", "pm@scholay.com", url: "mailto:pm@scholay.com", id: "contact"),
+            spacer(4), credit,
+        ])
         let preferredWidth = hero.widthAnchor.constraint(equalToConstant: 650)
         preferredWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([
@@ -2657,58 +2638,73 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         return column
     }
 
-    private func rimesLinkPage(subpageID: String) -> NSView {
-        let title: String
-        let summary: String
-        let action: String
-        let destination: String
-        switch subpageID {
-        case "website":
-            (title, summary, action, destination) = (
-                "xsime.com", "访问 \(ProductBrand.name) 官网，了解产品与项目动态。", "打开官网",
-                "https://xsime.com")
-        case "contact":
-            (title, summary, action, destination) = (
-                "pm@scholay.com", "反馈使用体验、问题或合作想法。", "写邮件",
-                "mailto:pm@scholay.com")
-        case "source":
-            (title, summary, action, destination) = (
-                "scholay / xsime", "查看源码、提交问题或参与改进。", "查看源码",
-                "https://github.com/scholay/xsime")
-        case "readme":
-            (title, summary, action, destination) = (
-                "从这里了解 \(ProductBrand.name)", "输入法、Buffer、Capsule 与 Mailbox 的功能和安装说明。", "阅读 README",
-                "https://github.com/scholay/xsime/blob/main/README.md")
-        default:
-            (title, summary, action, destination) = (
-                "Apache License 2.0", "查看 \(ProductBrand.name) 的开源许可原文。", "查看完整许可",
-                "https://github.com/scholay/xsime/blob/main/LICENSE")
-        }
-
-        let heading = NSTextField(labelWithString: title)
-        heading.font = .systemFont(ofSize: 22, weight: .semibold)
-        heading.textColor = RimeUI.textPrimary
-        heading.isSelectable = true
-        let detail = NSTextField(labelWithString: summary)
-        detail.font = .systemFont(ofSize: 13)
-        detail.textColor = RimeUI.textSecondary
-        detail.identifier = .init("settings.rimes.\(subpageID).summary")
-        let button = SettingsBrandLinkButton(title: action, target: self,
-                                              action: #selector(openBrandLink(_:)))
-        button.destination = URL(string: destination)
-        button.bezelStyle = .rounded
-        button.controlSize = .regular
-        button.toolTip = destination
-        button.identifier = .init("settings.rimes.\(subpageID).open")
-        return contentColumn([heading, detail, spacer(12), button])
+    /// The project addresses, then the complete README in every language it is published in.
+    private func rimesReadmePage() -> NSView {
+        contentColumn([
+            sectionLabel("项目地址"),
+            infoRow("源码", "github.com/scholay/xsime", url: "https://github.com/scholay/xsime", id: "source"),
+            infoRow("发布页", "github.com/scholay/xsime/releases", url: "https://github.com/scholay/xsime/releases", id: "releases"),
+            spacer(6),
+            SettingsReadmeView(),
+        ])
     }
 
-    @objc private func openBrandLink(_ sender: SettingsBrandLinkButton) {
-        guard let destination = sender.destination else { return }
-        if !NSWorkspace.shared.open(destination) {
-            settingsStatusLabel.stringValue = "未能打开链接，请检查浏览器或邮件应用设置"
-            settingsStatusLabel.textColor = .systemRed
+    private func rimesLicensePage() -> NSView {
+        let heading = NSTextField(labelWithString: "Apache License 2.0")
+        heading.font = .systemFont(ofSize: 15, weight: .semibold)
+        heading.textColor = RimeUI.textPrimary
+        let text = NSTextField(wrappingLabelWithString: licenseText())
+        text.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        text.textColor = RimeUI.textSecondary
+        text.isSelectable = true
+        text.preferredMaxLayoutWidth = 600
+        text.identifier = .init("settings.rimes.license.text")
+        return contentColumn([heading, caption("\(ProductBrand.name) 的开源许可，以下为随应用附带的完整原文。"), spacer(4), text])
+    }
+
+    private func licenseText() -> String {
+        let candidates = [
+            Bundle.main.url(forResource: "LICENSE", withExtension: nil),
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("LICENSE"),
+        ].compactMap { $0 }
+        for url in candidates {
+            if let text = try? String(contentsOf: url, encoding: .utf8), !text.isEmpty { return text }
         }
+        return "未能读取随应用附带的 LICENSE 文件。许可为 Apache License 2.0，完整文本见项目仓库根目录的 LICENSE。"
+    }
+
+    private func bodyText(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = RimeUI.textPrimary
+        label.isSelectable = true
+        label.preferredMaxLayoutWidth = 600
+        return label
+    }
+
+    /// A label and a value that is itself the link: one click opens it.
+    private func infoRow(_ label: String, _ value: String, url: String, id: String) -> NSView {
+        let name = NSTextField(labelWithString: label)
+        name.font = .systemFont(ofSize: 12)
+        name.textColor = RimeUI.textSecondary
+        name.translatesAutoresizingMaskIntoConstraints = false
+        name.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        let link = NSMutableAttributedString(string: value, attributes: [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: RimeUI.accentTextColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+        ])
+        if let target = URL(string: url) { link.addAttribute(.link, value: target, range: NSRange(location: 0, length: link.length)) }
+        let text = NSTextField(labelWithAttributedString: link)
+        text.isSelectable = true
+        text.allowsEditingTextAttributes = true
+        text.toolTip = url
+        text.identifier = .init("settings.rimes.\(id).value")
+        let row = NSStackView(views: [name, text])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        return row
     }
 
     private func inputPage(subpageID: String) -> NSView {
@@ -2750,14 +2746,12 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
                     caption("从方案管理切换包或恢复内置方案；各方案包的学习词库独立保存。"), importButton,
                     inputHabitsView(schema: MacRimeSchemeLibrary.shared.runtimeSelection?.schemaID ?? "")])
             }
-            let chordStatus = chordSchemaStatusView()
             let recovery = caption(ChordKeymapActivationCoordinator.shared.recoveryMessage ?? "")
             recovery.textColor = .systemRed
             recovery.isHidden = ChordKeymapActivationCoordinator.shared.recoveryMessage == nil
             return contentColumn([
                 dictionaryWarning,
                 importButton,
-                chordStatus,
                 recovery,
                 inputEncodingSelectionView(),
                 inputHabitsView(schema: InputConfigurationStore.shared.selectedSchemaID),
@@ -3250,6 +3244,23 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
                 symbolName: symbol
             )
         }
+        // With the optional chord extension on, its scheme is one more card, styled
+        // like the others (the Windows settings do the same).
+        chordSchemaRadio = nil
+        if ChordExtensionStore.shared.isEnabled {
+            let button = RimeFixedAccentChoiceButton.radio(
+                title: ChordKeymapStore.shared.activeProfile.name, target: self,
+                action: #selector(chordInputSchemaSelected(_:))
+            )
+            button.font = .systemFont(ofSize: 13, weight: .medium)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.state = ChordExtensionStore.isChordSchema(InputConfigurationStore.shared.selectedSchemaID) ? .on : .off
+            chordSchemaRadio = button
+            cards.append(SettingsChoiceCardView(
+                choice: button, title: ChordKeymapStore.shared.activeProfile.name,
+                detail: "由并击扩展提供 · 同拍组合与左右分开击键", symbolName: "hands.sparkles"
+            ))
+        }
         externalSchemaRadios.removeAll()
         let external = InputSchemaCatalog.options.filter {
             InputSchemaCatalog.isExternalOrdinaryID($0.id)
@@ -3271,27 +3282,6 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             ))
         }
         return choiceGrid(cards)
-    }
-
-    private func chordSchemaStatusView() -> NSView {
-        let implementation = ChordExtensionStore.shared.implementationName
-        let badge = NSTextField(labelWithString: "并击")
-        badge.font = .systemFont(ofSize: 10, weight: .semibold)
-        badge.textColor = themeStatusColor
-        badge.setContentHuggingPriority(.required, for: .horizontal)
-        let row = settingsRow(
-            title: "当前使用并击扩展",
-            detail: "正在使用\(implementation)；选择下方任一方案即可切回普通输入。",
-            symbolName: "hands.sparkles",
-            control: badge
-        )
-        row.identifier = NSUserInterfaceItemIdentifier(
-            "settings.input-scheme.chord-status"
-        )
-        row.isHidden = InputConfigurationStore.shared.selectedSchemaID
-            != ChordExtensionStore.schemaID
-        chordSchemaStatusRow = row
-        return row
     }
 
     private func choiceGrid(_ cards: [NSView]) -> NSView {
@@ -4700,7 +4690,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 8
-        column.edgeInsets = NSEdgeInsets(top: 0, left: 24, bottom: 22, right: 24)
+        column.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 22, right: 24)
         return column
     }
 
@@ -4824,7 +4814,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 8
-        column.edgeInsets = NSEdgeInsets(top: 0, left: 24, bottom: 22, right: 24)
+        column.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 22, right: 24)
         return column
     }
 
@@ -5064,8 +5054,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
 
     private func refreshInputConfigurationSelection() {
         let selectedSchemaID = InputConfigurationStore.shared.selectedSchemaID
-        chordSchemaStatusRow?.isHidden = selectedSchemaID
-            != ChordExtensionStore.schemaID
+        chordSchemaRadio?.state = ChordExtensionStore.isChordSchema(selectedSchemaID) ? .on : .off
         for encoding in InputEncoding.allCases {
             let ordinarySchemaID = InputConfigurationResolver.profiles.first {
                 $0.configuration.encoding == encoding
@@ -5510,8 +5499,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             return
         }
         guard navigation.selectSubpage(subpage, catalog: routeCatalog) else { return }
-        settingsStatusLabel.stringValue = route.id == SettingsCoreRoute.rimes.id
-            ? "" : "已打开\(route.subpages[sender.selectedSegment].title)"
+        settingsStatusLabel.stringValue = ""
         settingsStatusLabel.textColor = RimeUI.textMuted
         showCurrentRoute()
     }
@@ -6022,6 +6010,15 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         _ = InputConfigurationStore.shared.select(
             encoding: InputEncoding.allCases[sender.tag]
         )
+        RIMESController.applyStoredInputConfiguration()
+        reload()
+    }
+
+    @objc private func chordInputSchemaSelected(_ sender: RimeFixedAccentChoiceButton) {
+        guard InputConfigurationStore.shared.select(schemaID: ChordExtensionStore.schemaID) else {
+            sender.state = .off
+            return
+        }
         RIMESController.applyStoredInputConfiguration()
         reload()
     }
@@ -6564,4 +6561,25 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         return StandaloneWindowFocusCoordinator.shared
             .runModalAlertIfRIMESActive(alert) != nil
     }
+}
+
+/// A plugin page that arranges its own scrolling and fills the space it is given
+/// (for example a fixed sidebar beside a scrolling main area). The settings shell
+/// hosts it directly instead of wrapping it in another scroll view.
+protocol SettingsSelfScrollingPage: NSView {}
+
+/// The note beside the page tabs. Confirmations such as "已打开 …" or "已复制 …"
+/// are noise there, so it shows only failures (red text) and hides its bar otherwise.
+final class SettingsStatusLabel: NSTextField {
+    var onVisibilityChange: ((Bool) -> Void)?
+    override var stringValue: String { didSet { refresh() } }
+    override var textColor: NSColor? { didSet { refresh() } }
+    private func refresh() {
+        let hidden = stringValue.isEmpty || textColor != .systemRed
+        guard hidden != isHidden else { return }
+        isHidden = hidden
+        onVisibilityChange?(hidden)
+    }
+    override init(frame frameRect: NSRect) { super.init(frame: frameRect); isHidden = true }
+    required init?(coder: NSCoder) { super.init(coder: coder); isHidden = true }
 }

@@ -31,7 +31,7 @@ For each host above, switch to **RIMES** (雾凇全拼) first.
 
 1. **Direct still works.** With Buffer hidden, type `nihao` + Space. The field
    contains `你好` and no leftover `nihao`.
-2. **Open Buffer.** Press `Ctrl+Shift+B` (or `Super+Shift+B`). The workbench
+2. **Open Buffer.** Press `Alt+Shift+B`. The workbench
    appears. The host keeps keyboard focus — the next key must not type into
    the Buffer window itself.
 3. **Stage, do not leak.** Type `nihao` + Space. `你好` appears as a chip in

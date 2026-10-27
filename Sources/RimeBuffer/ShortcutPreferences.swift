@@ -213,9 +213,9 @@ enum RimeShortcutAction: String, CaseIterable {
                 modifiers: [.command, .shift]
             )
         case .toggleClipboardHistory:
-            // Capsule's rail, on the chord clipboard managers such as Paste use.
+            // Keep the Capsule opener distinct from the system paste shortcut.
             return RimeKeyboardShortcut(
-                keyCode: UInt16(kVK_ANSI_V),
+                keyCode: UInt16(kVK_ANSI_C),
                 modifiers: [.command, .shift]
             )
         case .openMailbox:
@@ -278,7 +278,7 @@ enum RimeShortcutPreferences {
         .nextPlugin,
     ]
 
-    /// A missing Clipboard binding normally resolves to Command-Shift-V. If a
+    /// A missing Clipboard binding normally resolves to Command-Shift-C. If a
     /// pre-existing action already owns it, persist the first free fallback so
     /// Carbon never receives duplicate registrations from this process.
     private static let clipboardHistoryFallbackKeyCodes: [UInt16] = [

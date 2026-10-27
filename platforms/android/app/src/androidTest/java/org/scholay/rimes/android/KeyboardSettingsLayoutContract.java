@@ -33,6 +33,8 @@ final class KeyboardSettingsLayoutContract {
                 test.transitions();
                 test.atomicNotifications();
                 test.legacyProjectionAndEscape();
+                test.independentOrthogonalSchemes();
+                test.assistantLibrary();
                 result[0]=test.checks;
             } catch(Throwable error) { failure.set(error); }
             finally { context.deleteSharedPreferences(name); }
@@ -109,7 +111,7 @@ final class KeyboardSettingsLayoutContract {
     }
 
     private void seed(Object schema,Object layout) {
-        SharedPreferences.Editor editor=preferences.edit().clear();
+        SharedPreferences.Editor editor=preferences.edit().clear().putBoolean("layout_schema_v120",true);
         if(schema instanceof String) editor.putString(KeyboardSettings.KEY_SCHEMA,(String)schema);
         else editor.putInt(KeyboardSettings.KEY_SCHEMA,7);
         if(layout instanceof String) editor.putString(KeyboardSettings.KEY_LAYOUT,(String)layout);
@@ -141,4 +143,30 @@ final class KeyboardSettingsLayoutContract {
         settings.setLayout("qwerty");
         pair("rimes_pinyin","qwerty","wrong-type preferences explicitly recover");
     }
+    private void independentOrthogonalSchemes() {
+        settings.setSchema("rimes_wubi");settings.setLayout("orthogonal");settings.setSchema("rimes_pinyin");
+        pair("rimes_pinyin","orthogonal","ordinary scheme keeps orthogonal geometry");
+        check("rimes_pinyin".equals(settings.builtInRuntimeSchema(true)),"ordinary grid never silently switches to Natural Code");
+        settings.setSchema("isaac2026");pair("isaac2026","orthogonal","chord scheme selects its grid");
+        check("rimes_ziranma".equals(settings.builtInRuntimeSchema(false)),"disabled chord plugin retains the underlying Natural Code typing path");
+        preferences.edit().remove("layout_schema_v120").putString("schema","rimes_pinyin").putString("layout","orthogonal").commit();
+        KeyboardSettings migrated=new KeyboardSettings(preferences);
+        check("isaac2026".equals(migrated.getSchema()),"upgrade preserves the old chord behavior");
+        migrated.setSchema("rimes_wubi");
+        check("rimes_wubi".equals(new KeyboardSettings(preferences).getSchema()),"migration runs once and does not overwrite a later ordinary choice");
+    }
+    private void assistantLibrary() {
+        AssistantSettings store=new AssistantSettings(preferences);
+        check(store.snapshot().entrance.equals(AssistantSettings.BUILT_INS),"old users retain all five built-in shortcuts");
+        AssistantSettings.Preset first=AssistantSettings.create("Reply","Keep the meaning, use a gentle tone.","Write a reply");
+        store.save(first);store.entrance(first.id,true);store.move(first.id,-1);
+        check(new AssistantSettings(preferences).snapshot().preset(first.id)!=null,"custom assistant persists through a new store");
+        String before=store.revision();
+        store.save(new AssistantSettings.Preset(first.id,"Renamed","New instruction",""));
+        check(!before.equals(store.revision()),"editing changes the frozen request authority");
+        boolean rejected=false;try { store.save(new AssistantSettings.Preset(first.id,"X",new String(new char[4001]).replace((char)0,'x'),"")); } catch(IllegalArgumentException expected) { rejected=true; }
+        check(rejected && "New instruction".equals(store.instruction(first.id)),"oversized instructions do not replace the old preset");
+        store.remove(first.id);check(!store.snapshot().entrance.contains(first.id),"removing an assistant retires its shortcut");
+    }
+
 }

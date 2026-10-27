@@ -19,7 +19,7 @@ platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 
 | 操作 | 行为 |
 |---|---|
-| Ctrl+Shift+V | 默认全局 Capsule 快捷键（可在设置调整）；X11/Wayland 支持条件见 runtime/SHORTCUTS-VALIDATION.md |
+| Alt+Shift+C | 默认全局 Capsule 快捷键（可在设置调整）；X11/Wayland 支持条件见 runtime/SHORTCUTS-VALIDATION.md |
 | 底栏齿轮 | 打开 940×660 管理页，最小 620×430；撤销原输入目标 |
 | 管理页 Ctrl+S / Esc | 保存 / 确认未保存修改后返回底栏 |
 | 底栏 Return | 向仍绑定且聚焦的输入框插入整条笔记正文，成功后关闭 |

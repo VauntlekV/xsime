@@ -64,6 +64,8 @@ import RimesCore
         let field = SizingTestTextField(frame: CGRect(x: 20, y: 100, width: 300, height: 44))
         parent.view.addSubview(field)
         field.keyboard.loadViewIfNeeded()
+        // The 5 pt candidate inset below is the orthogonal grid's; choose it instead of inheriting whatever earlier tests saved.
+        field.keyboard.developmentResetPreferences(); field.keyboard.developmentChoose(.chord)
         field.keyboard.view.frame = CGRect(x: 0, y: 0, width: scene.coordinateSpace.bounds.width, height: 600)
         defer {
             field.resignFirstResponder(); window.isHidden = true

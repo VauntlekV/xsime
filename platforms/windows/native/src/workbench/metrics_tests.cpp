@@ -41,7 +41,8 @@ void Core() {
         "Unicode grapheme clusters");
   Check(Characters("é") == Characters("é"),
         "Swift Character canonical equivalence");
-  Check(Normalize("a\r\nb\rc") == "a\nb\nc", "only newline normalization");
+  Check(Normalize("a\r\nb\rc") == "abc", "visual track and paragraph breaks are excluded from scoring");
+  Check(Characters("甲\n乙") == Characters("甲乙"), "native row breaks preserve scoring offsets");
   Session s(Article("甲乙丙丁"), Context());
   s.Key(1, false, false, false);
   s.Chord(1.1);

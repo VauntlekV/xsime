@@ -177,6 +177,21 @@ int main(int argc, char** argv) {
                 };
                 try {
                     auto status = Ready(true);
+                    Call({{"op", "selectBuiltin"}, {"schema", "rime_ice"}});
+                    std::string composing;
+                    main([&] {
+                        tap(first, "n"); tap(first, "i");
+                        composing = ic->inputPanel().clientPreedit().toStringForCommit();
+                        Check(!composing.empty(), "ordinary scheme selection still accepts composing input");
+                    });
+                    Call({{"op", "selectBuiltin"}, {"schema", "wubi86"}});
+                    main([&] { Check(ic->inputPanel().clientPreedit().toStringForCommit() == composing, "settings selection must not discard pending composition"); });
+                    expect("你");
+                    Check(Call({{"op", "status"}}).at("selectedSchema") == "wubi86", "settings schema selection persists after the old composition commits");
+                    // The following chord-disable scenario exercises its original
+                    // Pinyin fallback. Restore that explicit ordinary choice after
+                    // proving the settings-driven Wubi switch retained composition.
+                    Call({{"op", "selectBuiltin"}, {"schema", "rime_ice"}});
                     Call({{"op", "makeCurrent"}});
                     batch("dv");
                     batch("i");

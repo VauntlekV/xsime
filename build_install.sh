@@ -248,7 +248,7 @@ cp -R Resources/*.lproj "$APP_PATH/Contents/Resources/" 2>/dev/null || true
 cp Resources/etinput.pdf "$APP_PATH/Contents/Resources/" 2>/dev/null || true
 cp Resources/etinput-menu.pdf "$APP_PATH/Contents/Resources/" 2>/dev/null || true
 cp Resources/menubar-template.png "$APP_PATH/Contents/Resources/" 2>/dev/null || true
-cp LICENSE NOTICE LICENSING.md ATTRIBUTION.md THIRD_PARTY_NOTICES.md "$APP_PATH/Contents/Resources/"
+cp LICENSE NOTICE LICENSING.md ATTRIBUTION.md THIRD_PARTY_NOTICES.md README.md README.en.md README.ja.md README.ko.md README.es.md "$APP_PATH/Contents/Resources/"
 cp -R LICENSES "$APP_PATH/Contents/Resources/"
 
 # Ad-hoc sign. --deep now that we have nested dylibs (librime + plugins).

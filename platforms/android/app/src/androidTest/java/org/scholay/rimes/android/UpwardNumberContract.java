@@ -326,7 +326,10 @@ final class UpwardNumberContract {
             settings.setLayout("nineKey");
             check(settings.builtInRuntimeSchema(true).equals("rimes_pinyin9"),"settings address the nine-key runtime schema");
             settings.setLayout("orthogonal");
-            check(settings.builtInRuntimeSchema(true).equals("rimes_ziranma"),"chord settings address their natural-code engine");
+            check(settings.builtInRuntimeSchema(true).equals("rimes_pinyin"),"orthogonal geometry retains the selected Pinyin engine");
+            settings.setSchema("isaac2026");
+            check(settings.builtInRuntimeSchema(true).equals("rimes_ziranma"),"isaac2026 explicitly selects the natural-code engine");
+            settings.setSchema("rimes_pinyin");
             check(settings.builtInRuntimeSchema(false).equals("rimes_pinyin"),"disabled chords preserve the ordinary schema");
         });
         fixture.edit().clear().commit();

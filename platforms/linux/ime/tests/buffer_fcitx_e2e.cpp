@@ -172,7 +172,7 @@ void EnsureCapturing(fcitx::AddonInstance* frontend, const fcitx::ICUUID& uuid,
     if (HasNeedle(snapshot, "\"capturing\":true")) {
         return;
     }
-    SendKey(frontend, uuid, "Control+Shift+B");
+    SendKey(frontend, uuid, "Alt+Shift+B");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"capturing\":true", "could not resume Buffer capture");
 }
@@ -290,21 +290,21 @@ void RunLauncherSuite(SuiteCtx ctx) {
                 switch (*phase) {
                 case 0:
                     keyboard(); check(instance->inputMethod(ctx.ic) == "keyboard-us", "keyboard fixture unavailable");
-                    ctx.frontend->call<fcitx::ITestFrontend::keyEvent>(ctx.uuid, fcitx::Key("Control+Shift+b"), false);
+                    ctx.frontend->call<fcitx::ITestFrontend::keyEvent>(ctx.uuid, fcitx::Key("Alt+Shift+b"), false);
                     check(instance->inputMethod(ctx.ic) == "rimes", "global shortcut did not switch this IC");
                     break;
                 case 1:
                     capturing(true);
-                    ctx.frontend->call<fcitx::ITestFrontend::keyEvent>(ctx.uuid, fcitx::Key("Control+Shift+b"), false);
+                    ctx.frontend->call<fcitx::ITestFrontend::keyEvent>(ctx.uuid, fcitx::Key("Alt+Shift+b"), false);
                     capturing(true); // held press must not toggle it closed
-                    ctx.frontend->call<fcitx::ITestFrontend::keyEvent>(ctx.uuid, fcitx::Key("Control+Shift+b"), true);
-                    key("Control+Shift+b"); capturing(false);
+                    ctx.frontend->call<fcitx::ITestFrontend::keyEvent>(ctx.uuid, fcitx::Key("Alt+Shift+b"), true);
+                    key("Alt+Shift+b"); capturing(false);
                     check(instance->inputMethod(ctx.ic) == "rimes", "closing unexpectedly switched IM");
-                    keyboard(); key("Control+Shift+b"); keyboard(); // user overrides the pending activation
+                    keyboard(); key("Alt+Shift+b"); keyboard(); // user overrides the pending activation
                     break;
                 case 2:
                     capturing(false);
-                    key("Control+Shift+b"); ctx.ic->focusOut();
+                    key("Alt+Shift+b"); ctx.ic->focusOut();
                     *other = ctx.frontend->call<fcitx::ITestFrontend::createInputContext>("launcher-other-app");
                     instance->inputContextManager().findByUUID(*other)->focusIn();
                     break;
@@ -313,7 +313,7 @@ void RunLauncherSuite(SuiteCtx ctx) {
                     instance->inputContextManager().findByUUID(*other)->focusOut();
                     ctx.frontend->call<fcitx::ITestFrontend::destroyInputContext>(*other);
                     ctx.ic->focusIn(); keyboard(); ctx.ic->setCapabilityFlags(fcitx::CapabilityFlag::Sensitive);
-                    key("Control+Shift+b");
+                    key("Alt+Shift+b");
                     check(instance->inputMethod(ctx.ic) == "keyboard-us", "protected field switched IM");
                     capturing(false);
                     ctx.ic->setCapabilityFlags(fcitx::CapabilityFlag::Preedit);
@@ -323,7 +323,7 @@ void RunLauncherSuite(SuiteCtx ctx) {
                     }
                     break;
                 case 4:
-                    key("Control+Shift+b");
+                    key("Alt+Shift+b");
                     check(instance->inputMethod(ctx.ic) == "keyboard-us", "retired binding still active");
                     key("Control+Alt+j"); break;
                 case 5:
@@ -341,11 +341,11 @@ void RunLauncherSuite(SuiteCtx ctx) {
                         auto next = config->Load(); next["globalShortcuts"] = true; config->Save(next, next.at("revision"));
                     }
                     keyboard(); break;
-                case 7: key("Control+Shift+v"); break;
+                case 7: key("Alt+Shift+c"); break;
                 case 8:
                     ExpectContains(ReadDump(std::getenv("RIMES_CAPSULE_DUMP")), "\"visible\":true", "Capsule independent shortcut did not open");
                     check(instance->inputMethod(ctx.ic) == "rimes", "Capsule did not select XSIME");
-                    key("Control+Shift+v");
+                    key("Alt+Shift+c");
                     std::cout << "Launcher: other IM activation, held keys, focus/user-switch cancellation, sensitive fields, custom bindings and disable passed\n";
                     instance->exit(); return true;
                 }
@@ -366,23 +366,23 @@ void RunBufferSuite(fcitx::Instance& instance,
     ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
                            fcitx::CapabilityFlag::ClientUnfocusCommit);
 
-    SendKey(frontend, uuid, "Control+Shift+B");
+    SendKey(frontend, uuid, "Alt+Shift+B");
     auto snapshot = ReadDump(dump_path);
-    ExpectContains(snapshot, "\"capturing\":true", "Ctrl+Shift+B did not enable capture");
-    ExpectContains(snapshot, "\"visible\":true", "Ctrl+Shift+B did not show the workbench");
-    std::cout << "ok: Ctrl+Shift+B enabled capture\n";
+    ExpectContains(snapshot, "\"capturing\":true", "Alt+Shift+B did not enable capture");
+    ExpectContains(snapshot, "\"visible\":true", "Alt+Shift+B did not show the workbench");
+    std::cout << "ok: Alt+Shift+B enabled capture\n";
 
-    SendKey(frontend, uuid, "Control+Shift+B");
+    SendKey(frontend, uuid, "Alt+Shift+B");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"capturing\":false", "hotkey did not pause capture");
     ExpectContains(snapshot, "\"visible\":false", "hotkey did not hide the workbench");
-    std::cout << "ok: Ctrl+Shift+B paused an open workbench\n";
+    std::cout << "ok: Alt+Shift+B paused an open workbench\n";
 
-    SendKey(frontend, uuid, "Control+Shift+B");
+    SendKey(frontend, uuid, "Alt+Shift+B");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"capturing\":true", "hotkey did not resume capture");
     ExpectContains(snapshot, "\"visible\":true", "hotkey did not show the workbench");
-    std::cout << "ok: Ctrl+Shift+B resumed capture\n";
+    std::cout << "ok: Alt+Shift+B resumed capture\n";
 
     Type(frontend, uuid, "nihao");
     SendKey(frontend, uuid, "space");
@@ -483,7 +483,7 @@ void RunBufferSuite(fcitx::Instance& instance,
     SendKey(frontend, uuid, "space");
     std::cout << "ok: buffer paused; later commits go to the host\n";
 
-    SendKey(frontend, uuid, "Control+Shift+B");
+    SendKey(frontend, uuid, "Alt+Shift+B");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"capturing\":true", "could not reopen for Escape-scope");
     const auto uuid2 = frontend->call<fcitx::ITestFrontend::createInputContext>("rimes-buffer-other");
@@ -518,7 +518,7 @@ void RunBufferSuite(fcitx::Instance& instance,
     }
     instance.setCurrentInputMethod(ic_dying, "rimes", true);
     ic_dying->focusIn();
-    SendKey(frontend, uuid_dying, "Control+Shift+B");
+    SendKey(frontend, uuid_dying, "Alt+Shift+B");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"capturing\":true", "dying IC did not capture");
     frontend->call<fcitx::ITestFrontend::destroyInputContext>(uuid_dying);

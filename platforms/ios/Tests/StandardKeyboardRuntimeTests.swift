@@ -226,27 +226,29 @@ import RimesCore
         keyboard.developmentType("64426")
         XCTAssertNotNil(descendants(keyboard.layoutViews.candidates).first { $0.accessibilityLabel == "你好" })
     }
-    func testOrthogonalGridIsALayoutAnySchemeCanUseAndOnlyPinyinFamilyResolvesChords() {
+    func testOrthogonalGridIsALayoutAnySchemeCanUseAndOnlyIsaac2026ResolvesChords() {
         let (window, keyboard) = host(); defer { window.isHidden = true }
         func orthogonal(_ scheme: InputScheme) -> KeySurface {
             keyboard.developmentChoose(scheme)
             keyboard.developmentOrdinaryAppearance(layout: .orthogonal); window.layoutIfNeeded()
             return keyboard.layoutViews.keys
         }
-        let pinyin = orthogonal(.pinyin)
-        XCTAssertTrue(pinyin.chordMode); XCTAssertTrue(pinyin.resolvesChords)
-        XCTAssertEqual(pinyin.profile.outputEncoding, .fullPinyin)
-        let ziranma = orthogonal(.ziranma)
-        XCTAssertTrue(ziranma.resolvesChords); XCTAssertEqual(ziranma.profile.outputEncoding, .ziranma)
-        let grid = ziranma.developmentKeyFrames
-        for scheme in [InputScheme.wubi86, .lingxiWubi, .english] {
+        let grid = orthogonal(.chord)
+        XCTAssertTrue(grid.chordMode); XCTAssertTrue(grid.resolvesChords)
+        XCTAssertEqual(grid.profile.outputEncoding, .ziranma)
+        for scheme in [InputScheme.pinyin, .ziranma, .wubi86, .lingxiWubi, .english] {
             let tap = orthogonal(scheme)
             XCTAssertTrue(tap.chordMode, "\(scheme)"); XCTAssertFalse(tap.resolvesChords, "\(scheme)")
-            XCTAssertEqual(tap.developmentKeyFrames, grid, "\(scheme) draws the same grid")
+            XCTAssertEqual(tap.developmentKeyFrames, grid.developmentKeyFrames, "\(scheme) draws the same grid")
         }
         // Leaving the grid is a layout choice and keeps the scheme.
         keyboard.developmentChoose(.wubi86); keyboard.developmentOrdinaryAppearance(layout: .qwerty); window.layoutIfNeeded()
         XCTAssertFalse(keyboard.layoutViews.keys.chordMode)
+        // isaac2026 on another layout types normally; picking it again returns to the grid.
+        keyboard.developmentChoose(.chord); keyboard.developmentOrdinaryAppearance(layout: .qwerty); window.layoutIfNeeded()
+        XCTAssertFalse(keyboard.layoutViews.keys.chordMode); XCTAssertFalse(keyboard.layoutViews.keys.resolvesChords)
+        keyboard.developmentChoose(.chord); window.layoutIfNeeded()
+        XCTAssertTrue(keyboard.layoutViews.keys.resolvesChords)
     }
     func testLegacyChordSchemeMigratesToOrthogonalLayoutOverItsEncoding() {
         let (window, keyboard) = host(); defer { window.isHidden = true }

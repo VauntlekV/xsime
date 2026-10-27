@@ -25,7 +25,7 @@ func runTypingPracticeLinuxUISmoke(_ output: URL) -> Bool {
                     for number in 0..<4 {
                         let sample = TypingTestSession(article: article, context: context)
                         sample.start(at: 10); sample.recordKey(at: 11)
-                        _ = sample.reconcileCommittedText(article.text, at: 130 - Double(number) * 10)
+                        _ = sample.reconcileCommittedText(article.scoredText, at: 130 - Double(number) * 10)
                         if number == 2 { sample.markPractice(reason: .focusLost) }
                         guard let result = sample.finish(at: 130 - Double(number) * 10, completedAt: Date(timeIntervalSince1970: 1_780_000_000 + Double(number) * 500)), store.add(result) else { return false }
                     }
@@ -48,13 +48,12 @@ func runTypingPracticeLinuxUISmoke(_ output: URL) -> Bool {
                             controller.practiceKey(event, isComposing: false)
                         }
                         clock = phase == "live" ? 20 : 130
-                        controller.smokeEditor.insertText(String(article.text.prefix(length)), replacementRange: NSRange(location: NSNotFound, length: 0))
+                        controller.smokeEditor.insertText(String(article.scoredText.prefix(length)), replacementRange: NSRange(location: NSNotFound, length: 0))
                         if phase == "complete" && controller.smokeIsArmed { return false }
                     }
-                    pane.layoutSubtreeIfNeeded()
-                    let height = ceil(pane.fittingSize.height)
-                    guard height.isFinite, (450...2400).contains(height) else { return false }
-                    window.setContentSize(NSSize(width: 698, height: height)); pane.layoutSubtreeIfNeeded(); pane.displayIfNeeded(); window.displayIfNeeded()
+                    let height: CGFloat = 760
+                    window.setContentSize(NSSize(width: 698, height: height)); pane.frame = NSRect(x: 0, y: 0, width: 698, height: height)
+                    pane.layoutSubtreeIfNeeded(); pane.displayIfNeeded(); window.displayIfNeeded()
                     guard let bitmap = pane.bitmapImageRepForCachingDisplay(in: pane.bounds) else { return false }
                     pane.cacheDisplay(in: pane.bounds, to: bitmap)
                     guard let png = bitmap.representation(using: .png, properties: [:]) else { return false }

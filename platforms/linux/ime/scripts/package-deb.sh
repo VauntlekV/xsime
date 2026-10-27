@@ -81,12 +81,18 @@ OLD_SONAME=$(patchelf --print-soname "$ROOT$PRIVATE_LIB/$PRIVATE_SONAME")
 [[ "$OLD_SONAME" == librime.so.* ]] || { echo 'Unexpected Rime SONAME' >&2; exit 1; }
 patchelf --set-soname "$PRIVATE_SONAME" "$ROOT$PRIVATE_LIB/$PRIVATE_SONAME"
 patchelf --set-rpath '$ORIGIN' "$ROOT$PRIVATE_LIB/$PRIVATE_SONAME"
-mkdir -p "$ROOT/DEBIAN"
+mkdir -p "$ROOT/DEBIAN" "$WORKDIR/debian"
+printf 'librimes-rime 1 fcitx5-rimes (= %s)\n' "$VERSION" > "$WORKDIR/debian/shlibs.local"
+python3 "$SCRIPT_DIR/bundle-private-runtime.py" "$ROOT" "$PRIVATE_LIB" "$VERSION" "$WORKDIR/debian/shlibs.local"
 ELF_FILES=()
 while IFS= read -r -d '' file; do
     if readelf -h "$file" >/dev/null 2>&1; then
         if patchelf --print-needed "$file" | grep -Fxq "$OLD_SONAME"; then
             patchelf --replace-needed "$OLD_SONAME" "$PRIVATE_SONAME" "$file"
+        fi
+        if [[ "$file" == "$ROOT$PRIVATE_LIB/"* ]]; then
+            patchelf --set-rpath '$ORIGIN' "$file"
+        else
             patchelf --set-rpath "$PRIVATE_LIB" "$file"
         fi
         ELF_FILES+=("-e$file")
@@ -110,7 +116,6 @@ Package: fcitx5-rimes
 Architecture: any
 Description: XSIME Fcitx5 input method
 EOF
-printf 'librimes-rime 1 fcitx5-rimes (= %s)\n' "$VERSION" > "$WORKDIR/debian/shlibs.local"
 DEPS=$(cd "$WORKDIR" && dpkg-shlibdeps -O -xfcitx5-rimes -l"$ROOT$PRIVATE_LIB" "${ELF_FILES[@]}")
 DEPS=${DEPS#shlibs:Depends=}
 [[ -n "$DEPS" && "$DEPS" != *$'\n'* && "$DEPS" != *shlibs:* ]] || {
@@ -126,7 +131,7 @@ Section: utils
 Priority: optional
 Architecture: $ARCH
 Installed-Size: $SIZE
-Depends: pkexec, fcitx5, fcitx5-frontend-gtk3, python3.12, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, xdg-desktop-portal, $DEPS
+Depends: pkexec, fcitx5, fcitx5-frontend-gtk3, python3 (>= 3.12), gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, xdg-desktop-portal, $DEPS
 Recommends: xdg-desktop-portal-gtk, libgtk-layer-shell0, wl-clipboard, fonts-inter, fonts-noto-cjk, fonts-noto-color-emoji
 Maintainer: XSIME contributors <https://github.com/scholay/xsime>
 Homepage: https://xsime.com

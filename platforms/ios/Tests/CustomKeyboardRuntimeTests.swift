@@ -46,7 +46,7 @@ import RimesCore
             controller.developmentChoose(.chord); controller.developmentSetLayout(chordLayout)
             window.layoutIfNeeded()
             let original = snapshot(controller)
-            controller.developmentChoose(.pinyin)
+            controller.developmentChoose(.pinyin); controller.developmentOrdinaryAppearance(layout: .qwerty)
             controller.developmentSetCustomLayout(CustomKeyboardLayout.templates[2])
             window.layoutIfNeeded()
             XCTAssertTrue(controller.layoutViews.keys.usesCustomLayout)
@@ -135,11 +135,11 @@ import RimesCore
         XCTAssertEqual(controller.layoutProxy.native.text, "ab \n")
 
         let space = controller.developmentSpaceKey
-        space.beginCursor(requireTracking: false)
-        XCTAssertTrue(space.isMovingCursor)
-        space.moveCursor(to: -CursorDrag.step)
+        let m = space.machine
+        m.down(1, at: CGPoint(x: m.width / 2, y: 20)); m.holdElapsed(1)
+        m.move(1, to: CGPoint(x: m.width / 2 - SplitSpaceMachine.caretStep, y: 20))
         XCTAssertEqual(controller.layoutProxy.native.selectedRange.location, 3)
-        space.finish()
+        m.up(1)
 
         let numbers = try key(.numbers)
         numbers.sendActions(for: .touchUpInside); window.layoutIfNeeded()

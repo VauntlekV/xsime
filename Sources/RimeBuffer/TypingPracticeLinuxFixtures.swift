@@ -11,7 +11,7 @@ func runTypingPracticeLinuxFixtures(_ output: URL) -> Bool {
         func articleValue(_ article: TypingTestArticle) -> [String: Any] {
             ["id": article.id, "version": article.version, "language": article.language.rawValue,
              "title": article.title, "theme": article.theme, "difficulty": article.difficulty,
-             "text": article.text, "characterCount": article.characterCount, "wordCount": article.wordCount]
+             "text": article.scoredText, "characterCount": article.characterCount, "wordCount": article.wordCount]
         }
         func observation(_ session: TypingTestSession, at time: Double) throws -> [String: Any] {
             let value = session.snapshot(at: time)
@@ -151,7 +151,8 @@ func runTypingPracticeLinuxFixtures(_ output: URL) -> Bool {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let names = ["OfficialPlugins/native/macos/TypingTestArticles.swift", "OfficialPlugins/native/macos/TypingTestSession.swift",
                      "OfficialPlugins/native/macos/TypingTestHistoryStore.swift", "OfficialPlugins/native/macos/TypingTestTextView.swift",
-                     "OfficialPlugins/native/macos/TypingSpeedSettingsViewController.swift", "Sources/RimeBuffer/TypingPracticeTelemetry.swift",
+                     "OfficialPlugins/native/macos/TypingSpeedSettingsViewController.swift", "OfficialPlugins/native/macos/TypingTestLibrary.swift",
+                     "OfficialPlugins/native/macos/TypingTestMaterialColumn.swift", "OfficialPlugins/native/macos/TypingTestTrackView.swift", "Sources/RimeBuffer/TypingPracticeTelemetry.swift",
                      "Sources/RimeBuffer/TypingTestUISmoke.swift", "Sources/RimeBuffer/TypingPracticeLinuxFixtures.swift",
                      "Sources/RimeBuffer/TypingPracticeLinuxUISmoke.swift", "Sources/RimeBuffer/MetricsChartViews.swift", "Sources/RimeBuffer/RimeUI.swift"]
         var sources: [String: String] = [:]

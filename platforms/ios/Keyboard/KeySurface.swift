@@ -6,7 +6,6 @@ import RimesCore
 
 final class KeySurface: UIView {
     let feedback = KeyboardFeedback()
-    private var reachable = ChordReachability(profile: .builtIn)
     var onTypingPress: (() -> Void)?
     var onKey: ((String) -> Void)?
     var onAlternate: ((String) -> Void)?
@@ -14,7 +13,7 @@ final class KeySurface: UIView {
     var onPreview: ((String) -> Void)?
     var onEmoji: ((String) -> Void)?
     var onLanguageToggle: (() -> Void)?
-    var profile = ChordProfile.builtIn { didSet { if oldValue != profile { reachable = ChordReachability(profile: profile) }; retire(); setNeedsLayout() } }
+    var profile = ChordProfile.builtIn { didSet { retire(); setNeedsLayout() } }
     var chordMode = false { didSet { retire(); setNeedsLayout() } }
     var numeric = false { didSet { retire(); setNeedsLayout() } }
     var shifted = false { didSet { if oldValue != shifted { retire() }; setNeedsDisplay() } }
@@ -67,14 +66,11 @@ final class KeySurface: UIView {
     private var nextID = 0
     private var ordinary: [ObjectIdentifier: OrdinaryKeyGesture] = [:]
     private var holdTimers: [ObjectIdentifier: Timer] = [:]
-    private let alternatePreview = UILabel()
+    private let callout = KeyCalloutView()
+    var developmentCalloutShown: Bool { callout.isShown }
     override init(frame: CGRect) {
         super.init(frame: frame); isMultipleTouchEnabled = true; backgroundColor = .clear
-        alternatePreview.isHidden = true; alternatePreview.isUserInteractionEnabled = false
-        alternatePreview.accessibilityElementsHidden = true
-        alternatePreview.textAlignment = .center; alternatePreview.font = .systemFont(ofSize: 28)
-        alternatePreview.layer.cornerRadius = 8; alternatePreview.clipsToBounds = true
-        addSubview(alternatePreview)
+        addSubview(callout)
         accessibilityLabel = L("字母键盘", "Letter keyboard")
         emojiButton.symbol("face.smiling", label: L("表情", "Emoji"))
         emojiButton.accessibilityIdentifier = "keyboard.emoji"
@@ -130,13 +126,11 @@ final class KeySurface: UIView {
     func showEmoji() { retire(); emojiMode = true }
 
     private func redraw() {
-        let dimmed = resolvesChords && gesture.active
-        [emojiButton, languageButton].forEach { $0.alpha = dimmed ? 0.3 : 1 }
         setNeedsDisplay()
     }
     private func clearOrdinaryTouches() {
         holdTimers.values.forEach { $0.invalidate() }; holdTimers.removeAll(); ordinary.removeAll()
-        alternatePreview.isHidden = true
+        callout.dismiss(animated: false)
     }
     func cancel() { utilityGeneration = UUID(); feedback.reset(); gesture.cancel(); clearOrdinaryTouches(); onPreview?(""); redraw() }
     /// Context loss may never deliver matching touch-up events. Retire old IDs so
@@ -214,12 +208,10 @@ final class KeySurface: UIView {
     }
     override func draw(_ rect: CGRect) {
         let selected = gesture.keys ?? []
-        let eligible = gesture.availableKeys(in: reachable)
         for (key, box) in boxes {
             let active = (key.first.map(selected.contains) ?? false) || ordinary.values.contains { $0.key == key }
-            let dimmed = resolvesChords && gesture.active && !active && !(key.first.map(eligible.contains) ?? false)
             let context = UIGraphicsGetCurrentContext()!
-            context.saveGState(); context.setAlpha(dimmed ? 0.30 : 1)
+            context.saveGState()
             let cap = KeycapStyle.capRect(in: box, pressed: active, compact: chordMode && !numeric)
             KeycapStyle.draw(in: box, pressed: active, compact: chordMode && !numeric, theme: theme, legacy: legacyKeys)
             let base = labels[key] ?? key.uppercased()
@@ -282,15 +274,13 @@ final class KeySurface: UIView {
     }
     private func showAlternatePreview() {
         guard let touch = ordinary.values.first(where: { $0.armed }), let value = touch.alternate,
-              let frame = boxes.first(where: { $0.0 == touch.initialKey })?.1 else {
-            if !alternatePreview.isHidden { alternatePreview.isHidden = true }; return
-        }
-        alternatePreview.text = value
-        alternatePreview.backgroundColor = touch.selected ? theme.palette.accent : theme.palette.key
-        alternatePreview.textColor = touch.selected ? theme.palette.accentInk : theme.palette.ink
-        let width = max(44, frame.width)
-        alternatePreview.frame = CGRect(x: min(max(0, frame.midX - width / 2), bounds.width - width), y: frame.minY - 42, width: width, height: 40)
-        alternatePreview.isHidden = false; bringSubviewToFront(alternatePreview)
+              let frame = boxes.first(where: { $0.0 == touch.initialKey })?.1 else { callout.dismiss(); return }
+        let cap = KeycapStyle.capRect(in: frame, pressed: false)
+        // Free height above the key: what the surface has plus what the keyboard leaves above it.
+        let room = cap.minY + self.frame.minY - 4
+        callout.present(value: value, key: cap, in: bounds, room: room, selected: touch.selected,
+                        fill: theme.palette.key, ink: theme.palette.ink, selectedFill: theme.palette.accent, selectedInk: theme.palette.accentInk)
+        bringSubviewToFront(callout)
     }
     private func beginOrdinary(_ id: ObjectIdentifier, key: String, point: CGPoint, at time: TimeInterval, scheduleHold: Bool = true) {
         let alternate = alternate(for: key)
@@ -410,4 +400,93 @@ private final class UtilityKeycapButton: KeycapButton {
 private final class KeyAccessibility: UIAccessibilityElement {
     var activate: (() -> Void)?
     override func accessibilityActivate() -> Bool { activate?(); return true }
+}
+
+/// The balloon that rises from a key while its alternate (the number or symbol above it) is being picked, drawn
+/// the way Apple's keyboard draws a key callout: one soft shape from the key up into a rounded bubble, a short
+/// concave neck between them, a faint shadow, a large glyph, and a spring on the way in.
+final class KeyCalloutView: UIView {
+    private let shape = CAShapeLayer()
+    private let label = UILabel()
+    private(set) var isShown = false
+    private var shownValue = ""
+    private var token = 0
+    static let neck: CGFloat = 9, bubbleRadius: CGFloat = 11
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false; accessibilityElementsHidden = true; isHidden = true; alpha = 0
+        shape.shadowColor = UIColor.black.cgColor; shape.shadowOpacity = 0.20; shape.shadowRadius = 4; shape.shadowOffset = CGSize(width: 0, height: 1.5)
+        layer.addSublayer(shape)
+        label.textAlignment = .center; label.adjustsFontSizeToFitWidth = true; label.minimumScaleFactor = 0.6
+        addSubview(label)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    /// `key` is the key cap in the parent's coordinates; the parent's bounds and `room` (free height above the key)
+    /// keep the balloon on screen. The glyph shows in the key's tint, or in the accent once the alternate is chosen.
+    func present(value: String, key: CGRect, in parent: CGRect, room: CGFloat, selected: Bool,
+                 fill: UIColor, ink: UIColor, selectedFill: UIColor, selectedInk: UIColor) {
+        let neck = Self.neck
+        let bubbleHeight = max(34, min(52, room - neck)), bubbleWidth = max(key.width + 22, 54)
+        let x = min(max(parent.minX, key.midX - bubbleWidth / 2), parent.maxX - bubbleWidth)
+        let outer = CGRect(x: x, y: key.minY - neck - bubbleHeight, width: bubbleWidth, height: bubbleHeight + neck + key.height)
+        let localKey = key.offsetBy(dx: -outer.minX, dy: -outer.minY)
+        let wasShown = isShown
+        layer.anchorPoint = CGPoint(x: localKey.midX / outer.width, y: 1)
+        frame = outer
+        shape.frame = bounds
+        let path = Self.path(key: localKey, bubbleWidth: bubbleWidth, bubbleHeight: bubbleHeight)
+        shape.path = path.cgPath; shape.shadowPath = path.cgPath
+        label.frame = CGRect(x: 4, y: 0, width: bubbleWidth - 8, height: bubbleHeight)
+        label.font = .systemFont(ofSize: min(32, max(24, bubbleHeight * 0.6)), weight: .regular)
+        let color = (selected ? selectedFill : fill).resolvedColor(with: traitCollection).cgColor
+        if wasShown && shownValue != value { label.text = value }
+        else if !wasShown { label.text = value }
+        label.textColor = selected ? selectedInk : ink
+        if wasShown {
+            // Choosing the alternate shifts the balloon's colour smoothly.
+            CATransaction.begin(); CATransaction.setAnimationDuration(0.12); shape.fillColor = color; CATransaction.commit()
+        } else {
+            CATransaction.begin(); CATransaction.setDisableActions(true); shape.fillColor = color; CATransaction.commit()
+        }
+        shownValue = value
+        guard !wasShown else { return }
+        isShown = true; token += 1; isHidden = false
+        transform = CGAffineTransform(scaleX: 0.55, y: 0.55); alpha = 0
+        UIView.animate(withDuration: 0.09) { self.alpha = 1 }
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.66, initialSpringVelocity: 7, options: [.allowUserInteraction]) {
+            self.transform = .identity
+        }
+    }
+    func dismiss(animated: Bool = true) {
+        guard isShown else { return }
+        isShown = false; token += 1
+        let current = token
+        guard animated else { alpha = 0; isHidden = true; transform = .identity; return }
+        UIView.animate(withDuration: 0.1, delay: 0, options: [.curveEaseIn, .beginFromCurrentState], animations: {
+            self.alpha = 0; self.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        }, completion: { _ in
+            if self.token == current { self.isHidden = true; self.transform = .identity }
+        })
+    }
+    /// The key, a bubble over it and a smooth waist between them as one outline.
+    static func path(key k: CGRect, bubbleWidth bw: CGFloat, bubbleHeight bh: CGFloat) -> UIBezierPath {
+        let bx = k.midX - bw / 2, by = k.minY - neck - bh, rb = bubbleRadius, rk = KeycapStyle.cornerRadius
+        let p = UIBezierPath()
+        p.move(to: CGPoint(x: bx + rb, y: by))
+        p.addLine(to: CGPoint(x: bx + bw - rb, y: by))
+        p.addArc(withCenter: CGPoint(x: bx + bw - rb, y: by + rb), radius: rb, startAngle: -.pi / 2, endAngle: 0, clockwise: true)
+        p.addLine(to: CGPoint(x: bx + bw, y: by + bh - rb))
+        // Down into the key's edge: the waist.
+        p.addCurve(to: CGPoint(x: k.maxX, y: k.minY + 1), controlPoint1: CGPoint(x: bx + bw, y: by + bh + neck * 0.7), controlPoint2: CGPoint(x: k.maxX, y: k.minY - neck * 0.7))
+        p.addLine(to: CGPoint(x: k.maxX, y: k.maxY - rk))
+        p.addArc(withCenter: CGPoint(x: k.maxX - rk, y: k.maxY - rk), radius: rk, startAngle: 0, endAngle: .pi / 2, clockwise: true)
+        p.addLine(to: CGPoint(x: k.minX + rk, y: k.maxY))
+        p.addArc(withCenter: CGPoint(x: k.minX + rk, y: k.maxY - rk), radius: rk, startAngle: .pi / 2, endAngle: .pi, clockwise: true)
+        p.addLine(to: CGPoint(x: k.minX, y: k.minY + 1))
+        p.addCurve(to: CGPoint(x: bx, y: by + bh - rb), controlPoint1: CGPoint(x: k.minX, y: k.minY - neck * 0.7), controlPoint2: CGPoint(x: bx, y: by + bh + neck * 0.7))
+        p.addLine(to: CGPoint(x: bx, y: by + rb))
+        p.addArc(withCenter: CGPoint(x: bx + rb, y: by + rb), radius: rb, startAngle: .pi, endAngle: -.pi / 2, clockwise: true)
+        p.close()
+        return p
+    }
 }

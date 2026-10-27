@@ -2162,15 +2162,15 @@
     },
     {
       "article" : {
-        "characterCount" : 5,
+        "characterCount" : 4,
         "difficulty" : "fixture",
         "id" : "public.unicode",
         "language" : "chinese",
-        "text" : "你👨‍👩‍👧‍👦é\n好",
+        "text" : "你👨‍👩‍👧‍👦é好",
         "theme" : "public fixture",
         "title" : "unicode",
         "version" : 1,
-        "wordCount" : 2
+        "wordCount" : 1
       },
       "context" : {
         "chordCountingAvailable" : true,
@@ -2206,7 +2206,7 @@
               "correctionCount" : 0,
               "deletedCharacterCount" : 0,
               "elapsedSeconds" : 0,
-              "expectedCharacterCount" : 5,
+              "expectedCharacterCount" : 4,
               "extraCharacterCount" : 0,
               "omissionCount" : 0,
               "physicalKeyCount" : 0,
@@ -2231,7 +2231,6 @@
               "pending",
               "pending",
               "pending",
-              "pending",
               "pending"
             ],
             "typedCorrectness" : [
@@ -2248,30 +2247,30 @@
           },
           "snapshot" : {
             "canComplete" : true,
-            "committedText" : "你👨‍👩‍👧‍👦é\n好",
+            "committedText" : "你👨‍👩‍👧‍👦é好",
             "isCancelled" : false,
             "isFinished" : false,
             "isStarted" : true,
             "metrics" : {
-              "attemptedCharacterCount" : 5,
+              "attemptedCharacterCount" : 4,
               "backspaceCount" : 0,
               "chordCount" : 0,
               "committedBackspaceCount" : 0,
-              "committedCharacterCount" : 5,
+              "committedCharacterCount" : 4,
               "compositionBackspaceCount" : 0,
-              "correctAttemptCount" : 5,
-              "correctCharacterCount" : 5,
+              "correctAttemptCount" : 4,
+              "correctCharacterCount" : 4,
               "correctionCount" : 0,
               "deletedCharacterCount" : 0,
               "elapsedSeconds" : 1,
-              "expectedCharacterCount" : 5,
+              "expectedCharacterCount" : 4,
               "extraCharacterCount" : 0,
               "omissionCount" : 0,
               "physicalKeyCount" : 0,
               "repeatKeyCount" : 0,
               "speedSamples" : [
                 {
-                  "effectiveCPM" : 300,
+                  "effectiveCPM" : 240,
                   "elapsedSeconds" : 1
                 }
               ],
@@ -2280,23 +2279,21 @@
             "rates" : {
               "chordsPerSecond" : 0,
               "codeLength" : 0,
-              "effectiveCPM" : 300,
+              "effectiveCPM" : 240,
               "finalAccuracy" : 1,
               "keysPerSecond" : 0,
               "processAccuracy" : 1,
               "progress" : 1,
-              "rawCPM" : 300,
-              "wordsPerMinute" : 60
+              "rawCPM" : 240,
+              "wordsPerMinute" : 48
             },
             "targetStates" : [
-              "correct",
               "correct",
               "correct",
               "correct",
               "correct"
             ],
             "typedCorrectness" : [
-              true,
               true,
               true,
               true,
@@ -2322,34 +2319,34 @@
               "mode" : "firstAttempt",
               "schemaID" : "public.schema"
             },
-            "displaySpeed" : 150,
+            "displaySpeed" : 120,
             "isComparable" : true,
             "isComplete" : true,
             "language" : "chinese",
             "metrics" : {
-              "attemptedCharacterCount" : 5,
+              "attemptedCharacterCount" : 4,
               "backspaceCount" : 0,
               "chordCount" : 0,
               "committedBackspaceCount" : 0,
-              "committedCharacterCount" : 5,
+              "committedCharacterCount" : 4,
               "compositionBackspaceCount" : 0,
-              "correctAttemptCount" : 5,
-              "correctCharacterCount" : 5,
+              "correctAttemptCount" : 4,
+              "correctCharacterCount" : 4,
               "correctionCount" : 0,
               "deletedCharacterCount" : 0,
               "elapsedSeconds" : 2,
-              "expectedCharacterCount" : 5,
+              "expectedCharacterCount" : 4,
               "extraCharacterCount" : 0,
               "omissionCount" : 0,
               "physicalKeyCount" : 0,
               "repeatKeyCount" : 0,
               "speedSamples" : [
                 {
-                  "effectiveCPM" : 300,
+                  "effectiveCPM" : 240,
                   "elapsedSeconds" : 1
                 },
                 {
-                  "effectiveCPM" : 150,
+                  "effectiveCPM" : 120,
                   "elapsedSeconds" : 2
                 }
               ],
@@ -2361,34 +2358,34 @@
           },
           "snapshot" : {
             "canComplete" : true,
-            "committedText" : "你👨‍👩‍👧‍👦é\n好",
+            "committedText" : "你👨‍👩‍👧‍👦é好",
             "isCancelled" : false,
             "isFinished" : true,
             "isStarted" : true,
             "metrics" : {
-              "attemptedCharacterCount" : 5,
+              "attemptedCharacterCount" : 4,
               "backspaceCount" : 0,
               "chordCount" : 0,
               "committedBackspaceCount" : 0,
-              "committedCharacterCount" : 5,
+              "committedCharacterCount" : 4,
               "compositionBackspaceCount" : 0,
-              "correctAttemptCount" : 5,
-              "correctCharacterCount" : 5,
+              "correctAttemptCount" : 4,
+              "correctCharacterCount" : 4,
               "correctionCount" : 0,
               "deletedCharacterCount" : 0,
               "elapsedSeconds" : 2,
-              "expectedCharacterCount" : 5,
+              "expectedCharacterCount" : 4,
               "extraCharacterCount" : 0,
               "omissionCount" : 0,
               "physicalKeyCount" : 0,
               "repeatKeyCount" : 0,
               "speedSamples" : [
                 {
-                  "effectiveCPM" : 300,
+                  "effectiveCPM" : 240,
                   "elapsedSeconds" : 1
                 },
                 {
-                  "effectiveCPM" : 150,
+                  "effectiveCPM" : 120,
                   "elapsedSeconds" : 2
                 }
               ],
@@ -2397,23 +2394,21 @@
             "rates" : {
               "chordsPerSecond" : 0,
               "codeLength" : 0,
-              "effectiveCPM" : 150,
+              "effectiveCPM" : 120,
               "finalAccuracy" : 1,
               "keysPerSecond" : 0,
               "processAccuracy" : 1,
               "progress" : 1,
-              "rawCPM" : 150,
-              "wordsPerMinute" : 30
+              "rawCPM" : 120,
+              "wordsPerMinute" : 24
             },
             "targetStates" : [
-              "correct",
               "correct",
               "correct",
               "correct",
               "correct"
             ],
             "typedCorrectness" : [
-              true,
               true,
               true,
               true,
@@ -233775,17 +233770,20 @@
   "purpose" : "public-typing-practice-contract",
   "schemaVersion" : 1,
   "sources" : {
-    "OfficialPlugins\/native\/macos\/TypingSpeedSettingsViewController.swift" : "0721081da4df0e103636b4be4367df5e0972cbb1ce4ae289fb1a45f6ae72d44f",
-    "OfficialPlugins\/native\/macos\/TypingTestArticles.swift" : "6767c66059be140f46c2b114321b0943340049cc75f97c97858bb7bb83d4fba6",
+    "OfficialPlugins\/native\/macos\/TypingSpeedSettingsViewController.swift" : "6108b60a6ed7571c1b036d4328bc6f88412c1e3613b90e2d78a935b525e1e386",
+    "OfficialPlugins\/native\/macos\/TypingTestArticles.swift" : "ce9a9418cae25d6c77952595ba7467ee0dab8964e3c77f3fd3ded355b7ffcf9c",
     "OfficialPlugins\/native\/macos\/TypingTestHistoryStore.swift" : "b1381a010bee67b368dfcf08dd43a3b088ea722f3b9969291ffb87e3ba1a37d5",
-    "OfficialPlugins\/native\/macos\/TypingTestSession.swift" : "c8be4b4b6276ed59f3a52e000f64b27ca49ed0af204eab378cb40c3c04536ae3",
-    "OfficialPlugins\/native\/macos\/TypingTestTextView.swift" : "178dcbb834a7dc2238068c7eebfe401f81d60b24df3a37f2489d3f331f12f7c8",
+    "OfficialPlugins\/native\/macos\/TypingTestLibrary.swift" : "53fb7184cf03c8fb9eaeb901613dcab43faccf0ec36d251db3e64014e4733f17",
+    "OfficialPlugins\/native\/macos\/TypingTestMaterialColumn.swift" : "cf7afcc9cf81b608604aac32dd13351da12f9f04f1f163ba66dde242eeb1e305",
+    "OfficialPlugins\/native\/macos\/TypingTestSession.swift" : "3330dbaaf2d4bda45b29b7fe3ee1b056744b5be371ddd47d6ec9c7b7b1466ca8",
+    "OfficialPlugins\/native\/macos\/TypingTestTextView.swift" : "51a46b991bad9558cfb0309f2c8e69ced7e731c4d270c27b352221b88628ae47",
+    "OfficialPlugins\/native\/macos\/TypingTestTrackView.swift" : "f927385908edebb968504908f4cc3c533d50100d271ff830b3b4f355e7384a2a",
     "Sources\/RimeBuffer\/MetricsChartViews.swift" : "9128efde9f8e933335fd9b63d586636e2da9a80344f13f78a773190036f9c1e1",
     "Sources\/RimeBuffer\/RimeUI.swift" : "80a1a1046687fd469c8627489f4e9f93ec348a4ff35e4e8228e896464a9b1516",
-    "Sources\/RimeBuffer\/TypingPracticeLinuxFixtures.swift" : "fdfdb1a116180d4e24905130085a83781e6747e9b5690fce22401180ebadf1b5",
-    "Sources\/RimeBuffer\/TypingPracticeLinuxUISmoke.swift" : "bf467f13652fafe5233d89363c5e92afee300696ab98ecd74f71fae627d0f567",
+    "Sources\/RimeBuffer\/TypingPracticeLinuxFixtures.swift" : "1c7671871371ca6edb1915e59a0e60d130fa5b7fa4448566fd09d4e137e88a17",
+    "Sources\/RimeBuffer\/TypingPracticeLinuxUISmoke.swift" : "00f46292bc409b8d7c0cfc756f5817fbb9d3b7cade7070f4724c34bb61617345",
     "Sources\/RimeBuffer\/TypingPracticeTelemetry.swift" : "b16035d4505d3f19a7f54bef8b986785f3f08ef1bc944ca944517ed3555d095e",
-    "Sources\/RimeBuffer\/TypingTestUISmoke.swift" : "357a9fb1e2ac0fdcb1cd11c85112a026bbe7dc0a2bb79b517aab1f7f357bf960"
+    "Sources\/RimeBuffer\/TypingTestUISmoke.swift" : "3293bff3c00b8443ed75298a1ccbf0718e214b7ac8af771ca601d9d369f77b15"
   },
   "validation" : [
     {

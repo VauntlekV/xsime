@@ -143,7 +143,7 @@ void RunPasswordSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     struct State {int fd=-1,phase=0; PasswordSummary record;std::uint64_t copies=0,restores=0;~State(){if(fd>=0)close(fd);}};
     auto state=std::make_shared<State>();PasswordRecord record;record.title="Host vault";record.summary="Public metadata";record.category="login";record.body="- 密码：host-private-fixture-secret\n- TOTP：JBSWY3DPEHPK3PXP";
     state->record=PasswordStore(ContentStore::DefaultRoot()).Put(record,"");
-    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});SendKey(frontend,uuid,"Control+Shift+V");
+    ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});SendKey(frontend,uuid,"Alt+Shift+C");
     state->fd=socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);sockaddr_un address{};address.sun_family=AF_UNIX;std::strncpy(address.sun_path,std::getenv("RIMES_CAPSULE_SOCKET"),sizeof(address.sun_path)-1);
     if(state->fd<0||connect(state->fd,reinterpret_cast<sockaddr*>(&address),sizeof(address)))Die("vault socket");
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
@@ -211,7 +211,7 @@ void RunCaptureSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, 
     std::atomic<bool> cancelled{false};state->image=archive.Import(file,record,cancelled);
     record.title="Temporary capture";state->other=archive.Import(file,record,cancelled);
     ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});
-    SendKey(frontend,uuid,"Control+Shift+V");
+    SendKey(frontend,uuid,"Alt+Shift+C");
     state->fd=socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);
     sockaddr_un address{};address.sun_family=AF_UNIX;
     std::strncpy(address.sun_path,std::getenv("RIMES_CAPSULE_SOCKET"),sizeof(address.sun_path)-1);
@@ -301,7 +301,7 @@ void RunResourceSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     state->record.reference.fields={{"authors","资源作者"},{"year","2024"},{"publisher","本地出版社"}};
     if(store.Put(state->record,"",&state->record,&error)!=StoreStatus::Ok) Die("resource fixture save");
     ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit});
-    SendKey(frontend,uuid,"Control+Shift+V");
+    SendKey(frontend,uuid,"Alt+Shift+C");
     state->fd=socket(AF_UNIX,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,0);
     sockaddr_un address{};address.sun_family=AF_UNIX;
     std::strncpy(address.sun_path,std::getenv("RIMES_CAPSULE_SOCKET"),sizeof(address.sun_path)-1);
@@ -361,7 +361,7 @@ void RunHistorySuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, 
                      fcitx::InputContext* ic, const std::string& dump_path) {
     using namespace rimes::capsule;
     SendKey(frontend, uuid, "Escape");
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     struct State {
         int fd = -1, phase = 0;
         ClipboardEntry text, image;
@@ -431,7 +431,7 @@ void RunHistorySuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, 
                 case 3:
                     if (snapshot.at("visible").get<bool>())
                         break;
-                    SendKey(frontend, uuid, "Control+Shift+V");
+                    SendKey(frontend, uuid, "Alt+Shift+C");
                     state->phase = 4;
                     break;
                 case 4:
@@ -684,7 +684,7 @@ void RunDetailSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, f
                                            fcitx::CapabilityFlag::ClientUnfocusCommit);
                     instance.setCurrentInputMethod(ic, "rimes", true);
                     ic->focusIn();
-                    SendKey(frontend, uuid, "Control+Shift+V");
+                    SendKey(frontend, uuid, "Alt+Shift+C");
                     for (int i = 0; i < 180000; ++i)
                         state->large += "👩🏽‍💻";
                     state->note.content = state->large;
@@ -709,12 +709,12 @@ void RunDetailSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend, f
                     std::cout << "ok: real Fcitx details insert exact row values, "
                                  "reject stale revisions, conceal on protected input "
                                  "and copy 2.7 MiB Unicode over fragmented IPC\n";
-                    SendKey(frontend, uuid, "Control+Shift+B");
+                    SendKey(frontend, uuid, "Alt+Shift+B");
                     SendKey(frontend, uuid, "Return");
                     ExpectContains(ReadDump(dump_path), "\"visible\":true",
                                    "Buffer Return must not close Capsule");
                     std::cout << "ok: Buffer capturing keeps Capsule from consuming Return\n";
-                    SendKey(frontend, uuid, "Control+Shift+B");
+                    SendKey(frontend, uuid, "Alt+Shift+B");
                     RunHistorySuite(instance, frontend, uuid, ic, dump_path);
                     return true;
                 }
@@ -736,31 +736,31 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
                            fcitx::CapabilityFlag::ClientUnfocusCommit);
 
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     ExpectContains(ReadDump(dump_path), "\"module\":\"notes\"",
                    "fresh Capsule did not start on the Notes page");
     auto snapshot = ReadDump(dump_path);
-    ExpectContains(snapshot, "\"visible\":true", "Ctrl+Shift+V did not show the rail");
-    ExpectContains(snapshot, "\"armed\":true", "Ctrl+Shift+V did not arm the session");
+    ExpectContains(snapshot, "\"visible\":true", "Alt+Shift+C did not show the rail");
+    ExpectContains(snapshot, "\"armed\":true", "Alt+Shift+C did not arm the session");
     ExpectContains(snapshot, "RIMES 默认词条", "seed note is missing");
     ExpectMissing(snapshot, "\\u200b", "snapshot must not advertise a ZWSP");
     ExpectNoZwsp(ic, "open rail");
-    std::cout << "ok: Ctrl+Shift+V showed an armed rail with the seed note\n";
+    std::cout << "ok: Alt+Shift+C showed an armed rail with the seed note\n";
 
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "hotkey did not hide");
     ExpectContains(snapshot, "\"armed\":false", "hotkey did not disarm");
-    std::cout << "ok: Ctrl+Shift+V hid the rail\n";
+    std::cout << "ok: Alt+Shift+C hid the rail\n";
 
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     frontend->call<fcitx::ITestFrontend::pushCommitExpectation>("RIMES");
     SendKey(frontend, uuid, "Return");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "activate must close the rail");
     std::cout << "ok: Return inserted the seed note and closed the rail\n";
 
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     Type(frontend, uuid, "nihao");
     ExpectNoZwsp(ic, "search while armed");
     SendKey(frontend, uuid, "space");
@@ -781,7 +781,7 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     SendKey(frontend, uuid, "space");
     std::cout << "ok: after close, Rime commits go to the host\n";
 
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     ic->focusOut();
     ic->focusIn();
     snapshot = ReadDump(dump_path);
@@ -789,15 +789,15 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     ExpectContains(snapshot, "\"visible\":true", "field switch keeps the rail");
     std::cout << "ok: field switch disarms; later Return is not consumed by Capsule\n";
 
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"armed\":true", "hotkey on a visible disarmed rail re-arms");
     ExpectContains(snapshot, "\"visible\":true", "re-arm keeps the rail up");
     ExpectContains(snapshot, "RIMES 默认词条", "re-arm shows the seed after hide cleared search");
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "second hotkey while armed closes");
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"armed\":true", "open again after the close");
     const auto uuid2 =
@@ -831,7 +831,7 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     ExpectContains(snapshot, "\"visible\":false", "password capability must hide the rail");
     ExpectContains(snapshot, "\"password_field\":true", "password flag missing");
     ExpectContains(snapshot, "\"session_protected\":false", "password input incorrectly revoked a copied vault secret");
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "password field must refuse the rail");
     ExpectContains(snapshot, "\"password_field\":true", "password flag must survive a toggle");
@@ -841,7 +841,7 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
                            fcitx::CapabilityFlag::ClientUnfocusCommit);
     instance.setCurrentInputMethod(ic, "rimes", true);
     ic->focusIn();
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"armed\":true", "normal field can re-arm after password");
     SendKey(frontend, uuid, "Control+c");
@@ -852,12 +852,12 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"copy_seq\":1", "search must not bump copy_seq");
     ExpectContains(snapshot, "\"last_copied\":\"RIMES\"", "search must not clear last_copied");
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"visible\":false", "armed hotkey closes");
     ExpectContains(snapshot, "\"last_copied\":\"\"", "Hide must clear last_copied");
     ExpectContains(snapshot, "\"copy_seq\":1", "Hide must not bump copy_seq");
-    SendKey(frontend, uuid, "Control+Shift+V");
+    SendKey(frontend, uuid, "Alt+Shift+C");
     snapshot = ReadDump(dump_path);
     ExpectContains(snapshot, "\"copy_seq\":1", "reopen must not look like a new copy");
     ExpectContains(snapshot, "\"last_copied\":\"\"", "reopen must not restore last_copied");
@@ -898,7 +898,7 @@ void RunCapsuleSuite(fcitx::Instance& instance, fcitx::AddonInstance* frontend,
                     return true;
                 }
                 if (!opened) {
-                    SendKey(frontend, uuid, "Control+Shift+V");
+                    SendKey(frontend, uuid, "Alt+Shift+C");
                     for (int i = 0; i < 5 && ReadDump(dump_path).find("\"module\":\"notes\"") ==
                                                  std::string::npos;
                          ++i)

@@ -61,10 +61,10 @@ statistics files, alongside user dictionaries and learning records.
 - Isolated user directory: `$XDG_DATA_HOME/rimes` (not `…/fcitx5/rime`)
 - Shared data: `$prefix/share/rimes/data` (the 57-file core closure plus 12
   hash-verified native chord files and their Linux manifest)
-- Default Buffer workbench (configurable, default `Ctrl+Shift+B`): Rime commits
+- Default Buffer workbench (configurable, default `Alt+Shift+B`): Rime commits
   stage as blocks, Return tap/hold and the paper plane send through the same
   `commitText` → `commitString` path
-- Capsule rail (configurable, default `Ctrl+Shift+V`): structured/Bullet/rich
+- Capsule rail (configurable, default `Alt+Shift+C`): structured/Bullet/rich
   notes, grouped detail rows and opt-in clipboard history. Text uses native
   `commitString` after an armed-IC recheck; rich clipboard items restore original
   MIME formats for explicit paste. The GTK manager exposes read-only history
@@ -103,8 +103,8 @@ In **Settings → Buffer → 快捷键**, click a recorder and press a combinati
 Escape cancels; unmodified Delete restores that action's default. Duplicate
 bindings and Ctrl/Super+A/V are rejected. The defaults and action titles are
 imported from macOS `ShortcutPreferences.swift`, mapping Command to Ctrl:
-Buffer `Ctrl+Shift+B`, Capsule `Ctrl+Shift+V`, settings `Ctrl+Shift+S`.
-Mailbox uses `Ctrl+Shift+M`; it opens its independent workspace without changing
+Buffer `Alt+Shift+B`, Capsule `Alt+Shift+C`, settings `Alt+Shift+S`.
+Mailbox uses `Alt+Shift+M`; it opens its independent workspace without changing
 the current input method. Super can be selected explicitly in the recorder.
 Global grabs pause during recording and resume on completion, cancellation,
 settings-process exit or a two-minute timeout.
@@ -194,8 +194,9 @@ Use the `fcitx5-rimes_<version>_amd64.deb` and matching `.sha256` attached to
 the project's [GitHub Release](https://github.com/scholay/xsime/releases).
 Older releases may not have a deb; until a release with this asset is
 published, build one locally using the packaging instructions below.
-The release workflow builds on Ubuntu 24.04 amd64. Other Debian/Ubuntu
-versions must satisfy the package's declared dependencies; rebuild on the
+The release workflow builds on Ubuntu 24.04 amd64 and validates the same DEB
+on Ubuntu 26.04 amd64. Versioned engine dependencies stay in its private library
+directory. Other Debian/Ubuntu versions must satisfy the package's declared dependencies; rebuild on the
 target distribution or architecture when they do not. This is a Fcitx5
 package, not an IBus engine.
 
@@ -336,7 +337,7 @@ Buffer/Capsule and control clients, settings/plugin/resource managers, Mailbox,
 gateway and native helpers, ordinary chord data, statistics/practice resources,
 pinned official plugins, private Rime/Lua and reviewed dictionaries. The deferred
 stream-input feature is not part of this Linux delivery.
-The release package targets Ubuntu 24.04 amd64; install with `sudo apt install ./fcitx5-rimes_1.1.5_amd64.deb`. The package manager removes application files while user dictionaries remain in the user data directory.
+The release package targets Ubuntu 24.04 / 26.04 amd64; install with `sudo apt install ./fcitx5-rimes_<version>_amd64.deb`. The package manager removes application files while user dictionaries remain in the user data directory.
 The package recommends `libgtk-layer-shell0`, `wl-clipboard` and the Inter/Noto
 fonts (including emoji). GStreamer base/good/PipeWire plugins and
 `xdg-desktop-portal` are runtime dependencies for capture. Install the portal
@@ -360,7 +361,9 @@ The reusable `linux-deb.yml` workflow builds on Ubuntu 24.04 amd64, runs source
 install/uninstall tests, then installs, upgrades, reinstalls and removes the exact deb
 on a disposable runner. Every phase checks user/CLI data bytes, ownership,
 permissions and directory layout. Installed binary/runtime checks run after
-fresh installation and upgrade. The workflow downloads the highest strictly
+fresh installation and upgrade. A separate Ubuntu 26.04 container installs the
+same DEB, imports and types with a third-party scheme, then removes the package
+while retaining its data. The workflow downloads the highest strictly
 older matching-architecture deb from a published project `v*` Release and verifies
 its checksum and package identity before upgrading it. If no older deb exists,
 it explicitly uses an older-version fixture built from the current payload,

@@ -21,7 +21,7 @@
 입력기 하나로 번역, 생성, 다듬기 같은 일상 작업을, 지금 쓰는 앱을 떠나지 않고 처리합니다. 입력기와 플러그인이 맡습니다.
 
 - **Buffer**(`⌘⇧B`): 확정 전의 텍스트 작업대. 중국어와 영어는 먼저 버퍼로 들어갑니다. 실시간 번역을 하거나, 고른 AI 연결기로 생성하고 고칠 수 있습니다. 확인한 뒤에야 현재 입력칸으로 **명시적으로 전달**합니다.
-- **Capsule**(`⌘⇧V`): 화면 아래의 막대. 방금 복사한 텍스트, 링크, 이미지, 파일, 색은 「최근」에 나타납니다. 오래 남길 것은 노트, 이미지, PDF, 스킬, 비밀번호로 넣습니다.
+- **Capsule**(`⌘⇧C`): 화면 아래의 막대. 방금 복사한 텍스트, 링크, 이미지, 파일, 색은 「최근」에 나타납니다. 오래 남길 것은 노트, 이미지, PDF, 스킬, 비밀번호로 넣습니다.
 - **Mailbox**(`⌘⇧M`): AI 대화, 메모, 검토를 기다리는 외부 알림은 이 창에 남습니다. 새 대화를 만들고 이미 설정한 연결기를 고를 수 있습니다.
 
 ## 주요 기능에 대해
@@ -38,7 +38,7 @@
 |---|---|---|---|---|---|
 | 입력 방안 | — | Rime Ice 완전 병음, 자연마, 소학, 오필 86, XSIME Wubi, 영어 | — | — | — |
 | 버퍼 | `⌘⇧B` | 확정 전의 텍스트 | 먼저 XSIME로 전환한 뒤 잡아 나누어 전달 | — | 다른 입력기로 옮긴 뒤에는 시스템 클립보드만 쓰고 IMK는 쓰지 않음 |
-| Capsule 막대 | `⌘⇧V` | 최근 복사. 노트, 이미지, PDF, 스킬, 비밀번호 | 클릭은 선택, 더블 클릭 또는 Return은 붙여넣기. `⌘S`로 보관 | 이 Mac에만 | 붙여넣기에는 손쉬운 사용 권한이 필요. 없으면 클립보드에만 넣음 |
+| Capsule 막대 | `⌘⇧C` | 최근 복사. 노트, 이미지, PDF, 스킬, 비밀번호 | 클릭은 선택, 더블 클릭 또는 Return은 붙여넣기. `⌘S`로 보관 | 이 Mac에만 | 붙여넣기에는 손쉬운 사용 권한이 필요. 없으면 클립보드에만 넣음 |
 | Mailbox | `⌘⇧M` | AI 대화, 메모, 검토 대기 알림 | 새 대화. 첫 Return에 생성 시작 | 모델은 그 대화에만 묶임 | CLI는 각자 기본 모델 |
 | Capsule 관리 | 톱니 또는 붓 | 다섯 종류. 미리보기와 복사 | 네 번의 병격 뒤에 비밀번호를 봄. 최대 15초 | iCloud는 선택. 비밀번호와 키는 이 Mac에 남김 | 암호는 로컬 요약만 저장 |
 | 설정 | `⌘⇧S` | 단축키, 상태, 동기화, 보안 | 현재 입력기가 XSIME일 때만 열림 | — | Mailbox / Capsule 창을 안에 넣지 않음 |
@@ -81,7 +81,7 @@
 
 ## 설치
 
-[1.1.6 릴리스](https://github.com/scholay/xsime/releases/tag/v1.1.6)에서 macOS PKG, Android APK/AAB, Windows EXE/ZIP, Linux DEB(Ubuntu 24.04 amd64 / Fcitx5)를 받을 수 있습니다. macOS는 서명 및 공증되었고 Android는 기존 장기 서명 키를 사용하며 Windows EXE는 서명되지 않았습니다. iOS는 [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242) / [TestFlight 공개 초대](https://testflight.apple.com/join/Kdj9RB4q)를 이용하세요. 설치 가능한 버전은 Apple 페이지에 표시됩니다. 다섯 플랫폼 모두 동일한 Rime ZIP 또는 입력 코드가 포함된 UTF-8 TXT/TSV 사전을 가져올 수 있습니다. [가져오기 안내](docs/portable-scheme-import.md)와 [1.1.6 검증 기록](docs/releases/1.1.6.md)을 참고하세요. 소스를 받아 로컬에서 빌드할 수도 있습니다.
+[1.2.0 릴리스](https://github.com/scholay/xsime/releases/tag/v1.2.0)에서 macOS PKG, Android APK/AAB, Windows EXE/ZIP, Linux DEB(Ubuntu 24.04 / 26.04 amd64 / Fcitx5)와 재서명용 미서명 iOS IPA를 받을 수 있습니다. macOS는 서명 및 공증되었고 Android는 기존 장기 서명 키를 사용하며 Windows EXE는 서명되지 않았습니다. iOS는 [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242) / [TestFlight 공개 초대](https://testflight.apple.com/join/Kdj9RB4q)를 이용하세요. 설치 가능한 버전은 Apple 페이지에 표시됩니다. 다섯 플랫폼 모두 동일한 Rime ZIP 또는 입력 코드가 포함된 UTF-8 TXT/TSV 사전을 가져올 수 있습니다. [가져오기 안내](docs/portable-scheme-import.md)와 [1.2.0 검증 기록](docs/releases/1.2.0.md)을 참고하세요. 소스를 받아 로컬에서 빌드할 수도 있습니다.
 
 ```bash
 git clone --recurse-submodules https://github.com/scholay/xsime.git

@@ -183,10 +183,11 @@ bool BufferService::IsToggleHotkey(const KeyEvent& event) {
     const auto& key = event.rawKey();
     const bool shift = key.states().test(KeyState::Shift);
     const bool ctrl = key.states().test(KeyState::Ctrl);
+    const bool alt = key.states().test(KeyState::Alt);
     const bool super = key.states().test(KeyState::Super);
     const bool letter_b = key.check(FcitxKey_B) || key.check(FcitxKey_b) ||
                           key.sym() == FcitxKey_B || key.sym() == FcitxKey_b;
-    return letter_b && shift && (ctrl || super) && !(ctrl && super);
+    return letter_b && shift && alt && !ctrl && !super;
 }
 
 bool BufferService::IsReturnKey(const Key& key) {

@@ -21,7 +21,7 @@
 一つの入力メソッドで、翻訳、生成、推敲といった日常の作業を、今開いているアプリを離れずに済ませます。入力メソッドとプラグインが担います。
 
 - **Buffer**（`⌘⇧B`）：確定前のテキスト作業台。中国語も英語も、まずバッファに入ります。リアルタイム翻訳や、選んだ AI コネクタによる生成と書き直しができます。確認したあと、現在の入力欄へ**明示的に送ります**。
-- **Capsule**（`⌘⇧V`）：画面下端のバー。コピーした直後のテキスト、リンク、画像、ファイル、色は「最近」に出ます。残しておきたいものは、ノート、画像、PDF、スキル、パスワードに収めます。
+- **Capsule**（`⌘⇧C`）：画面下端のバー。コピーした直後のテキスト、リンク、画像、ファイル、色は「最近」に出ます。残しておきたいものは、ノート、画像、PDF、スキル、パスワードに収めます。
 - **Mailbox**（`⌘⇧M`）：AI の会話、メモ、確認待ちの外部プッシュは、このウィンドウに残ります。新しい会話を始め、設定済みのコネクタを選べます。
 
 ## 主な機能について
@@ -38,7 +38,7 @@
 |---|---|---|---|---|---|
 | 入力方案 | — | 霧凇全拼、自然碼、小鶴、五筆 86、XSIME Wubi、英語 | — | — | — |
 | バッファ | `⌘⇧B` | 確定前のテキスト | 先に XSIME へ切り替え、取り込んで分割して送る | — | ほかへ切り替えたあとはシステムクリップボードのみ。IMK は使わない |
-| Capsule バー | `⌘⇧V` | 直前のコピー。ノート、画像、PDF、スキル、パスワード | クリックで選択、ダブルクリックまたは Return で貼り付け。`⌘S` で保存 | この Mac のみ | 貼り付けにはアクセシビリティが必要。未許可ならクリップボードへ入れるだけ |
+| Capsule バー | `⌘⇧C` | 直前のコピー。ノート、画像、PDF、スキル、パスワード | クリックで選択、ダブルクリックまたは Return で貼り付け。`⌘S` で保存 | この Mac のみ | 貼り付けにはアクセシビリティが必要。未許可ならクリップボードへ入れるだけ |
 | Mailbox | `⌘⇧M` | AI の会話、メモ、確認待ちのプッシュ | 新しい会話。最初の Return で生成を始める | モデルはその会話だけに結び付く | CLI はそれぞれの既定モデル |
 | Capsule 管理 | 歯車または筆 | 五種類の項目。プレビューとコピー | 四組の並打のあとパスワードを表示。最長 15 秒 | iCloud は任意。パスワードと鍵はこの Mac に残す | 合言葉はローカルのダイジェストだけを保存 |
 | 設定 | `⌘⇧S` | ショートカット、状態、同期、セキュリティ | 現在の入力メソッドが XSIME のときだけ開く | — | Mailbox / Capsule のウィンドウは埋め込まない |
@@ -81,7 +81,7 @@
 
 ## インストール
 
-[1.1.6 リリース](https://github.com/scholay/xsime/releases/tag/v1.1.6)から、macOS PKG、Android APK／AAB、Windows EXE／ZIP、Linux DEB（Ubuntu 24.04 amd64／Fcitx5）をダウンロードできます。macOS は署名・公証済み、Android は従来の長期署名鍵を使用し、Windows EXE は未署名です。iOS は [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242)／[TestFlight 公開招待](https://testflight.apple.com/join/Kdj9RB4q)を利用してください。インストール可能なバージョンは Apple のページに表示されます。5つのプラットフォームで共通の Rime ZIP やコード付き UTF-8 TXT／TSV 辞書を読み込めます。[インポートガイド](docs/portable-scheme-import.md)と[1.1.6 の検証記録](docs/releases/1.1.6.md)を参照してください。ソースからのローカルビルドも可能です。
+[1.2.0 リリース](https://github.com/scholay/xsime/releases/tag/v1.2.0)から、macOS PKG、Android APK／AAB、Windows EXE／ZIP、Linux DEB（Ubuntu 24.04 / 26.04 amd64／Fcitx5）と再署名用の未署名 iOS IPA をダウンロードできます。macOS は署名・公証済み、Android は従来の長期署名鍵を使用し、Windows EXE は未署名です。iOS は [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242)／[TestFlight 公開招待](https://testflight.apple.com/join/Kdj9RB4q)を利用してください。インストール可能なバージョンは Apple のページに表示されます。5つのプラットフォームで共通の Rime ZIP やコード付き UTF-8 TXT／TSV 辞書を読み込めます。[インポートガイド](docs/portable-scheme-import.md)と[1.2.0 の検証記録](docs/releases/1.2.0.md)を参照してください。ソースからのローカルビルドも可能です。
 
 ```bash
 git clone --recurse-submodules https://github.com/scholay/xsime.git

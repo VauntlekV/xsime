@@ -1,0 +1,5 @@
+{
+  "en-US": "Adds personal AI assistant presets and a configurable keyboard shortcut bar. Input schemes and official plugins now use clearer card views. The orthogonal keyboard layout works independently of the chord plugin; choose isaac2026 for Natural Code chord input.\n\nRefines Space-key candidate selection and cursor gestures. Slide two fingers to open or close Buffer, and pinch on Space to bring the current field into Buffer. Hold Send for one second to insert all remaining content; Buffer closes after its last block is sent. Preserves imported schemes, learned words and existing settings.",
+  "zh-Hans": "新增个人 AI 助手预设，可编辑提示词并管理键盘快捷入口。输入方案与官方插件采用更清晰的卡片视图；正交键盘布局可独立使用，选择 isaac2026 后可启用自然码并击。\n\n优化空格键选词与光标手势。支持双指滑动开合 Buffer，在空格上捏合可将当前输入框内容带入 Buffer；长按发送一秒可发送全部剩余内容，最后一块发出后自动收起。保留导入方案、用户词库与现有设置。",
+  "zh-Hant": "新增個人 AI 助手預設，可編輯提示詞並管理鍵盤快捷入口。輸入方案與官方外掛採用更清楚的卡片檢視；正交鍵盤配置可獨立使用，選擇 isaac2026 後可啟用自然碼並擊。\n\n最佳化空白鍵選字與游標手勢。支援雙指滑動開合 Buffer，在空白鍵上捏合可將目前輸入欄位內容帶入 Buffer；長按傳送一秒可傳送全部剩餘內容，最後一塊送出後自動收起。保留匯入方案、使用者詞庫與現有設定。"
+}

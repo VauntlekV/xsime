@@ -321,7 +321,7 @@ jobs:
             [ -d "$resource_bundle" ] || continue
             cp -R "$resource_bundle" "$APP/Contents/Resources/"
           done
-          cp LICENSE NOTICE LICENSING.md ATTRIBUTION.md THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/"
+          cp LICENSE NOTICE LICENSING.md ATTRIBUTION.md THIRD_PARTY_NOTICES.md README.md README.en.md README.ja.md README.ko.md README.es.md "$APP/Contents/Resources/"
           cp -R LICENSES "$APP/Contents/Resources/"
           cp Info.plist "$APP/Contents/Info.plist"
           cp -R Vendor/rime/Frameworks/* "$APP/Contents/Frameworks/"
@@ -1855,7 +1855,7 @@ jobs:
           | macOS（Apple Silicon / Intel） | `RIMES-VERSION_PLACEHOLDER.pkg` | 设置内下载，系统安装器授权安装 |
           | Windows（x64 / x86） | `RIMES-Windows-VERSION_PLACEHOLDER-Setup.exe` | 设置内下载并运行完整安装器，按提示注销或重启 |
           | Android | `RIMES-Android-VERSION_PLACEHOLDER.apk` | 设置内下载，Android 系统确认安装；使用原长期签名 |
-          | Linux（Ubuntu 24.04 amd64） | `fcitx5-rimes_VERSION_PLACEHOLDER_amd64.deb` | 设置内下载，授权系统包管理器安装后重新登录 |
+          | Linux（Ubuntu 24.04 / 26.04 amd64） | `fcitx5-rimes_VERSION_PLACEHOLDER_amd64.deb` | 设置内下载，授权系统包管理器安装后重新登录 |
           | iOS | [App Store](https://apps.apple.com/app/id6814620242) · [TestFlight](https://testflight.apple.com/join/Kdj9RB4q) | 可用版本以 Apple 页面为准；社区 IPA 与签名说明见发布资产 |
 
           旧版尚无更新入口的客户端，首次请下载本版安装包升级；之后可从设置检查、下载并安装。
@@ -1882,14 +1882,15 @@ jobs:
           |------|--------|
           | PKG | `PKG_SHA256_PLACEHOLDER` |
 
-          ### Linux（Ubuntu 24.04 amd64）
+          ### Linux（Ubuntu 24.04 / 26.04 amd64）
           同一 Release 随后附带 `fcitx5-rimes_VERSION_PLACEHOLDER_amd64.deb` 与 `.sha256`。
           用 `sha256sum -c fcitx5-rimes_VERSION_PLACEHOLDER_amd64.deb.sha256` 校验，
           再用 `sudo apt install ./fcitx5-rimes_VERSION_PLACEHOLDER_amd64.deb` 安装或升级。
           `sudo apt remove fcitx5-rimes` 卸载程序并保留用户词库与学习记录。
           安装后执行 `fcitx5 -r`，在 Fcitx5 配置中添加犀术IME；
           [完整安装与卸载说明](https://github.com/scholay/xsime/blob/main/platforms/linux/ime/README.md)。
-          deb 附带固定版本的 Rime/Lua 运行库，其他系统需满足包内依赖，X11/Wayland 桌面体验需单独验收。
+          deb 附带固定版本的 Rime/Lua 与版本化引擎依赖，使用应用私有目录并保留上游许可；
+          其他系统需满足包内依赖，X11/Wayland 桌面体验需单独验收。
           EOF
           /usr/bin/sed -i '' \
             -e "s/VERSION_PLACEHOLDER/$VERSION/g" \

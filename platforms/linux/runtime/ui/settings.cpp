@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstring>
 #include <fstream>
+#include "rimes_product_documents.hpp"
 #include <iostream>
 #include <memory>
 
@@ -39,7 +40,7 @@ struct Settings {
   Json saved = config.Load();
   Json routes = [] { auto value = Visuals().at("routes"); value.push_back(rimes::chord::Contract().at("route"));
     value.push_back({{"id", "extension.statistics"}, {"title", "统计"}, {"icon", "chart.bar.xaxis"}, {"group", "extensions"},
-                    {"subpages", Json::array({{"daily", "每日"}, {"history", "历史"}, {"test-results", "测速成绩"}})}});
+                    {"subpages", Json::array({{"daily", "每日"}, {"history", "热力图"}})}});
     value.push_back({{"id", "extension.typing-speed"}, {"title", "打字测速"}, {"icon", "speedometer"}, {"group", "extensions"},
                     {"subpages", Json::array({{"overview", "文章跟打"}, {"history", "成绩"}})}}); return value; }();
   std::unique_ptr<ChordPane> chord_pane;
@@ -240,7 +241,7 @@ struct Settings {
         return r;
     throw std::runtime_error("Unknown route");
   }
-  void Select(std::string next, const std::string &page = "") {
+  void Select(std::string next, std::string page = "") {
     if (chord_pane && !chord_pane->CanLeave()) return;
     if (practice_pane && !practice_pane->CanLeave()) return;
     chord_pane.reset();
@@ -252,6 +253,7 @@ struct Settings {
 #endif
     ++page_revision;
     shortcut_buttons.clear(); shortcut_status = nullptr;
+    if (next == "extension.statistics" && page == "test-results") { next = "extension.typing-speed"; page = "history"; }
     route = std::move(next);
     const auto &r = Route();
     subpage = page.empty() ? r.at("subpages")[0][0].get<std::string>() : page;
@@ -288,12 +290,6 @@ struct Settings {
     gtk_widget_set_margin_end(feedback, 24);
     Add(tabs, feedback, true);
     Add(content, tabs);
-    auto *heading = Label(
-        route == "core.rimes" ? "关于 XSIME" : r.at("title").get<std::string>(),
-        "heading");
-    gtk_widget_set_size_request(heading, -1, Metric("headingHeight"));
-    gtk_widget_set_margin_start(heading, 24);
-    Add(content, heading);
     auto *scroll = gtk_scrolled_window_new(nullptr, nullptr);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -304,6 +300,7 @@ struct Settings {
     gtk_widget_set_margin_start(body, 24);
     gtk_widget_set_margin_end(body, 24);
     gtk_widget_set_margin_bottom(body, 22);
+    gtk_widget_set_margin_top(body, route.rfind("extension.", 0) == 0 ? 0 : 18);
     gtk_container_add(GTK_CONTAINER(scroll), body);
     if (route == "extension.fly-chord-learning") {
       chord_pane = std::make_unique<ChordPane>(GTK_WINDOW(window), subpage, rendering,
@@ -334,11 +331,36 @@ struct Settings {
       Add(body, Label(subpage == "encoding" ? "输入方案" : "词库", "section"));
       Add(body, Button("导入与管理…", [this] { Launch("rimes-schemes"); }));
       Add(body, Label("导入方案和移除方案均保留学习记录。", "caption"));
-      if (subpage == "encoding") InputHabits(body);
+      if (subpage == "encoding") { BuiltInSchemes(body); InputHabits(body); }
+    } else if (route == "core.rimes" && (subpage == "readme" || subpage == "license")) {
+      auto* document = gtk_text_view_new();
+      gtk_text_view_set_editable(GTK_TEXT_VIEW(document), FALSE);
+      gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(document), FALSE);
+      gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(document), GTK_WRAP_WORD_CHAR);
+      gtk_widget_set_size_request(document, Metric("contentWidth"), -1);
+      const auto& text = subpage == "license" ? rimes::documents::License() : rimes::documents::Readme();
+      gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(document)), text.c_str(), -1);
+      auto* document_scroll = gtk_scrolled_window_new(nullptr, nullptr);
+      gtk_widget_set_size_request(document_scroll, Metric("contentWidth"), 500);
+      gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(document_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+      gtk_container_add(GTK_CONTAINER(document_scroll), document);
+      Add(body, document_scroll, true);
     } else if (route == "core.rimes") {
-      Add(body, Label("XSIME", "heading"));
-      Add(body, Label(std::string("版本 ") + RIMES_PRODUCT_VERSION, "caption"));
-      Add(body, Label("学术海 · 原生中文输入与文本工作台", "section"));
+      auto* hero = Class(Row(20), "settings-hero");
+      auto* logo = gtk_image_new_from_icon_name("rimes", GTK_ICON_SIZE_DIALOG);
+      gtk_image_set_pixel_size(GTK_IMAGE(logo), 88); Add(hero, logo);
+      auto* identity = Column(6);
+      Add(identity, Label("XSIME", "heading"));
+      Add(identity, Label("世界对智者太过挑剔\n好奇的人需要朋友", "section"));
+      Add(identity, Label("The world is too hard on the wise.\nCurious minds need friends.", "caption"));
+      Add(hero, identity, true); Add(body, hero);
+      Add(body, Label(std::string("版本 ") + RIMES_PRODUCT_VERSION + " · 学术海 · librime", "caption"));
+      for (const auto& link : std::vector<std::pair<const char*, const char*>>{
+            {"官网 · xsime.com", "https://xsime.com"}, {"邮箱 · pm@scholay.com", "mailto:pm@scholay.com"},
+            {"开源项目 · scholay / xsime", "https://github.com/scholay/xsime"},
+            {"README", "https://github.com/scholay/xsime/blob/main/README.md"},
+            {"Apache License 2.0", "https://github.com/scholay/xsime/blob/main/LICENSE"}})
+        Add(body, gtk_link_button_new_with_label(link.second, link.first));
       Add(body, Button("检查更新…", [this] { ShowApplicationUpdate(GTK_WINDOW(window)); }));
     } else if (route == "core.maintenance" && subpage == "logs-data") {
       Add(body, Label("用户词库、学习记录和工作台数据", "section"));
@@ -354,6 +376,36 @@ struct Settings {
       Add(body, Label("此页面随对应 Linux 模块接入。", "caption"));
     }
     gtk_widget_show_all(content);
+  }
+  void BuiltInSchemes(GtkWidget* body) {
+    auto* grid = gtk_grid_new(); gtk_grid_set_row_spacing(GTK_GRID(grid), 8); gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+    const std::vector<std::pair<const char*, const char*>> schemes = {{"rime_ice", "雾凇全拼"}, {"double_pinyin", "自然码双拼"}, {"double_pinyin_flypy", "小鹤双拼"},
+      {"wubi86", "五笔 86"}, {"lingxi_wubi", "犀术五笔"}, {"english", "英文"}, {"isaac2026", "isaac2026"}};
+    const auto revision = page_revision; auto life = alive;
+    std::vector<std::pair<std::string, GtkWidget*>> buttons;
+    int index = 0;
+    for (const auto& scheme : schemes) {
+      const std::string id = scheme.first;
+      auto* card = Button(scheme.second, [this, id, life, revision] {
+        if (rendering) return;
+        ChordCall({{"op", "selectBuiltin"}, {"schema", id}}, cancel, [this, life, revision](Json value) {
+          if (!life->load() || revision != page_revision) return;
+          Message(value.value("ok", false) ? "已选择方案，当前组字完成后切换" : value.value("message", std::string("输入法服务暂不可用，请先启用输入法")));
+          if (value.value("ok", false)) Select(route, subpage);
+        });
+      }, "choice-card");
+      gtk_widget_set_size_request(card, 210, 68);
+      gtk_grid_attach(GTK_GRID(grid), card, index % 3, index / 3, 1, 1); ++index;
+      buttons.emplace_back(id, card);
+    }
+    Add(body, grid);
+    if (!rendering) ChordCall({{"op", "status"}}, cancel, [this, life, revision, buttons](Json value) {
+      if (!life->load() || revision != page_revision || !value.value("ok", false)) return;
+      auto selected = value.value("selectedSchema", std::string("rime_ice"));
+      if (selected.empty()) selected = "rime_ice";
+      for (const auto& [id, card] : buttons)
+        if (id == selected || (id == "isaac2026" && rimes::chord::IsChordSchema(selected))) Class(card, "selected");
+    });
   }
   void InputHabits(GtkWidget* body) {
     Add(body, Label("方案输入习惯", "section"));

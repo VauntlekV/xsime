@@ -12,7 +12,7 @@ parser.add_argument('--output', type=Path)
 args = parser.parse_args()
 value = json.loads((folder/'resources/native-practice.json').read_text())
 expected = {'OfficialPlugins/native/macos/'+name+'.swift' for name in
-            ['TypingTestArticles','TypingTestSession','TypingTestHistoryStore','TypingTestTextView','TypingSpeedSettingsViewController']} | {
+            ['TypingTestArticles','TypingTestSession','TypingTestHistoryStore','TypingTestTextView','TypingSpeedSettingsViewController','TypingTestLibrary','TypingTestMaterialColumn','TypingTestTrackView']} | {
             'Sources/RimeBuffer/'+name+'.swift' for name in ['TypingPracticeTelemetry','TypingTestUISmoke','TypingPracticeLinuxFixtures','TypingPracticeLinuxUISmoke','MetricsChartViews','RimeUI']}
 if value.get('purpose') != 'public-typing-practice-contract' or value.get('schemaVersion') != 1 or set(value.get('sources', {})) != expected:
     raise SystemExit('Export the actual native typing practice contract')

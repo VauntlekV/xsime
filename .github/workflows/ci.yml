@@ -623,6 +623,9 @@ jobs:
           "$BIN" gateway-settings-render "$RUNNER_TEMP/native-gateway-settings/gateway"
           "$BIN" codex-settings-render "$RUNNER_TEMP/native-gateway-settings/codex"
           "$BIN" claude-settings-render "$RUNNER_TEMP/native-gateway-settings/claude"
+          "$BIN" chord-linux-fixtures "$RUNNER_TEMP/native-gateway-settings/native-chord.json"
+          "$BIN" typing-practice-linux-fixtures "$RUNNER_TEMP/native-gateway-settings/native-practice.json"
+          "$BIN" typing-practice-linux-ui "$RUNNER_TEMP/native-gateway-settings/practice-dashboard"
 
       - name: Save native settings contracts and renderings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -750,12 +753,12 @@ jobs:
             dimensions="$(sips -g pixelWidth -g pixelHeight "$OUTPUT"/*.png | \
               awk '/pixelWidth:/{w=$2}/pixelHeight:/{print w"x"$2}' | sort -u)"
             echo "mode=$MODE pngs=$png_count routes=$route_count dimensions=$dimensions"
-            # A clean profile renders 23 core subpages (including six RIMES tabs, Mailbox and
-            # its plugin-management tab), 3 statistics pages, and 2 typing-speed
-            # pages. The optional Chording extension adds four after enablement.
+            # A clean profile renders 24 routes: XSIME content is inline and
+            # typing history belongs to typing practice, not Statistics.
+            # Optional Chording routes appear only after enablement.
             test "$png_count" = "$route_count"
-            test "$png_count" = '28'
-            test "$route_count" = '28'
+            test "$png_count" = '24'
+            test "$route_count" = '24'
             test "$translation_route_count" = '0'
             # bitmapImageRepForCachingDisplay follows the hosted runner's
             # backing scale. A headless 1x runner and a Retina 2x runner both

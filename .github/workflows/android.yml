@@ -53,6 +53,8 @@ jobs:
           sdkmanager_path="${ANDROID_HOME:?}/cmdline-tools/latest/bin/sdkmanager"
           test -x "$sdkmanager_path"
           "$sdkmanager_path" 'platforms;android-37.2' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+      - name: Verify shared assistant starter translations
+        run: python3 scripts/verify-assistant-starters.py
       - name: Build both native ABIs and offline dictionaries
         run: python3 scripts/build-engine.py
       - name: Run real Android x86_64 engine and learning contracts
@@ -123,6 +125,12 @@ jobs:
           grep -Fq 'PASS native keycaps, chord and Buffer rail rendering' .native/rendering-emulator.log
           grep -Fq 'CHORD_SURFACE checks=' .native/rendering-emulator.log
           grep -Fq 'INSTRUMENTATION_CODE: -1' .native/rendering-emulator.log
+          adb -s emulator-5554 shell am instrument -w -r -e mode space-touch org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation | tee .native/space-touch-emulator.log
+          grep -Fq 'PASS native space touch checks=' .native/space-touch-emulator.log
+          grep -Fq 'INSTRUMENTATION_CODE: -1' .native/space-touch-emulator.log
+          adb -s emulator-5554 shell am instrument -w -r -e mode buffer-hold org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation | tee .native/buffer-hold-emulator.log
+          grep -Fq 'PASS native Buffer hold checks=' .native/buffer-hold-emulator.log
+          grep -Fq 'INSTRUMENTATION_CODE: -1' .native/buffer-hold-emulator.log
           # Exercise real service entry points, including TYPE_NULL editor
           # classification and private-field delivery, on Android's main Looper.
           adb -s emulator-5554 shell am instrument -w -r -e mode upward-number org.scholay.rimes.android.debug.test/org.scholay.rimes.android.EngineInstrumentation | tee .native/upward-emulator.log

@@ -32,8 +32,7 @@ jobs:
 
       - name: Install distro build and package dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake extra-cmake-modules pkg-config gettext \
+          bash scripts/ci/install-ubuntu-packages.sh build-essential cmake extra-cmake-modules pkg-config gettext \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev fcitx5-modules-dev \
             fcitx5 fcitx5-modules fcitx5-frontend-gtk3 librime-dev librime-plugin-lua librime-bin \
             libgtk-3-dev libvte-2.91-dev libicu-dev libsqlite3-dev libpoppler-glib-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libportal-dev \
@@ -86,6 +85,24 @@ jobs:
           else
             platforms/linux/ime/tests/deb_lifecycle.sh "${packages[0]}"
           fi
+
+      - name: Install the same private-runtime deb on Ubuntu 26.04
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/amd64 \
+            -e DEBIAN_FRONTEND=noninteractive -e TZ=Etc/UTC \
+            -v "$RUNNER_TEMP/rimes-deb:/packages:ro" \
+            -v "$RUNNER_TEMP/wanxiang-original.zip:/fixtures/wanxiang.zip:ro" \
+            ubuntu:26.04 bash -ceu '
+              apt-get update
+              apt-get install -y /packages/*.deb
+              if ldd /usr/bin/rimes-schemes | grep -q "not found"; then exit 1; fi
+              /usr/bin/rimes-schemes --import /tmp/portable-import /fixtures/wanxiang.zip wanxiang
+              /usr/bin/rimes-schemes --verify /tmp/portable-import nihao 你好
+              printf "preserve\n" > /tmp/portable-import/keep-user-data
+              apt-get remove -y fcitx5-rimes
+              test -f /tmp/portable-import/keep-user-data
+            '
 
       - name: Name the immutable package artifact
         id: artifact

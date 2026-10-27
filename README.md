@@ -37,7 +37,7 @@
 让你通过一个输入法，实现智能时代的翻译、生成、润色等日常需求，且无需离开当前操作的应用程序，全程由输入法及插件来解决:
 
 - **Buffer**（`⌘⇧B`）：上屏前的文本工作台。中文 / 英文先进入缓冲，可实时翻译，或使用选定的 AI 连接器生成和改写；你确认后， **显式投递**到当前输入框。
-- **Capsule**（`⌘⇧V`）：屏幕底部的底栏。刚复制的文本、链接、图片、文件和颜色先出现在「最近」；要长期留下的，收进笔记、图片、PDF、技能或密码。
+- **Capsule**（`⌘⇧C`）：屏幕底部的底栏。刚复制的文本、链接、图片、文件和颜色先出现在「最近」；要长期留下的，收进笔记、图片、PDF、技能或密码。
 - **Mailbox**（`⌘⇧M`）：AI 会话、备注和待审核的外部推送都留在这个窗口里。可以新建对话并选择已配置的连接器。
 
 ## 主要能力须知
@@ -54,7 +54,7 @@
 |---|---|---|---|---|---|
 | 输入方案 | — | 雾凇全拼、自然码、小鹤、五笔 86、犀术五笔、英文 | — | — | — |
 | 缓冲工作台 | `⌘⇧B` | 上屏前的文本 | 先切到 XSIME，再捕获、分块投递 | — | 切走后只走系统剪贴板，不走 IMK |
-| Capsule 底栏 | `⌘⇧V` | 最近复制；笔记、图片、PDF、技能、密码 | 单击选择，双击或 Return 粘贴。`⌘S` 收录 | 只在本机 | 粘贴需辅助功能；未授权则只进剪贴板 |
+| Capsule 底栏 | `⌘⇧C` | 最近复制；笔记、图片、PDF、技能、密码 | 单击选择，双击或 Return 粘贴。`⌘S` 收录 | 只在本机 | 粘贴需辅助功能；未授权则只进剪贴板 |
 | Mailbox | `⌘⇧M` | AI 会话、备注、待审核推送 | 新建对话；首次 Return 才生成 | 模型只绑定该会话 | CLI 用默认模型 |
 | Capsule 管理 | 齿轮或画笔 | 五类条目，可预览和复制 | 四组并击后查看密码，最多 15 秒 | 可选 iCloud；密码与密钥留本机 | 口令只存本机摘要 |
 | 设置 | `⌘⇧S` | 快捷键、状态、同步与安全 | 仅 XSIME 为当前输入法时打开 | — | 不嵌入 Mailbox / Capsule 窗口 |
@@ -110,17 +110,17 @@
 
 ## 安装
 
-[1.1.8 全平台发布页](https://github.com/scholay/xsime/releases/tag/v1.1.8)集中提供 macOS PKG、Android APK／AAB、Windows EXE／ZIP、Linux DEB 和 iOS 社区 IPA。本版改进五端方案偏好、移动端键盘和桌面端日常使用体验。五端均提供第三方 Rime 方案导入入口，支持同一份标准 ZIP 及带编码的 UTF-8 TXT／TSV；方案 ZIP 上限为 2 GiB，格式与边界见[导入指南](docs/portable-scheme-import.md)。
+[1.2.0 全平台发布页](https://github.com/scholay/xsime/releases/tag/v1.2.0)集中提供 macOS PKG、Android APK／AAB、Windows EXE／ZIP、Linux DEB 和 iOS 社区 IPA。本版同步移动端助手、键盘手势与 Buffer 操作，并完善桌面设置、EPUB 素材和双轨跟打。五端均提供第三方 Rime 方案导入入口，支持同一份标准 ZIP 及带编码的 UTF-8 TXT／TSV；方案 ZIP 上限为 2 GiB，格式与边界见[导入指南](docs/portable-scheme-import.md)。
 
 | 平台 | 版本与安装入口 |
 |---|---|
-| macOS | [1.1.8 PKG](https://github.com/scholay/xsime/releases/download/v1.1.8/RIMES-1.1.8.pkg)，Apple Silicon／Intel，已签名和公证 |
-| Android | [1.1.8 APK](https://github.com/scholay/xsime/releases/download/v1.1.8/RIMES-Android-1.1.8.apk)，版本码 22，沿用长期签名 |
-| Windows | [1.1.8 EXE](https://github.com/scholay/xsime/releases/download/v1.1.8/RIMES-Windows-1.1.8-Setup.exe)，x64 系统，包含 x64／x86 TSF；EXE 未签名 |
-| Linux | [1.1.8 DEB](https://github.com/scholay/xsime/releases/download/v1.1.8/fcitx5-rimes_1.1.8_amd64.deb)，Ubuntu 24.04 amd64／Fcitx5 |
-| iOS | [1.1.8（64）社区 IPA](https://github.com/scholay/xsime/releases/download/v1.1.8/XSIME-1.1.8-64-ios-unsigned.ipa)，需[自行签名](https://github.com/scholay/xsime/releases/download/v1.1.8/XSIME-1.1.8-64-ios-README.txt)；[App Store 1.1.8 已上线](https://apps.apple.com/app/id6814620242) / [TestFlight 公开邀请](https://testflight.apple.com/join/Kdj9RB4q)，外部 TestFlight 仍待单独审核 |
+| macOS | [1.2.0 PKG](https://github.com/scholay/xsime/releases/download/v1.2.0/RIMES-1.2.0.pkg)，Apple Silicon／Intel，已签名和公证 |
+| Android | [1.2.0 APK](https://github.com/scholay/xsime/releases/download/v1.2.0/RIMES-Android-1.2.0.apk)，版本码 23，沿用长期签名 |
+| Windows | [1.2.0 EXE](https://github.com/scholay/xsime/releases/download/v1.2.0/RIMES-Windows-1.2.0-Setup.exe)，x64 系统，包含 x64／x86 TSF；EXE 未签名 |
+| Linux | [1.2.0 DEB](https://github.com/scholay/xsime/releases/download/v1.2.0/fcitx5-rimes_1.2.0_amd64.deb)，Ubuntu 24.04 / 26.04 amd64／Fcitx5 |
+| iOS | [1.2.0 社区 IPA 与签名说明](https://github.com/scholay/xsime/releases/tag/v1.2.0)，需自行签名；[App Store](https://apps.apple.com/app/id6814620242) / [TestFlight 公开邀请](https://testflight.apple.com/join/Kdj9RB4q)，可用版本及审核状态以 Apple 页面为准 |
 
-本轮构建、导入测试与安装验收范围见[1.1.8 发布记录](docs/releases/1.1.8.md)。
+本轮构建、导入测试与安装验收范围见[1.2.0 发布记录](docs/releases/1.2.0.md)。
 
 macOS 27 有用户报告：安装后在 App Store 沙盒版微信、QQ 中切换到 XSIME，宿主应用可能闪退。若遇到这一情况，先切回其他输入法，参考[按应用备份输入源缓存的恢复指引](docs/macos/input-source-cache-recovery.md)。安装器不会清理其他应用的缓存；重启应用或退出登录并不保证解决此问题。调查进度见 [#90](https://github.com/scholay/xsime/issues/90)。
 
@@ -167,7 +167,7 @@ cd xsime
 | macOS | 下载已签名、公证的 PKG，交给 macOS Installer 安装 |
 | Windows | 下载完整 EXE 并安装；当前 EXE 未签名 |
 | Android | 下载沿用长期签名的 APK，在系统安装器确认升级 |
-| Linux | Ubuntu 24.04 amd64 下载 DEB，授权系统包管理器安装 |
+| Linux | Ubuntu 24.04 / 26.04 amd64 下载 DEB，授权系统包管理器安装 |
 | iOS | 检查实际可用的商店版本，前往 App Store 下载和安装；测试版由 TestFlight 更新 |
 
 旧版尚未提供完整更新入口时，请先从上方下载表手动升级一次。GitHub 发布新版本不代表 iOS 同版已上架，以 Apple 页面为准。

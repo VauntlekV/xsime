@@ -214,3 +214,8 @@ The Linux capture and preview helpers dynamically use the distribution's GStream
 ## Linux Mailbox terminal
 
 The interactive terminal dynamically links the distribution's GTK VTE library (0.76 or later). VTE source and component notices are at <https://github.com/GNOME/vte/tree/0.76.0>, including `COPYING.LGPL3`, `COPYING.GPL3`, and `COPYING.XTERM`; the distribution package supplies its copyright and corresponding source information. The deb resolves VTE through system package dependencies. The bounded file-preview helper uses the distribution's GdkPixbuf raster decoders. No VTE or GdkPixbuf binary is vendored in this repository.
+
+
+## Linux private engine dependencies
+
+The Linux deb may carry the build distribution's versioned ICU and engine helper libraries under its private `usr/lib/<architecture>/rimes/` directory. They retain their upstream SONAMEs and do not replace system libraries. The exact library names, source package versions and original redistribution notices are shipped in `usr/share/doc/fcitx5-rimes/third-party/runtime-libraries.tsv` and the adjacent `*-copyright` files. GTK, Fcitx, libc, GStreamer and the system C++ runtime remain system dependencies.

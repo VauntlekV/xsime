@@ -29,6 +29,7 @@ public:
     void selectCandidate(int index);
     void page(bool next);
     void refreshCandidates();
+    void requestSchema(const std::string& schema);
     void applySnapshot(const rimes::linuxime::EngineSnapshot& snapshot);
     std::string schemaId() const { return schema_id_; }
     bool composing() const { return composing_ || chord_.Pending() || !native_chord_down_.empty(); }

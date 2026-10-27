@@ -185,7 +185,7 @@ int main(int argc, char** argv) {
                         }
                         driver = std::thread([&, frontend, uuid] {
                             try {
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Command(root, "select_plugin", "builtin.claude-code-cli");
                                 Command(root, "paste", "公开原文🙂");
                                 Wait([&] { return Snapshot(root).can_generate; },
@@ -254,7 +254,7 @@ int main(int argc, char** argv) {
                                       "final delivery did not consume source");
                                 home.Remove("release-text");
                                 home.Remove("text-started");
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Command(root, "paste", "取消后的公开原文");
                                 Wait([&] { return Snapshot(root).can_generate; },
                                      "second request unavailable");
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
                                 // A changed source invalidates the request before a late result.
                                 home.Remove("release-text");
                                 home.Remove("text-started");
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Wait([&] { return Snapshot(root).can_generate; },
                                      "reopen unavailable");
                                 Command(root, "generate");
@@ -313,7 +313,7 @@ int main(int argc, char** argv) {
 
                                 home.Remove("release-text");
                                 home.Remove("text-started");
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Wait(
                                     [&] {
                                         return Snapshot(root).visible &&

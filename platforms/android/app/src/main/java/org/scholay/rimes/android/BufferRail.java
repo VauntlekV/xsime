@@ -3,6 +3,8 @@ package org.scholay.rimes.android;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PathMeasure;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -18,6 +20,21 @@ import java.util.Map;
 /** Ephemeral block projection. Visible chips never change the text delivered to the host. */
 final class BufferRail extends HorizontalScrollView {
     private final Content content;
+    private float sendProgress;
+    private final Paint sendPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    void sendProgress(float value) { sendProgress=Math.max(0,Math.min(1,value));invalidate(); }
+    @Override protected void dispatchDraw(Canvas canvas) {
+        super.dispatchDraw(canvas);
+        if(sendProgress<=0 || content.palette==null) return;
+        int saved=canvas.save();canvas.translate(getScrollX(),getScrollY());
+        float inset=dp(1);RectF box=new RectF(inset,inset,getWidth()-inset,getHeight()-inset);
+        Path outline=new Path();outline.addRoundRect(box,dp(7),dp(7),Path.Direction.CW);
+        canvas.clipPath(outline);
+        PathMeasure measure=new PathMeasure(outline,false);Path segment=new Path();
+        measure.getSegment(0,measure.getLength()*sendProgress,segment,true);
+        sendPaint.setColor(content.palette.accent);sendPaint.setStyle(Paint.Style.STROKE);sendPaint.setStrokeWidth(dp(2));sendPaint.setStrokeCap(Paint.Cap.ROUND);
+        canvas.drawPath(segment,sendPaint);canvas.restoreToCount(saved);
+    }
     private List<String> lastBlocks=Collections.emptyList();
     private List<String> lastSource;
     private String lastComposition="";
@@ -71,7 +88,7 @@ final class BufferRail extends HorizontalScrollView {
     }
     /** Scrub old-target text, drawing caches and accessibility together. */
     void clearProjection() {
-        removeCallbacks(followCaret); followPending=false; lastBlocks=Collections.emptyList(); lastSource=null; lastComposition=""; lastTheme=null;
+        sendProgress(0);removeCallbacks(followCaret); followPending=false; lastBlocks=Collections.emptyList(); lastSource=null; lastComposition=""; lastTheme=null;
         placeholder="输入内容暂存于此"; content.clear(); setContentDescription(null); scrollTo(0,0); content.requestLayout(); content.invalidate();
     }
     int visibleChipCount() { return content.visibleChips; }

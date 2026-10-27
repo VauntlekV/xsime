@@ -34,7 +34,7 @@ does nothing under another IM (including stock `fcitx5-rime`). The
 
 1. **Direct still works.** With Capsule hidden, type `nihao` + Space. The
    field contains `你好` and no leftover `nihao`.
-2. **Open Capsule.** Press `Ctrl+Shift+V` (or `Super+Shift+V`). The rail
+2. **Open Capsule.** Press `Alt+Shift+C`. The rail
    appears at the bottom. The host keeps keyboard focus — the next click
    must not type into the Capsule window itself.
 3. **Seed card.** The 笔记 tab shows `RIMES 默认词条` (or your own notes).
@@ -56,7 +56,7 @@ does nothing under another IM (including stock `fcitx5-rime`). The
    Status must leave armed even if you wait a few seconds. Press Return
    in the new field: Capsule must **not** insert `RIMES` there. In the
    new field press Escape: that app must receive Escape; Capsule may stay
-   visible. One `Ctrl+Shift+V` on the new field **re-arms**; a second
+   visible. One `Alt+Shift+C` on the new field **re-arms**; a second
    press closes. Do not insert until it is re-armed.
 8. **Password.** Click a password field in a GTK host that keeps the IM
    enabled. Capsule must refuse to arm / hide. Typed secrets must not
@@ -67,7 +67,7 @@ does nothing under another IM (including stock `fcitx5-rime`). The
 9. **Copy.** Open Capsule, press `Ctrl+C`. Paste into the host with the
    host's own paste (`Ctrl+Shift+V` in a terminal, `Ctrl+V` elsewhere).
    You get `RIMES`. Capsule itself must not synthesize Ctrl+V.
-10. **Buffer priority.** Open Buffer (`Ctrl+Shift+B`), stage `你好`, then
+10. **Buffer priority.** Open Buffer (`Alt+Shift+B`), stage `你好`, then
     open Capsule. Return must send the Buffer chip, not a Capsule note.
     Pause Buffer, then Return inserts the selected note.
 11. **X11 placement.** On Xfce the rail sits at the **bottom**, about

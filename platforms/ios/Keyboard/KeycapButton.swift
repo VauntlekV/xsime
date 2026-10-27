@@ -67,6 +67,31 @@ enum KeycapStyle {
     }
 }
 
+extension KeycapStyle {
+    /// Space is one ordinary cap; where it is pressed shows as a ripple (see `SpaceCursorButton`), never a hard split.
+    static func drawSplitSpace(in rect: CGRect, enabled: Bool = true, compact: Bool = false,
+                               theme: StatusSkin, legacy: Bool) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        let palette = theme.palette, system = theme.keyboardStyle == .system
+        let snapped = pixelSnapped(rect)
+        let box = system ? snapped.insetBy(dx: 0, dy: 0.5) : capRect(in: snapped, pressed: false, compact: compact)
+        let radius: CGFloat = system ? cornerRadius : (compact ? 3 : cornerRadius)
+        context.saveGState()
+        if !enabled { context.setAlpha(0.4) }
+        if legacy {
+            UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0, alpha: 0.6) : UIColor(red: 0.54, green: 0.54, blue: 0.56, alpha: 1) }.setFill()
+            UIBezierPath(roundedRect: box.offsetBy(dx: 0, dy: 1), cornerRadius: radius).fill()
+        }
+        let cap = UIBezierPath(roundedRect: legacy ? box.offsetBy(dx: 0, dy: -0.5) : box, cornerRadius: radius)
+        (system && !legacy ? palette.key.withAlphaComponent(translucentKeyAlpha) : palette.key).setFill(); cap.fill()
+        if !system {
+            UIColor.label.withAlphaComponent(0.10).setStroke()
+            cap.lineWidth = 0.7; cap.stroke()
+        }
+        context.restoreGState()
+    }
+}
+
 class KeycapButton: UIButton {
     var theme: StatusSkin = .rhino { didSet { if oldValue != theme { updateAppearance() } } }
     var skin: KeyboardSkin { theme.keyboardStyle }
@@ -148,6 +173,9 @@ struct InsertionPress {
 
 final class InsertKeycapButton: KeycapButton {
     var onPressBegan: (() -> Void)?
+    /// Hold progress for the edge line: began (with the hold length), cancelled by a tap or a slide off, or completed.
+    enum HoldPhase: Equatable { case began(TimeInterval), cancelled, completed }
+    var onHoldProgress: ((HoldPhase) -> Void)?
     var onInsert: ((InsertionPress.Action) -> Void)?
     private var press = InsertionPress()
     private var holdTimer: Timer?
@@ -158,19 +186,20 @@ final class InsertKeycapButton: KeycapButton {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var isEnabled: Bool { didSet { if !isEnabled { cancelPress() } } }
-    func cancelPress() { holdTimer?.invalidate(); holdTimer = nil; press.cancel(); isHighlighted = false }
+    func cancelPress() { holdTimer?.invalidate(); holdTimer = nil; press.cancel(); isHighlighted = false; onHoldProgress?(.cancelled) }
     override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         guard super.beginTracking(touch, with: event) else { return false }
         onPressBegan?()
         let now = ProcessInfo.processInfo.systemUptime
         press.begin(at: now); deadline = now + InsertionPress.holdDuration
+        onHoldProgress?(.began(InsertionPress.holdDuration))
         scheduleHold(); return true
     }
     private func scheduleHold() {
         holdTimer?.invalidate()
         let timer = Timer(timeInterval: max(0.001, deadline - ProcessInfo.processInfo.systemUptime), repeats: false) { [weak self] _ in
             guard let self else { return }
-            if let action = self.press.advance(to: ProcessInfo.processInfo.systemUptime) { self.onInsert?(action) }
+            if let action = self.press.advance(to: ProcessInfo.processInfo.systemUptime) { self.onHoldProgress?(.completed); self.onInsert?(action) }
             else if self.isTracking && self.isEnabled { self.scheduleHold() }
         }
         holdTimer = timer; RunLoop.main.add(timer, forMode: .common)
@@ -183,6 +212,7 @@ final class InsertKeycapButton: KeycapButton {
         holdTimer?.invalidate(); holdTimer = nil
         let action = press.end(at: ProcessInfo.processInfo.systemUptime, inside: touch.map { bounds.contains($0.location(in: self)) } ?? false)
         super.endTracking(touch, with: event)
+        onHoldProgress?(action == .all ? .completed : .cancelled)
         if let action { onInsert?(action) }
     }
     override func cancelTracking(with event: UIEvent?) { cancelPress(); super.cancelTracking(with: event) }
@@ -211,46 +241,255 @@ struct CursorDrag {
     }
 }
 
-/// Space: a tap types; holding it and dragging moves by one character per step,
-/// and releasing then types nothing. The controller assigns selection or caret
-/// movement to each independent Space key.
+/// Where a finger lands on Space. The middle third is the cursor zone.
+enum SpaceZone { case left, center, right }
+
+/// Gesture logic of Space, kept apart from UIKit so it can be driven directly. Space is one cap with a
+/// left, a middle and a right part, and everything but a plain tap is a gesture:
+/// - Tap: a space.
+/// - Slide sideways with one finger: sweep the candidates. The finger's place across Space maps to the
+///   visible words (left edge first, middle the middle word, right edge last), so left to right, middle to
+///   either side and right to left all work. Lifting commits the highlighted word.
+/// - Slide up or down with one finger: the candidate lines roll (finger up is the next line) with no word
+///   selected; lifting leaves the row on that line.
+/// - Hold the middle for 1 s: cursor mode; sliding sideways moves the caret.
+/// - Two fingers pinching from the sides to the middle: put the field's text straight into the Buffer, replacing
+///   whatever it holds. Two fingers sliding together: up opens the Buffer, down closes it. Whichever movement is
+///   larger decides, so a slide whose fingers drift together is not mistaken for a pinch.
+final class SplitSpaceMachine {
+    static let cursorHold: TimeInterval = 1.0
+    static let slop: CGFloat = 8
+    static let caretStep: CGFloat = 10, slideStep: CGFloat = 24, pairSlop: CGFloat = 16, pairSlide: CGFloat = 24
+    enum Role { case undecided, sweep, roller, cursor, pinch, paired, dead }
+    struct Press {
+        var start: CGPoint
+        var last: CGPoint
+        var anchor: CGPoint
+        var role = Role.undecided
+        var slid = false
+    }
+    private(set) var presses: [Int: Press] = [:]
+    /// Width of the Space cap, set by the view.
+    var width: CGFloat = 200
+    var onTap: () -> Void = {}
+    /// Sweep: begin returns false when there are no candidates. Move gets the finger's place, 0...1 across Space.
+    var onSweepBegan: () -> Bool = { false }
+    var onSweepMove: (CGFloat) -> Void = { _ in }
+    var onSweepEnded: (Bool) -> Void = { _ in }
+    /// Roller: one call per line, +1 next (finger up), -1 previous.
+    var onRollerBegan: () -> Bool = { false }
+    var onRoll: (Int) -> Void = { _ in }
+    var onRollerEnded: () -> Void = {}
+    var onCursorBegan: () -> Bool = { false }
+    var onCursorMove: (Int) -> Void = { _ in }
+    var onCursorEnded: () -> Void = {}
+    var onPinch: () -> Void = {}
+    /// Two fingers sliding together: +1 up, -1 down. Fires once.
+    var onPairSlide: (Int) -> Void = { _ in }
+    var onChange: () -> Void = {}
+    var isActive: Bool { !presses.isEmpty }
+    func zone(at x: CGFloat) -> SpaceZone { x < width / 3 ? .left : x > width * 2 / 3 ? .right : .center }
+
+    func down(_ id: Int, at point: CGPoint) {
+        var press = Press(start: point, last: point, anchor: point)
+        // A finger joining one that is already sweeping, rolling or in cursor mode is ignored.
+        if presses.values.contains(where: { [.sweep, .roller, .cursor].contains($0.role) }) { press.role = .dead }
+        presses[id] = press; onChange()
+    }
+    /// The cursor hold elapsed for a still finger in the middle.
+    func holdElapsed(_ id: Int) {
+        guard var press = presses[id], press.role == .undecided, !press.slid, presses.count == 1,
+              zone(at: press.start.x) == .center else { return }
+        press.role = onCursorBegan() ? .cursor : .dead
+        press.anchor = press.last; presses[id] = press; onChange()
+    }
+    private func fraction(_ x: CGFloat) -> CGFloat { min(max(x / max(1, width), 0), 1) }
+    func move(_ id: Int, to point: CGPoint) {
+        guard var press = presses[id] else { return }
+        press.last = point
+        func roll(_ press: inout Press) {
+            let rows = Int(((point.y - press.anchor.y) / Self.slideStep).rounded(.towardZero))
+            if rows != 0 {
+                press.anchor.y += CGFloat(rows) * Self.slideStep
+                // Finger up turns to the next line, as dragging a list up does.
+                for _ in 0..<abs(rows) { onRoll(rows < 0 ? 1 : -1) }
+            }
+        }
+        switch press.role {
+        case .undecided:
+            if presses.count == 2, let other = presses.first(where: { $0.key != id && $0.value.role == .undecided }) {
+                presses[id] = press
+                evaluatePair(id, other.key); return
+            }
+            guard presses.count == 1, hypot(point.x - press.start.x, point.y - press.start.y) > Self.slop else { presses[id] = press; return }
+            press.slid = true
+            if abs(point.y - press.start.y) > abs(point.x - press.start.x) {
+                press.role = onRollerBegan() ? .roller : .dead; press.anchor = press.start
+                if press.role == .roller { roll(&press) }
+            } else if onSweepBegan() {
+                press.role = .sweep; onSweepMove(fraction(point.x))
+            } else { press.role = .dead }
+        case .sweep: onSweepMove(fraction(point.x))
+        case .roller: roll(&press)
+        case .cursor:
+            let count = Int(((point.x - press.anchor.x) / Self.caretStep).rounded(.towardZero))
+            if count != 0 { press.anchor.x += CGFloat(count) * Self.caretStep; onCursorMove(count) }
+        case .pinch, .paired, .dead: break
+        }
+        presses[id] = press; onChange()
+    }
+    /// Two undecided fingers decide once, by whichever movement is larger. Moving toward each other is a pinch (the
+    /// Buffer takes the field's text); both moving the same way vertically is a slide (up opens the Buffer, down
+    /// closes it). A slide whose fingers also drift together stays a slide, and a pinch with a little wobble a pinch.
+    private func evaluatePair(_ a: Int, _ b: Int) {
+        guard let p = presses[a], let q = presses[b] else { return }
+        let gapChange = abs(p.last.x - q.last.x) - abs(p.start.x - q.start.x)
+        let dyP = p.last.y - p.start.y, dyQ = q.last.y - q.start.y
+        let together = (dyP > 0) == (dyQ > 0) ? (abs(dyP) + abs(dyQ)) / 2 : 0
+        let sameWay = min(abs(dyP), abs(dyQ)) >= Self.pairSlide / 2
+        func settle(_ role: Role) { for id in [a, b] { presses[id]?.role = role; presses[id]?.slid = true } }
+        if sameWay, together >= Self.pairSlide, together > abs(gapChange) {
+            settle(.paired); onPairSlide(dyP < 0 ? 1 : -1)
+        } else if -gapChange > Self.pairSlop, -gapChange > together {
+            settle(.pinch); onPinch()
+        }
+        onChange()
+    }
+    func up(_ id: Int) {
+        guard let press = presses.removeValue(forKey: id) else { return }
+        switch press.role {
+        case .undecided: if !press.slid && presses.values.allSatisfy({ $0.role != .pinch && $0.role != .paired }) { onTap() }
+        case .sweep: onSweepEnded(true)
+        case .roller: onRollerEnded()
+        case .cursor: onCursorEnded()
+        case .pinch, .paired, .dead: break
+        }
+        onChange()
+    }
+    func cancelAll() {
+        let all = presses; presses = [:]
+        for press in all.values {
+            switch press.role {
+            case .sweep: onSweepEnded(false)
+            case .roller: onRollerEnded()
+            case .cursor: onCursorEnded()
+            default: break
+            }
+        }
+        if !all.isEmpty { onChange() }
+    }
+}
+
+/// Space, drawn as two halves with a thin seam and chamfered outer corners. See `SplitSpaceMachine`.
 final class SpaceCursorButton: KeycapButton {
-    var onCursorBegan: (() -> Bool)?
-    var onCursorMove: ((Int) -> Void)?
-    private var drag = CursorDrag()
-    private var holdTimer: Timer?
-    private var lastX: CGFloat = 0
-    private var suppressTap = false
-    var isMovingCursor: Bool { drag.active }
-    /// False once a hold has turned this press into caret movement.
-    func consumeTap() -> Bool { defer { suppressTap = false }; return !suppressTap }
-    override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-        finish(); suppressTap = false; lastX = touch.location(in: self).x
-        let timer = Timer(timeInterval: CursorDrag.holdDuration, repeats: false) { [weak self] _ in self?.beginCursor(requireTracking: true) }
-        holdTimer = timer; RunLoop.main.add(timer, forMode: .common)
-        return super.beginTracking(touch, with: event)
+    let machine = SplitSpaceMachine()
+    /// Ripples spread from each finger inside the cap, so the pressed side is felt without a seam.
+    private let rippleHost = CALayer()
+    private let rippleMask = CAShapeLayer()
+    private var glows: [Int: CAGradientLayer] = [:]
+    /// The current input mode, in small grey letters at the lower right, as on Apple's Space bar.
+    var modeLabel = "" { didSet { if oldValue != modeLabel { setNeedsDisplay() } } }
+    private var touchIDs: [ObjectIdentifier: Int] = [:]
+    private var nextID = 0
+    private var timers: [Int: Timer] = [:]
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = true
+        rippleHost.mask = rippleMask; rippleHost.masksToBounds = true
+        layer.addSublayer(rippleHost)
+        machine.onTap = { [weak self] in self?.sendActions(for: .touchUpInside) }
+        machine.onChange = { [weak self] in self?.setNeedsDisplay() }
     }
-    func beginCursor(requireTracking: Bool) {
-        holdTimer?.invalidate(); holdTimer = nil
-        guard isTracking || !requireTracking, !drag.active, onCursorBegan?() == true else { return }
-        drag.activate(at: lastX); suppressTap = true; isSelected = true
+    required init?(coder: NSCoder) { fatalError() }
+    /// Kept for callers that cancel a press; releases every finger without typing.
+    override func cancelTracking(with event: UIEvent?) { reset(); super.cancelTracking(with: event) }
+    private func reset() {
+        timers.values.forEach { $0.invalidate() }; timers = [:]; touchIDs = [:]
+        machine.cancelAll()
+        for id in Array(glows.keys) { endRipple(id: id) }
     }
-    func moveCursor(to x: CGFloat) {
-        lastX = x
-        let count = drag.steps(to: x)
-        if count != 0 { onCursorMove?(count) }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        rippleHost.frame = bounds; machine.width = bounds.width
+        rippleMask.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: 0.5), cornerRadius: KeycapStyle.cornerRadius).cgPath
     }
-    override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-        if drag.active { moveCursor(to: touch.location(in: self).x); return true }
-        lastX = touch.location(in: self).x
-        return super.continueTracking(touch, with: event)
+    private var rippleRadius: CGFloat { max(40, bounds.width * 0.3) }
+    /// A soft ripple: a blurred wave of colour spreads from the finger and melts away, with no outline at all, and a
+    /// gentle glow stays under the finger while it is down.
+    private func startRipple(id: Int, at point: CGPoint) {
+        let color = theme.palette.accent
+        func softDisc(_ center: CGFloat, _ alpha: CGFloat) -> CAGradientLayer {
+            let layer = CAGradientLayer(); layer.type = .radial
+            // Fully transparent at the rim, so there is never an edge: the wave is brightest part-way out and fades both ways.
+            layer.colors = [color.withAlphaComponent(alpha * 0.35).cgColor, color.withAlphaComponent(alpha).cgColor, color.withAlphaComponent(0).cgColor]
+            layer.locations = [0, NSNumber(value: Double(center)), 1]
+            layer.startPoint = CGPoint(x: 0.5, y: 0.5); layer.endPoint = CGPoint(x: 1, y: 1)
+            return layer
+        }
+        for (delay, alpha) in [(0.0, CGFloat(0.30)), (0.14, CGFloat(0.16))] {
+            let wave = softDisc(0.55, alpha)
+            let size = rippleRadius * 3.4
+            wave.bounds = CGRect(x: 0, y: 0, width: size, height: size); wave.position = point
+            wave.opacity = 0; rippleHost.addSublayer(wave)
+            let grow = CABasicAnimation(keyPath: "transform.scale"); grow.fromValue = 0.18; grow.toValue = 1
+            let fade = CAKeyframeAnimation(keyPath: "opacity"); fade.values = [0, 1, 0]; fade.keyTimes = [0, 0.25, 1]
+            let group = CAAnimationGroup(); group.animations = [grow, fade]; group.duration = 0.9; group.beginTime = CACurrentMediaTime() + delay
+            group.timingFunction = CAMediaTimingFunction(name: .easeOut); group.fillMode = .backwards
+            CATransaction.begin(); CATransaction.setCompletionBlock { wave.removeFromSuperlayer() }
+            wave.add(group, forKey: "ripple")
+            CATransaction.commit()
+        }
+        // The glow under the finger, as soft as the wave.
+        let glow = CAGradientLayer(); glow.type = .radial
+        glow.colors = [color.withAlphaComponent(0.26).cgColor, color.withAlphaComponent(0.10).cgColor, color.withAlphaComponent(0).cgColor]
+        glow.locations = [0, 0.5, 1]
+        glow.startPoint = CGPoint(x: 0.5, y: 0.5); glow.endPoint = CGPoint(x: 1, y: 1)
+        glow.bounds = CGRect(x: 0, y: 0, width: rippleRadius * 2.4, height: rippleRadius * 2.4); glow.position = point
+        glow.opacity = 0; rippleHost.addSublayer(glow); glows[id] = glow
+        let appear = CABasicAnimation(keyPath: "opacity"); appear.fromValue = 0; appear.toValue = 1; appear.duration = 0.25
+        glow.opacity = 1; glow.add(appear, forKey: "appear")
     }
-    override func endTracking(_ touch: UITouch?, with event: UIEvent?) { finish(); super.endTracking(touch, with: event) }
-    override func cancelTracking(with event: UIEvent?) { finish(); super.cancelTracking(with: event) }
-    override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { finish(); suppressTap = false } }
-    func finish() {
-        holdTimer?.invalidate(); holdTimer = nil
-        if drag.active { drag.cancel(); isSelected = false }
+    private func moveRipple(id: Int, to point: CGPoint) {
+        guard let glow = glows[id] else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true); glow.position = point; CATransaction.commit()
+    }
+    private func endRipple(id: Int) {
+        guard let glow = glows.removeValue(forKey: id) else { return }
+        CATransaction.begin(); CATransaction.setCompletionBlock { glow.removeFromSuperlayer() }
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = glow.presentation()?.opacity ?? 1; fade.toValue = 0; fade.duration = 0.3
+        glow.opacity = 0; glow.add(fade, forKey: "fade")
+        CATransaction.commit()
+    }
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            let point = touch.location(in: self)
+            if !machine.isActive { sendActions(for: .touchDown) }
+            nextID += 1; let id = nextID; touchIDs[ObjectIdentifier(touch)] = id
+            machine.down(id, at: point); startRipple(id: id, at: point)
+            let timer = Timer(timeInterval: SplitSpaceMachine.cursorHold, repeats: false) { [weak self] _ in self?.machine.holdElapsed(id) }
+            timers[id] = timer; RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            guard let id = touchIDs[ObjectIdentifier(touch)] else { continue }
+            machine.move(id, to: touch.location(in: self)); moveRipple(id: id, to: touch.location(in: self))
+        }
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            guard let id = touchIDs.removeValue(forKey: ObjectIdentifier(touch)) else { continue }
+            timers.removeValue(forKey: id)?.invalidate(); machine.up(id); endRipple(id: id)
+        }
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { reset() }
+    override func didMoveToWindow() { super.didMoveToWindow(); if window == nil { reset() } }
+    override func draw(_ rect: CGRect) {
+        KeycapStyle.drawSplitSpace(in: bounds, enabled: isEnabled, compact: compactCap, theme: theme, legacy: legacyKey)
+        guard !modeLabel.isEmpty else { return }
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: UIColor.secondaryLabel]
+        let size = modeLabel.size(withAttributes: attributes)
+        modeLabel.draw(at: CGPoint(x: bounds.maxX - size.width - 9, y: bounds.maxY - size.height - 5), withAttributes: attributes)
     }
 }
 

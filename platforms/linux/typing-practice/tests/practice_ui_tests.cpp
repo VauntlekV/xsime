@@ -96,12 +96,13 @@ int main(int argc, char **argv) {
     try {
         gtk_init(&argc, &argv);
         g_object_set(gtk_settings_get_default(), "gtk-enable-animations", FALSE, nullptr);
-        const auto output = argc == 2 ? std::filesystem::path(argv[1]) : std::filesystem::path();
+        const auto output = argc == 2 ? std::filesystem::path(argv[1]) : root / "renders";
         if (!output.empty())
             std::filesystem::create_directories(output);
         for (const auto *theme : {"night", "day", "quiet", "rasta"})
             for (const auto *language : {"chinese", "english"})
                 for (const auto *phase : {"ready", "live", "complete", "history"}) {
+                    std::cerr << "Render " << language << '-' << phase << '-' << theme << '\n';
                     Theme(theme);
                     const auto fixture = Read(std::filesystem::path(PRACTICE_DASHBOARD) /
                                               (std::string(language) + "-" + phase + ".json"));
@@ -114,11 +115,11 @@ int main(int argc, char **argv) {
                         gtk_container_add(GTK_CONTAINER(window), pane.Widget());
                         gtk_widget_show_all(window);
                         Settle();
-                        const auto frame = pane.Geometry();
                         const auto name =
                             std::string(language) + "-" + phase + "-" + theme + ".png";
+                        Check(Render(window, (output / name).string()), "render failed");
+                        const auto frame = pane.Geometry();
                         if (!output.empty()) {
-                            Check(Render(window, (output / name).string()), "render failed");
                             std::ofstream(output / (name + ".geometry.json"))
                                 << frame.dump(2) << '\n';
                         }
@@ -131,9 +132,11 @@ int main(int argc, char **argv) {
                                   frame.at("trend").at("height") == 165,
                               "native practice metric bounds differ");
                         if (std::string(phase) != "history")
-                            Check(frame.at("target").at("height") == 189 &&
-                                      frame.at("editor").at("height") == 139,
-                                  "native editor bounds differ");
+                            Check(frame.at("target").at("height") == 342 &&
+                                      frame.at("editor").at("height") == 342,
+                                  "two-track native editor bounds differ: " + name +
+                                      " target=" + frame.at("target").dump() +
+                                      " editor=" + frame.at("editor").dump());
                     }
                     gtk_widget_destroy(window);
                 }

@@ -22,6 +22,8 @@ struct RimesApp: App {
 }
 struct HomeView: View {
     @EnvironmentObject private var model: SettingsModel
+    /// isaac2026 is listed only while the slide-chord plugin is on.
+    private var chordPluginOn: Bool { (try? MobileOfficialPlugins.makeStore().isEnabled(legacyID: "chord")) == true }
     var body: some View {
         NavigationStack {
             List {
@@ -50,13 +52,14 @@ struct HomeView: View {
                 }
                 Section(L("你的输入方式", "Your typing")) {
                     NavigationLink { InputHabitsView() } label: { Label(L("输入习惯", "Input preferences"), systemImage: "slider.horizontal.3") }
-                    Picker(L("默认方案", "Default scheme"), selection: $model.value.scheme) { ForEach(InputScheme.allCases) { Text($0.title).tag($0) } }.onChange(of: model.value.scheme) { _,_ in do { try RimeSchemeStore().activate(nil); model.value.schemeSelectionRevision = UUID(); model.save() } catch { model.error = error.localizedDescription } }
+                    Picker(L("默认方案", "Default scheme"), selection: $model.value.scheme) { ForEach(InputScheme.allCases.filter { $0 != .chord || chordPluginOn || model.value.scheme == .chord }) { Text($0.title).tag($0) } }.onChange(of: model.value.scheme) { _,_ in do { try RimeSchemeStore().activate(nil); model.value.schemeSelectionRevision = UUID(); model.save() } catch { model.error = error.localizedDescription } }
                     NavigationLink { ChordProfilesView() } label: { Label(L("滑动并击与键位", "Slide chords & mappings"), systemImage: "hand.draw") }
                     NavigationLink { KeyboardAppearanceView() } label: { Label(L("键盘布局与换肤", "Keyboard layout & skins"), systemImage: "keyboard") }
                     NavigationLink { RimeSchemesView() } label: { Label(L("Rime 方案包与导入", "Rime schemes & import"), systemImage: "shippingbox") }
                     NavigationLink { TranslationSetupView() } label: { Label(L("Apple 本地翻译语言包", "Apple translation languages"), systemImage: "translate") }
                     NavigationLink { OfficialPluginsView() } label: { Label(L("官方插件", "Official plugins"), systemImage: "puzzlepiece.extension") }
                     NavigationLink { ProvidersView() } label: { Label(L("AI 服务", "AI services"), systemImage: "sparkles") }
+                    NavigationLink { AssistantView() } label: { Label(L("AI 助手与快捷入口", "AI assistant & quick entrance"), systemImage: "wand.and.stars") }
                     NavigationLink { PoemLibraryView() } label: { Label(L("AI 作诗：句式与词卡", "AI Poem: patterns & word cards"), systemImage: "text.book.closed") }
                     NavigationLink { StatusSkinsView() } label: { Label(L("宠物轮换", "Pet rotation"), systemImage: "pawprint") }
                 }
@@ -67,8 +70,8 @@ struct HomeView: View {
                     Text("\(ProductBrand.name) " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0")).font(.caption).foregroundStyle(.secondary)
                 } footer: {
                     VStack(spacing: 0) {
-                        Link("pm.scholay.com", destination: URL(string: "https://pm.scholay.com")!)
-                            .accessibilityLabel(L("官网，pm.scholay.com", "Website, pm.scholay.com"))
+                        Link("xsime.com", destination: URL(string: "https://xsime.com")!)
+                            .accessibilityLabel(L("官网，xsime.com", "Website, xsime.com"))
                             .accessibilityIdentifier("settings.home.website")
                             .frame(minHeight: 44)
                         Link("pm@scholay.com", destination: URL(string: "mailto:pm@scholay.com")!)

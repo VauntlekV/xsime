@@ -448,7 +448,9 @@ void RimesState::selectCandidate(int index) {
 
 void RimesState::page(bool next) {
     FlushChord(); chord_.BreakPairing();
-    if (navigation_.expanded()) { MoveMatrixRow(next ? 1 : -1); return; }
+    // PageDown opens the multi-row selector, matching the desktop candidate
+    // contract. A short engine page stays visible beside its neighbours.
+    if (navigation_.expanded() || (next && !navigation_.empty())) { MoveMatrixRow(next ? 1 : -1); return; }
     const auto session = EnsureSession();
     if (session == 0) {
         return;
@@ -470,15 +472,26 @@ void RimesState::applySnapshot(const rimes::linuxime::EngineSnapshot& snapshot) 
     }
     snapshot_ = snapshot; navigation_.Reset(snapshot);
     ime_->applySnapshot(ic_, snapshot);
-    if (!pending_schema_.empty() && !snapshot.composing && snapshot.raw_input.empty() && ime_->chord() && ime_->chord()->Enabled()) {
-        const auto desired = std::exchange(pending_schema_, {});
+    if (!pending_schema_.empty() && !snapshot.composing && snapshot.raw_input.empty() && native_chord_down_.empty() && chord_down_.empty()) {
+        auto desired = std::exchange(pending_schema_, {});
+        if (rimes::chord::IsChordSchema(desired) && ime_->chord() &&
+            (!ime_->chord()->Enabled() || desired != ime_->chord()->Profile().SchemaID())) desired = ime_->chord()->FallbackSchema();
         (void)ime_->engine().SelectSchema(session_, desired);
         (void)ime_->engine().Refresh(session_, &snapshot_);
+        schema_id_ = snapshot_.schema_id; navigation_.Reset(snapshot_);
     }
     UpdateUI(snapshot_);
 }
 
 void RimesState::refreshCandidates() { UpdateUI(snapshot_); }
+
+void RimesState::requestSchema(const std::string& schema) {
+    pending_schema_ = schema;
+    if (!session_ || snapshot_.composing || !snapshot_.raw_input.empty() || !native_chord_down_.empty() || !chord_down_.empty()) return;
+    auto current = snapshot_;
+    current.commit_text.clear(); // A settings request must never replay the last commit.
+    applySnapshot(current);
+}
 
 std::optional<rimes::linuxime::EngineSnapshot> RimesState::StepCandidatePage(int delta) {
     rimes::linuxime::EngineSnapshot next;
@@ -510,7 +523,10 @@ bool RimesState::HandleCandidateKey(KeyEvent& event) {
     if (modifiers || navigation_.empty() || !ic_->hasFocus() || ProtectedInput(ic_->capabilityFlags())) return false;
     const bool expanded = navigation_.expanded();
     const bool arrow = key == FcitxKey_Left || key == FcitxKey_Right || key == FcitxKey_Up || key == FcitxKey_Down;
-    const bool paging = expanded && (key == FcitxKey_Page_Up || key == FcitxKey_Page_Down || key == '-' || key == '=');
+    // Page keys enter the matrix for imported schemas too. Their ordinary
+    // '-' and '=' bindings remain owned by the schema until it is expanded.
+    const bool paging = key == FcitxKey_Page_Up || key == FcitxKey_Page_Down ||
+                        (expanded && (key == '-' || key == '='));
     const bool number = expanded && key >= '1' && key <= '9';
     const bool collapse = expanded && key == FcitxKey_Escape;
     if (!arrow && !paging && !number && !collapse && key != FcitxKey_space) return false;

@@ -16,7 +16,7 @@ struct CandidateLayout {
     static let padding: CGFloat = 16
     /// Width of the expand/collapse control. Collapsed it sits beside the words; expanded it
     /// overlays the end of the first row only, so the other rows keep the full width.
-    static let controlWidth: CGFloat = 44
+    static let controlWidth: CGFloat = 52
     static func measure(_ texts: [String], comments: [String] = [], width: CGFloat, expanded: Bool, landscape: Bool, firstRowReserve: CGFloat = 0) -> CandidateLayout {
         let font = UIFont.systemFont(ofSize: landscape ? 18 : 20)
         let rowHeight = rowHeight(landscape: landscape)
@@ -39,6 +39,26 @@ struct CandidateLayout {
     }
 }
 
+/// The expand control is a full key square: its touch area reaches above the row into the keyboard's top margin
+/// and down into the gap above the keys, but only over the control, never over the words.
+protocol ExpandReach: UIView {
+    var expandReachWidth: CGFloat { get }
+}
+enum ExpandReachMetrics { static let above: CGFloat = 7, below: CGFloat = 4 }
+extension ExpandReach {
+    func pointInsideOrInExpandReach(_ point: CGPoint, default base: Bool) -> Bool {
+        if base { return true }
+        return point.x >= bounds.width - expandReachWidth && point.y >= -ExpandReachMetrics.above && point.y <= bounds.height + ExpandReachMetrics.below
+    }
+}
+/// Holds the candidate strip; see `ExpandReach`.
+final class CandidatePanelView: UIView, ExpandReach {
+    var expandReachWidth: CGFloat = 0
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        pointInsideOrInExpandReach(point, default: super.point(inside: point, with: event))
+    }
+}
+
 private final class CandidateScrollView: UIScrollView {
     override func touchesShouldCancel(in view: UIView) -> Bool { true }
 }
@@ -52,7 +72,11 @@ private final class CandidateContentView: UIView {
     }
 }
 
-final class CandidateStrip: UIView {
+final class CandidateStrip: UIView, ExpandReach {
+    var expandReachWidth: CGFloat { texts.isEmpty ? 0 : CandidateLayout.controlWidth + 12 }
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        pointInsideOrInExpandReach(point, default: super.point(inside: point, with: event))
+    }
     let scroll: UIScrollView = CandidateScrollView()
     let expandButton = CandidateButton()
     private let content = CandidateContentView()
@@ -76,14 +100,130 @@ final class CandidateStrip: UIView {
         scroll.delaysContentTouches = false
         scroll.showsHorizontalScrollIndicator = false; scroll.showsVerticalScrollIndicator = false; scroll.hideEdgeEffects()
         expandButton.accessibilityIdentifier = "keyboard.candidates.expand"
+        // A full key wide plus reach to its left: it sits at the screen edge, where touches are hardest to land.
+        expandButton.hitSlop = UIEdgeInsets(top: ExpandReachMetrics.above, left: 12, bottom: ExpandReachMetrics.below, right: 0)
+        expandButton.setPreferredSymbolConfiguration(.init(pointSize: 19, weight: .semibold), forImageIn: .normal)
         expandButton.addAction(UIAction { [weak self] _ in self?.onPress?() }, for: .touchDown)
         expandButton.addAction(UIAction { [weak self] _ in self?.onExpand?() }, for: .touchUpInside)
     }
     required init?(coder: NSCoder) { fatalError() }
+    // MARK: Space-bar control
+    private var wheel: CandidateWheel?
+    private var wheelHighlights = true
+    private var wheelPages: [[CandidateWheel.Item]] = []
+    var isWheelActive: Bool { wheel != nil }
+    /// The words of the line the wheel is on.
+    var wheelRange: ClosedRange<Int>? {
+        guard let wheel, wheelPages.indices.contains(wheel.current), let first = wheelPages[wheel.current].first?.index,
+              let last = wheelPages[wheel.current].last?.index else { return nil }
+        return first...last
+    }
+    private func pageItems() -> [[CandidateWheel.Item]] {
+        guard !texts.isEmpty else { return [] }
+        let layout = CandidateLayout.measure(texts, comments: comments, width: max(1, scroll.bounds.width), expanded: true, landscape: landscape)
+        var result: [[CandidateWheel.Item]] = [], line: [CandidateWheel.Item] = []
+        for (index, frame) in layout.frames.enumerated() {
+            if let last = line.last, last.frame.minY != frame.minY { result.append(line); line = [] }
+            line.append((index, texts[index], frame))
+        }
+        if !line.isEmpty { result.append(line) }
+        return result
+    }
+    /// Shows the candidates as a drum on the line holding `index`; the plain row stays underneath, hidden.
+    func beginWheel(at index: Int, highlighted: Bool = true) {
+        endWheel(); wheelHighlights = highlighted
+        wheelPages = pageItems()
+        let page = wheelPages.firstIndex { $0.contains { $0.index == index } } ?? 0
+        let view = CandidateWheel(frame: scroll.frame)
+        view.tintColor = tintColor
+        view.configure(pages: wheelPages, current: page, highlight: highlighted ? index : nil,
+                       font: .systemFont(ofSize: landscape ? 17 : 19))
+        insertSubview(view, aboveSubview: scroll); wheel = view; scroll.alpha = 0
+    }
+    /// Rolls the drum one line and scrolls the plain row to match; returns the middle word of the new line.
+    @discardableResult func turnWheel(_ delta: Int) -> Int? {
+        guard let wheel, wheelPages.indices.contains(wheel.current + delta) else { return nil }
+        let line = wheelPages[wheel.current + delta]
+        let middle = line[line.count / 2].index
+        wheel.roll(by: delta, highlight: wheelHighlights ? middle : nil)
+        if buttons.indices.contains(line[0].index) {
+            let limit = max(0, scroll.contentSize.width - scroll.bounds.width)
+            scroll.setContentOffset(CGPoint(x: min(limit, buttons[line[0].index].frame.minX), y: 0), animated: false)
+        }
+        return middle
+    }
+    func endWheel() {
+        wheel?.removeFromSuperview(); wheel = nil; wheelPages = []; scroll.alpha = 1
+    }
+    private(set) var highlightedIndex: Int?
+    var count: Int { buttons.count }
+    var isAtTop: Bool { scroll.contentOffset.y <= 0.5 }
+    /// The last candidate that fits entirely in the visible row or rows.
+    var lastVisibleIndex: Int? {
+        let visible = scroll.bounds
+        return buttons.indices.last { index in
+            let frame = buttons[index].frame
+            return expanded ? frame.maxY <= visible.maxY + 0.5 && frame.maxX <= visible.maxX + 0.5 && frame.minY >= visible.minY - 0.5
+                : frame.maxX <= visible.maxX + 0.5 && frame.minX >= visible.minX - 0.5
+        }
+    }
+    var firstVisibleIndex: Int? {
+        let visible = scroll.bounds
+        return buttons.indices.first { buttons[$0].frame.minX >= visible.minX - 0.5 && buttons[$0].frame.maxX <= visible.maxX + 0.5 }
+    }
+    /// The word in the middle of those fully visible, where a Space-bar highlight starts.
+    var middleVisibleIndex: Int? {
+        guard let first = firstVisibleIndex, let last = lastVisibleIndex, last >= first else { return nil }
+        return (first + last) / 2
+    }
+    /// The lines the matrix would wrap the words into. In the single row each is one page.
+    private func pages() -> [Range<Int>] {
+        guard !texts.isEmpty else { return [] }
+        let layout = CandidateLayout.measure(texts, comments: comments, width: max(1, scroll.bounds.width), expanded: true, landscape: landscape)
+        var result: [Range<Int>] = [], start = 0
+        for index in layout.frames.indices.dropFirst() where layout.frames[index].minY != layout.frames[index - 1].minY {
+            result.append(start..<index); start = index
+        }
+        result.append(start..<layout.frames.count)
+        return result
+    }
+    /// Shows the next (+1) or previous (-1) line of words in the single row; false past either end.
+    @discardableResult func turnPage(_ delta: Int) -> Bool {
+        guard !expanded, buttons.count == texts.count else { return false }
+        let pages = pages()
+        let current = pages.lastIndex { buttons[$0.lowerBound].frame.minX <= scroll.contentOffset.x + 1 } ?? 0
+        guard pages.indices.contains(current + delta) else { return false }
+        let limit = max(0, scroll.contentSize.width - scroll.bounds.width)
+        scroll.setContentOffset(CGPoint(x: min(limit, buttons[pages[current + delta].lowerBound].frame.minX), y: 0), animated: false)
+        return true
+    }
+    func setHighlight(_ index: Int?) {
+        if let old = highlightedIndex, buttons.indices.contains(old) { buttons[old].isSweepTarget = false }
+        highlightedIndex = index.flatMap { buttons.indices.contains($0) ? $0 : nil }
+        wheel?.setHighlight(highlightedIndex)
+        guard let index = highlightedIndex else { return }
+        buttons[index].isSweepTarget = true
+        scroll.scrollRectToVisible(buttons[index].frame.insetBy(dx: -12, dy: 0), animated: false)
+    }
+    /// The candidate one row above or below `index`, nearest in horizontal position; nil past either end.
+    func index(inRowOffset delta: Int, from index: Int) -> Int? {
+        guard buttons.indices.contains(index) else { return nil }
+        let current = buttons[index].frame, rowHeight = CandidateLayout.rowHeight(landscape: landscape)
+        let targetY = current.minY + CGFloat(delta) * rowHeight
+        let row = buttons.indices.filter { abs(buttons[$0].frame.minY - targetY) < rowHeight / 2 }
+        return row.min { abs(buttons[$0].frame.midX - current.midX) < abs(buttons[$1].frame.midX - current.midX) }
+    }
+    func scrollRows(_ rows: Int) {
+        guard expanded else { return }
+        let step = CandidateLayout.rowHeight(landscape: landscape) * CGFloat(rows)
+        let limit = max(0, scroll.contentSize.height - scroll.bounds.height)
+        scroll.setContentOffset(CGPoint(x: 0, y: min(limit, max(0, scroll.contentOffset.y + step))), animated: false)
+    }
     func update(_ values: [String], comments: [String] = [], context: String = "") {
         let sameContext = context == self.context
         if !sameContext { self.context = context }
         guard values != texts || comments != self.comments else { return }
+        endWheel(); setHighlight(nil)
         let appending = expanded && sameContext && !texts.isEmpty && values.count >= texts.count
             && Array(values.prefix(texts.count)) == texts
             && texts.indices.allSatisfy { (comments.indices.contains($0) ? comments[$0] : "") == (self.comments.indices.contains($0) ? self.comments[$0] : "") }
@@ -162,9 +302,102 @@ final class CandidateStrip: UIView {
 }
 
 /// Candidates read as text, with a transient touch highlight and no keycap base.
+/// A drum of candidate lines: the line in focus sits in the middle and the lines before and after show as
+/// tilted slivers at the upper and lower edges, so turning a line feels like rolling a watch crown.
+final class CandidateWheel: UIView {
+    typealias Item = (index: Int, text: String, frame: CGRect)
+    private var rows: [UIView] = []
+    private let pill = UIView()
+    private(set) var current = 0
+    private var pages: [[Item]] = []
+    private var font = UIFont.systemFont(ofSize: 19)
+    /// How much of the neighbouring lines shows above and below.
+    static let peek: CGFloat = 6
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        clipsToBounds = true; isUserInteractionEnabled = false; backgroundColor = .clear
+        var perspective = CATransform3DIdentity; perspective.m34 = -1 / 260
+        layer.sublayerTransform = perspective
+        pill.layer.cornerRadius = 7; pill.layer.cornerCurve = .continuous
+        pill.backgroundColor = (tintColor ?? .systemBlue).withAlphaComponent(0.3)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func tintColorDidChange() { super.tintColorDidChange(); pill.backgroundColor = (tintColor ?? .systemBlue).withAlphaComponent(0.3) }
+    private var rowHeight: CGFloat { max(16, bounds.height - 2 * Self.peek) }
+    /// Rotation about the edge nearest the focused line, tilting the neighbour away like the side of a drum.
+    private func tilt(_ angle: CGFloat, pivot: CGFloat) -> CATransform3D {
+        var t = CATransform3DIdentity
+        t = CATransform3DTranslate(t, 0, pivot, 0); t = CATransform3DRotate(t, angle, 1, 0, 0); t = CATransform3DTranslate(t, 0, -pivot, 0)
+        return t
+    }
+    private func makeRow(page: Int, slot: Int, highlight: Int?) -> UIView {
+        let height = rowHeight
+        let y = slot < 0 ? Self.peek - height : slot > 0 ? bounds.height - Self.peek : Self.peek
+        let row = UIView(frame: CGRect(x: 0, y: y, width: bounds.width, height: height))
+        row.isUserInteractionEnabled = false
+        guard pages.indices.contains(page) else { return row }
+        for item in pages[page] {
+            let label = UILabel(frame: CGRect(x: item.frame.minX, y: 0, width: item.frame.width, height: height))
+            label.text = item.text; label.font = font; label.textAlignment = .center; label.textColor = .label
+            label.lineBreakMode = .byTruncatingTail
+            if slot == 0, item.index == highlight {
+                pill.frame = CGRect(x: item.frame.minX + 2, y: 1, width: item.frame.width - 4, height: height - 2)
+                row.addSubview(pill)
+            }
+            row.addSubview(label)
+        }
+        if slot != 0 {
+            row.alpha = 0.22
+            row.layer.transform = tilt(slot < 0 ? 0.95 : -0.95, pivot: slot < 0 ? height / 2 : -height / 2)
+        }
+        return row
+    }
+    private func build(highlight: Int?) {
+        rows.forEach { $0.removeFromSuperview() }
+        rows = [-1, 0, 1].map { makeRow(page: current + $0, slot: $0, highlight: highlight) }
+        rows.forEach(addSubview)
+    }
+    func configure(pages: [[Item]], current: Int, highlight: Int?, font: UIFont) {
+        self.pages = pages; self.current = min(max(0, current), max(0, pages.count - 1)); self.font = font
+        build(highlight: highlight)
+    }
+    func setHighlight(_ index: Int?) {
+        guard pages.indices.contains(current) else { return }
+        let height = rowHeight
+        if let index, let item = pages[current].first(where: { $0.index == index }), rows.indices.contains(1) {
+            pill.frame = CGRect(x: item.frame.minX + 2, y: 1, width: item.frame.width - 4, height: height - 2)
+            if pill.superview !== rows[1] { rows[1].insertSubview(pill, at: 0) }
+            pill.isHidden = false
+        } else { pill.isHidden = true }
+    }
+    /// Rolls to the previous (-1) or next (+1) line.
+    func roll(by delta: Int, highlight: Int?) {
+        guard pages.indices.contains(current + delta) else { return }
+        current += delta
+        build(highlight: highlight)
+        // New rows start where the old ones were and roll into place.
+        let pitch = rowHeight - Self.peek
+        for row in rows {
+            let final = row.layer.transform, alpha = row.alpha
+            row.transform = row.transform.concatenating(CGAffineTransform(translationX: 0, y: CGFloat(delta) * pitch))
+            row.alpha = alpha * 0.4
+            UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+                row.layer.transform = final; row.alpha = alpha
+            }
+        }
+    }
+}
+
 final class CandidateButton: UIButton {
     let commentLabel = UILabel()
     private let highlight = UIView()
+    /// Extra reach beyond the visible button, so a thumb that lands near it still counts.
+    var hitSlop = UIEdgeInsets.zero
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.inset(by: UIEdgeInsets(top: -hitSlop.top, left: -hitSlop.left, bottom: -hitSlop.bottom, right: -hitSlop.right)).contains(point)
+    }
+    /// Chosen by the Space-bar sweep, not touched: shows in the accent colour.
+    var isSweepTarget = false { didSet { if oldValue != isSweepTarget { updateHighlight() } } }
     var comment = "" {
         didSet {
             guard comment != oldValue else { return }
@@ -194,7 +427,8 @@ final class CandidateButton: UIButton {
     override func tintColorDidChange() { super.tintColorDidChange(); updateHighlight() }
     private func updateHighlight() {
         // A touch only greys the word; the blue flood was jarring while scrolling or on a mis-tap.
-        highlight.backgroundColor = .tertiarySystemFill; highlight.alpha = isHighlighted ? 1 : 0
+        highlight.backgroundColor = isSweepTarget ? (tintColor ?? .systemBlue).withAlphaComponent(0.3) : .tertiarySystemFill
+        highlight.alpha = isHighlighted || isSweepTarget ? 1 : 0
         setTitleColor(.label, for: .normal); setTitleColor(.label, for: .highlighted)
         imageView?.tintColor = .label
         commentLabel.textColor = .secondaryLabel
@@ -297,7 +531,14 @@ final class PluginShortcutBar: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         scroll.showsHorizontalScrollIndicator = false; addSubview(scroll); scroll.hideEdgeEffects()
-        for plugin in KeyboardPlugin.allCases {
+        setPlugins(KeyboardPlugin.builtIn)
+    }
+    /// Rebuilds the bar when the user's entrance list changes; unchanged lists keep their buttons.
+    func setPlugins(_ plugins: [KeyboardPlugin]) {
+        func signature(_ list: [KeyboardPlugin]) -> [String] { list.map { [$0.rawValue, $0.title, $0.shortTitle, $0.symbol].joined(separator: "|") } }
+        guard buttons.isEmpty || signature(plugins) != signature(buttons.map(\.plugin)) else { return }
+        buttons.forEach { $0.button.removeFromSuperview() }; buttons = []
+        for plugin in plugins {
             let button = UIButton(configuration: .gray())
             button.accessibilityIdentifier = "keyboard.shortcut.\(plugin.rawValue)"
             button.accessibilityLabel = plugin.title
@@ -307,7 +548,7 @@ final class PluginShortcutBar: UIView {
             button.addGestureRecognizer(hold)
             scroll.addSubview(button); buttons.append((plugin, button))
         }
-        refresh()
+        refresh(); setNeedsLayout()
     }
     required init?(coder: NSCoder) { fatalError() }
     override func tintColorDidChange() { super.tintColorDidChange(); refresh() }
@@ -718,5 +959,172 @@ final class PanelSwitchRow: UIView {
         toggle.frame = CGRect(x: bounds.width - size.width, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
         label.frame = CGRect(x: 0, y: 0, width: max(0, toggle.frame.minX - 12), height: bounds.height)
         toggle.accessibilityLabel = label.text
+    }
+}
+
+/// A passing prompt. It floats over the keys for a few seconds and then fades, so it never takes a row of its
+/// own or moves the keyboard. Setting `text` shows it; an empty text hides it at once.
+final class PromptLabel: UILabel {
+    private var hideWork: DispatchWorkItem?
+    private let padding = UIEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false; alpha = 0; isHidden = true
+        layer.cornerRadius = 12; layer.cornerCurve = .continuous; layer.masksToBounds = true
+        backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
+        textAlignment = .center; textColor = .label
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (label: PromptLabel, _: UITraitCollection) in
+            label.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
+        }
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var text: String? {
+        didSet {
+            hideWork?.cancel()
+            guard let text, !text.isEmpty else { alpha = 0; isHidden = true; return }
+            isHidden = false
+            UIView.animate(withDuration: 0.15) { self.alpha = 1 }
+            // Long messages stay longer; the full text is also announced to VoiceOver.
+            let work = DispatchWorkItem { [weak self] in
+                UIView.animate(withDuration: 0.3, animations: { self?.alpha = 0 }, completion: { _ in
+                    if self?.alpha == 0 { self?.isHidden = true }
+                })
+            }
+            hideWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(2.4, Double(text.count) * 0.09), execute: work)
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+    }
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.inset(by: padding)) }
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        let inner = super.sizeThatFits(CGSize(width: max(0, size.width - padding.left - padding.right), height: .greatestFiniteMagnitude))
+        return CGSize(width: ceil(inner.width) + padding.left + padding.right, height: ceil(inner.height) + padding.top + padding.bottom)
+    }
+}
+
+/// The default Buffer's typing figures as small bordered chips: an icon and a number, never a word, so
+/// they read as readings in any language.
+final class TypingStatsView: UIView {
+    struct Item: Equatable {
+        var symbol: String
+        var value: String
+        /// What VoiceOver says for the icon.
+        var spoken: String
+    }
+    private var chips: [UILabel] = []
+    private var items: [Item] = []
+    var fontSize: CGFloat = 10.5 { didSet { if oldValue != fontSize { render() } } }
+    private var chipFont: UIFont { .monospacedDigitSystemFont(ofSize: fontSize, weight: .medium) }
+    override init(frame: CGRect) { super.init(frame: frame); isUserInteractionEnabled = false }
+    required init?(coder: NSCoder) { fatalError() }
+    /// The numbers, for tests and a plain-text read-out.
+    var text: String { items.map(\.value).joined(separator: " · ") }
+    var symbols: [String] { items.map(\.symbol) }
+    func update(_ values: [Item]) {
+        guard values != items else { return }
+        items = values
+        while chips.count < values.count { chips.append(makeChip()) }
+        while chips.count > values.count { chips.removeLast().removeFromSuperview() }
+        render()
+        accessibilityLabel = values.map { "\($0.spoken) \($0.value)" }.joined(separator: "，")
+    }
+    private func render() {
+        let config = UIImage.SymbolConfiguration(pointSize: fontSize, weight: .medium)
+        for (chip, item) in zip(chips, items) {
+            let text = NSMutableAttributedString()
+            if let image = UIImage(systemName: item.symbol, withConfiguration: config)?.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal) {
+                let attachment = NSTextAttachment(image: image)
+                // Sit the icon on the digits' baseline.
+                attachment.bounds = CGRect(x: 0, y: -1.5, width: image.size.width, height: image.size.height)
+                text.append(NSAttributedString(attachment: attachment)); text.append(NSAttributedString(string: " "))
+            }
+            text.append(NSAttributedString(string: item.value, attributes: [.font: chipFont, .foregroundColor: UIColor.secondaryLabel]))
+            chip.attributedText = text
+            chip.accessibilityLabel = "\(item.spoken) \(item.value)"
+        }
+        setNeedsLayout()
+    }
+    private func makeChip() -> UILabel {
+        let chip = BorderedChipLabel()
+        chip.font = chipFont; chip.textColor = .secondaryLabel; chip.textAlignment = .center
+        chip.layer.cornerRadius = 5; chip.layer.cornerCurve = .continuous
+        chip.layer.borderWidth = 0.8; chip.layer.borderColor = UIColor.separator.cgColor
+        addSubview(chip); return chip
+    }
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous); chips.forEach { $0.layer.borderColor = UIColor.separator.cgColor }
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let gap: CGFloat = 4, height = min(bounds.height, ceil(chipFont.lineHeight) + 8)
+        let widths = chips.map { ceil($0.intrinsicContentSize.width) }
+        let total = widths.reduce(0, +) + gap * CGFloat(max(0, chips.count - 1))
+        // Too many chips for the line: squeeze them before clipping.
+        var x = max(0, (bounds.width - total) / 2), scale: CGFloat = total > bounds.width && total > 0 ? bounds.width / total : 1
+        for (chip, width) in zip(chips, widths) {
+            chip.frame = CGRect(x: x, y: (bounds.height - height) / 2, width: width * scale, height: height)
+            x += width * scale + gap * scale
+        }
+    }
+}
+private final class BorderedChipLabel: UILabel {
+    private let inset: CGFloat = 6
+    override var intrinsicContentSize: CGSize { let s = super.intrinsicContentSize; return CGSize(width: s.width + 2 * inset, height: s.height) }
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.insetBy(dx: inset, dy: 0)) }
+    override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
+}
+
+/// The progress of a hold-to-send-all: a thin line along the lower edge of the Buffer's input box fills from left to
+/// right while a send key is held, the way the desktop button fills its icon, then flashes when everything is
+/// released. The view takes the box's frame and corner radius and clips the line to them, so it follows the rounded
+/// corners with clean edges.
+final class HoldProgressBar: UIView {
+    static let height: CGFloat = 3
+    private let fill = CALayer()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false; alpha = 0
+        layer.cornerCurve = .continuous; layer.masksToBounds = true; layer.cornerRadius = 7
+        fill.anchorPoint = CGPoint(x: 0, y: 0.5)
+        layer.addSublayer(fill); applyColor()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func tintColorDidChange() { super.tintColorDidChange(); applyColor() }
+    private func applyColor() {
+        let color = (tintColor ?? .systemBlue)
+        fill.backgroundColor = color.cgColor
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // The line sits on the box's bottom edge; the view's rounded clip shapes its ends at the corners.
+        fill.bounds = CGRect(x: 0, y: 0, width: bounds.width, height: Self.height); fill.position = CGPoint(x: 0, y: bounds.height - Self.height / 2)
+        CATransaction.commit()
+    }
+    /// Whether the line is showing, for tests.
+    private(set) var isShowing = false
+    func begin(duration: TimeInterval) {
+        layer.removeAllAnimations(); fill.removeAllAnimations()
+        alpha = 1; isShowing = true
+        let grow = CABasicAnimation(keyPath: "transform.scale.x")
+        grow.fromValue = 0.001; grow.toValue = 1; grow.duration = duration; grow.timingFunction = CAMediaTimingFunction(name: .linear)
+        grow.fillMode = .both; grow.isRemovedOnCompletion = false
+        fill.add(grow, forKey: "hold")
+    }
+    /// A tap or a slide-off: the line drops away.
+    func cancel() {
+        guard isShowing else { return }
+        isShowing = false
+        UIView.animate(withDuration: 0.18, animations: { self.alpha = 0 }, completion: { _ in
+            if !self.isShowing { self.fill.removeAllAnimations() }
+        })
+    }
+    /// The hold finished: the full line flashes once and fades.
+    func complete() {
+        fill.removeAllAnimations()
+        alpha = 1; isShowing = true
+        UIView.animate(withDuration: 0.4, delay: 0.05, options: [.curveEaseOut], animations: { self.alpha = 0 }, completion: { _ in
+            if self.alpha == 0 { self.isShowing = false }
+        })
     }
 }

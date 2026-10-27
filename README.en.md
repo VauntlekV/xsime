@@ -23,7 +23,7 @@ All five platforms include **Wubi 86** and **XSIME Wubi**. Wubi 86 supports `z` 
 One input method covers everyday translation, generation, and polishing, without leaving the app you are in. The input method and its plug-ins do the work:
 
 - **Buffer** (`⌘⇧B`): a text workbench before commit. Chinese or English enters the buffer first, where you can translate it live or generate and rewrite it with the selected AI connector. After you confirm, it is **explicitly delivered** into the current field.
-- **Capsule** (`⌘⇧V`): a bar at the bottom of the screen. Text, links, images, files, and colors you just copied appear in Recent. What you want to keep goes into notes, images, PDFs, skills, or passwords.
+- **Capsule** (`⌘⇧C`): a bar at the bottom of the screen. Text, links, images, files, and colors you just copied appear in Recent. What you want to keep goes into notes, images, PDFs, skills, or passwords.
 - **Mailbox** (`⌘⇧M`): AI conversations, notes, and external items waiting for review stay in this window. You can start a conversation and choose a connector you have already configured.
 
 ## Notes on the main capabilities
@@ -40,7 +40,7 @@ One input method covers everyday translation, generation, and polishing, without
 |---|---|---|---|---|---|
 | Input schemes | — | Rime Ice full Pinyin, Natural Code, Xiaohe, Wubi 86, XSIME Wubi, English | — | — | — |
 | Buffer | `⌘⇧B` | Text before it is committed | Switch to XSIME, then capture and deliver in chunks | — | After you switch away, only the system clipboard is used, not IMK |
-| Capsule bar | `⌘⇧V` | Recent copies; notes, images, PDFs, skills, passwords | Click to select, double-click or Return to paste. `⌘S` saves | This Mac only | Paste needs Accessibility; otherwise it only reaches the clipboard |
+| Capsule bar | `⌘⇧C` | Recent copies; notes, images, PDFs, skills, passwords | Click to select, double-click or Return to paste. `⌘S` saves | This Mac only | Paste needs Accessibility; otherwise it only reaches the clipboard |
 | Mailbox | `⌘⇧M` | AI conversations, notes, items waiting for review | New conversation; the first Return starts generation | The model is bound to that conversation | CLIs use their default model |
 | Capsule manager | Gear or brush | Five kinds of items, with preview and copy | Four chords reveal a password, for at most 15 seconds | Optional iCloud; passwords and keys stay on this Mac | The passphrase is stored only as a local digest |
 | Settings | `⌘⇧S` | Shortcuts, status, sync, and security | Opens only while XSIME is the current input method | — | Does not embed the Mailbox or Capsule windows |
@@ -96,17 +96,17 @@ Bundled plug-ins use the defaults above. Optional plug-ins require installation 
 
 ## Install
 
-The [1.1.6 release](https://github.com/scholay/xsime/releases/tag/v1.1.6) provides macOS PKG, Android APK/AAB, Windows EXE/ZIP, and Linux DEB packages. All five platforms support importing the same standard Rime ZIP or encoded UTF-8 TXT/TSV dictionary; see the [import guide](docs/portable-scheme-import.md).
+The [1.2.0 release](https://github.com/scholay/xsime/releases/tag/v1.2.0) provides macOS PKG, Android APK/AAB, Windows EXE/ZIP, Linux DEB packages, and an unsigned iOS community IPA. All five platforms support importing the same standard Rime ZIP or encoded UTF-8 TXT/TSV dictionary; see the [import guide](docs/portable-scheme-import.md).
 
 | Platform | Installation |
 |---|---|
-| macOS | [1.1.6 PKG](https://github.com/scholay/xsime/releases/download/v1.1.6/RIMES-1.1.6.pkg), Apple Silicon and Intel, signed and notarized |
-| Android | [1.1.6 APK](https://github.com/scholay/xsime/releases/download/v1.1.6/RIMES-Android-1.1.6.apk), version code 20, signed with the existing long-term key |
-| Windows | [1.1.6 EXE](https://github.com/scholay/xsime/releases/download/v1.1.6/RIMES-Windows-1.1.6-Setup.exe), x64 Windows with x64/x86 TSF; unsigned EXE |
-| Linux | [1.1.6 DEB](https://github.com/scholay/xsime/releases/download/v1.1.6/fcitx5-rimes_1.1.6_amd64.deb), Ubuntu 24.04 amd64 / Fcitx5 |
-| iOS | [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242) / [public TestFlight invitation](https://testflight.apple.com/join/Kdj9RB4q). Apple’s pages show the currently available builds. |
+| macOS | [1.2.0 PKG](https://github.com/scholay/xsime/releases/download/v1.2.0/RIMES-1.2.0.pkg), Apple Silicon and Intel, signed and notarized |
+| Android | [1.2.0 APK](https://github.com/scholay/xsime/releases/download/v1.2.0/RIMES-Android-1.2.0.apk), version code 23, signed with the existing long-term key |
+| Windows | [1.2.0 EXE](https://github.com/scholay/xsime/releases/download/v1.2.0/RIMES-Windows-1.2.0-Setup.exe), x64 Windows with x64/x86 TSF; unsigned EXE |
+| Linux | [1.2.0 DEB](https://github.com/scholay/xsime/releases/download/v1.2.0/fcitx5-rimes_1.2.0_amd64.deb), Ubuntu 24.04 / 26.04 amd64 / Fcitx5 |
+| iOS | [1.2.0 community IPA and signing notes](https://github.com/scholay/xsime/releases/tag/v1.2.0); [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242) / [public TestFlight invitation](https://testflight.apple.com/join/Kdj9RB4q). Apple’s pages show the currently available builds. |
 
-See the [1.1.6 release record](docs/releases/1.1.6.md) for build, import, and installation validation.
+See the [1.2.0 release record](docs/releases/1.2.0.md) for build, import, and installation validation.
 
 A user has reported host-app crashes on macOS 27 when switching to XSIME in the App Store sandboxed versions of WeChat and QQ after installation. If affected, switch to another input method and follow the [per-app input-source cache backup and recovery guide](docs/macos/input-source-cache-recovery.md#english). The installer does not clear other apps' caches; restarting the app or logging out is not a guaranteed fix. Investigation remains open in [#90](https://github.com/scholay/xsime/issues/90).
 
@@ -144,7 +144,7 @@ cd xsime
 
 ## Application updates
 
-Starting with 1.1.6, all five platforms offer **Check for updates** in Settings. macOS downloads a signed, notarized PKG, Windows the full EXE, and Android an APK signed with the existing key. Each opens the system installer. On Ubuntu 24.04 amd64, Linux downloads a DEB and asks you to authorize the system package manager. The Windows EXE remains unsigned.
+All five platforms offer **Check for updates** in Settings. macOS downloads a signed, notarized PKG, Windows the full EXE, and Android an APK signed with the existing key. Each opens the system installer. On Ubuntu 24.04 / 26.04 amd64, Linux downloads a DEB and asks you to authorize the system package manager. The Windows EXE remains unsigned.
 
 Completion is shown after reopening the app and verifying the running version. Settings, imported schemes and learned words are preserved. Follow any system request for authorization, sign-out or restart. If your older version lacks this flow, upgrade once using the downloads above.
 

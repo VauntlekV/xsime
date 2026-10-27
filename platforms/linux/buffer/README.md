@@ -40,7 +40,7 @@ platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 
 | Item | Value |
 |---|---|
-| Toggle | `Ctrl+Shift+B` or `Super+Shift+B` while XSIME is current |
+| Toggle | `Alt+Shift+B` while XSIME is current |
 | Close | same hotkey, Escape, or the toolbar close button |
 | Send next | Return tap, or the paper plane |
 | Send all | hold Return 1.2s |

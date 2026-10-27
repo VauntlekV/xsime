@@ -282,10 +282,10 @@ int main(int argc, char** argv) {
                     suite_started = true;
                     ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
                                            fcitx::CapabilityFlag::ClientUnfocusCommit);
-                    SendKey(frontend, uuid, "Control+Shift+V");
+                    SendKey(frontend, uuid, "Alt+Shift+C");
                     const auto opened = ReadDump(dump_path);
                     if (opened.find("\"visible\":true") == std::string::npos) {
-                        Die("Ctrl+Shift+V did not show the rail");
+                        Die("Alt+Shift+C did not show the rail");
                     }
                     connected_timer = instance.eventLoop().addTimeEvent(
                         CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 200000, 200000,

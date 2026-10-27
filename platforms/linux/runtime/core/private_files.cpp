@@ -22,10 +22,11 @@ struct FD {
     FD(const FD&) = delete;
     FD& operator=(const FD&) = delete;
 };
-void SafeFile(int fd) {
+void SafeFile(int fd, bool reading_snapshot = false) {
     struct stat status{};
     if (fstat(fd, &status) || !S_ISREG(status.st_mode) || status.st_uid != geteuid() ||
-        (status.st_mode & 0777) != 0600 || status.st_nlink != 1)
+        (status.st_mode & 0777) != 0600 ||
+        (status.st_nlink != 1 && !(reading_snapshot && status.st_nlink == 0)))
         throw std::runtime_error("Unsafe private file");
 }
 std::string Hex(const unsigned char* bytes, std::size_t count) {
@@ -108,7 +109,10 @@ std::optional<std::string> PrivateDirectory::Read(std::string_view name, std::si
         if (errno == ENOENT) return std::nullopt;
         throw std::runtime_error("Cannot read private file");
     }
-    SafeFile(file.value);
+    // A concurrent atomic publication can unlink this already-open inode.
+    // It remains a complete private snapshot; multiple links are still unsafe.
+    // Writers, removers and locks continue to require one live directory entry.
+    SafeFile(file.value, true);
     struct stat status{};
     if (fstat(file.value, &status) || status.st_size < 0 || static_cast<std::uint64_t>(status.st_size) > limit)
         throw std::runtime_error("Private file exceeds size limit");

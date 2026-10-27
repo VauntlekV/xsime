@@ -311,7 +311,7 @@ void CapsuleModel::RefreshHint() {
     if (loading_) { hint_ = "正在读取 Capsule…"; return; }
     if (managing_) { hint_ = module_==Module::Capture ? "管理捕获 · Esc 返回底栏" : "Ctrl+S SAVE   ESC BACK TO RAIL"; return; }
     if (!armed_) {
-        hint_ = "Disarmed — Ctrl+Shift+V on this field re-arms; press again to close";
+        hint_ = "Disarmed — use the Capsule shortcut on this field to re-arm; press again to close";
         return;
     }
     if (cards_.empty()) {
