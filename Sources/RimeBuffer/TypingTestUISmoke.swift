@@ -175,7 +175,7 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
                         return fail("\(page)/\(sizeName): content must fill a tall window without scrolling \(dump())")
                     }
                 }
-                guard controller.smokeMaterialRowCount >= 9 else { return fail("material column must list the built-in articles") }
+                guard controller.smokeMaterialRowCount == TypingTestArticles.all.count else { return fail("material column must list the built-in articles as cards") }
                 if page == "overview" {
                     guard controller.smokeTargetString == article.text,
                           let editorScroll = controller.smokeEditor.enclosingScrollView,
@@ -222,7 +222,7 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
             controller.smokeToggleMaterials()
             controller.smokeToggleCells()
             pane.layoutSubtreeIfNeeded()
-            guard controller.smokeCellsHidden, controller.smokeMaterials.smokeWidth == 0 else {
+            guard controller.smokeCellsHidden, controller.smokeMaterials.smokeWidth < 60 else {
                 return fail("fold: column width \(controller.smokeMaterials.smokeWidth), cellsHidden \(controller.smokeCellsHidden)")
             }
             guard targetScroll.frame.height > before + 60, targetScroll.frame.width > 450 else {
@@ -262,9 +262,11 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
             while importLibrary.books.isEmpty, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
             RunLoop.main.run(until: Date().addingTimeInterval(0.1))
             guard let book = importLibrary.books.first else { return fail("import through the controller produced no book") }
-            guard controller.smokeMaterialRowCount > rowsBefore, controller.smokeMaterials.currentArticleID == "epub.\(book.id).1",
+            guard controller.smokeMaterials.smokeTab == 1, controller.smokeMaterials.smokeOpenBookTitle == book.title,
+                  controller.smokeMaterialRowCount == 1 + book.passageCount,
+                  controller.smokeMaterials.currentArticleID == "epub.\(book.id).1",
                   controller.smokeTargetString == book.article(number: 1)?.text else {
-                return fail("import must list the book and open its first passage: rows \(rowsBefore)->\(controller.smokeMaterialRowCount), current=\(String(describing: controller.smokeMaterials.currentArticleID))")
+                return fail("import must open the book on the 书籍 tab and its first piece: rows \(rowsBefore)->\(controller.smokeMaterialRowCount), tab \(controller.smokeMaterials.smokeTab), current=\(String(describing: controller.smokeMaterials.currentArticleID))")
             }
             controller.importFiles([file])
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))

@@ -95,6 +95,7 @@ platforms/ios/RIMES.xcodeproj/-Xcc/
 /Sources/RimeBuffer/TypingTestMaterialColumn.swift
 /Sources/RimeBuffer/TypingTestSession.swift
 /Sources/RimeBuffer/TypingTestTextView.swift
+/Sources/RimeBuffer/TypingTestTrackView.swift
 /Sources/RimeBuffer/YearHistoryHeatmapView.swift
 /platforms/android/app/src/main/java/org/scholay/rimes/android/BufferPluginExecutor.java
 /platforms/android/app/src/main/java/org/scholay/rimes/android/BufferPluginPanel.java

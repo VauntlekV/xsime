@@ -51,6 +51,7 @@ func typingTestSmokeFixture() -> TypingTestSmokeFixture {
     let chinese = (1...40).map { "第\($0)段：清晨的街道很安静，<em>老板</em>把热气腾腾的豆浆放在柜台上。赶早班的人快步走来！" }
     let chapterOne = "<h1>第一章 清晨</h1>" + chinese.map { "<p>\n  \($0)\n</p>" }.joined()
         + "<script>var secret = 'SCRIPTTEXT';</script><!-- hidden comment --><p>汉<ruby>字<rt>han</rt></ruby>&amp;&#x4E00;&nbsp;&mdash;结束。</p>"
+        + "<p>★ ※ 请参阅附录[12]，详见 http://example.com/x 或写信 mail@example.com ，，，。。。 </p><p>* * * ---- 12</p>"
     let english = (1...30).map { "<p>Sentence number \($0) walks quietly past the bakery. Dr. Smith waved at the baker, who smiled &amp; nodded.</p>" }.joined()
     let container = "<?xml version=\"1.0\"?><container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>"
     let opf = """
@@ -58,8 +59,8 @@ func typingTestSmokeFixture() -> TypingTestSmokeFixture {
     <dc:title>测试之书</dc:title><dc:creator>某作者</dc:creator><dc:language>zh</dc:language></metadata>
     <manifest><item id="cover" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>
     <item id="c1" href="Text/ch%2001.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="Text/ch2.xhtml" media-type="application/xhtml+xml"/>
-    <item id="note" href="Text/note.xhtml" media-type="application/xhtml+xml"/><item id="css" href="s.css" media-type="text/css"/></manifest>
-    <spine><itemref idref="cover"/><itemref idref="c1"/><itemref idref="c2"/><itemref idref="note" linear="no"/></spine></package>
+    <item id="toc" href="Text/toc2.xhtml" media-type="application/xhtml+xml"/><item id="note" href="Text/note.xhtml" media-type="application/xhtml+xml"/><item id="css" href="s.css" media-type="text/css"/></manifest>
+    <spine><itemref idref="cover"/><itemref idref="c1"/><itemref idref="toc"/><itemref idref="c2"/><itemref idref="note" linear="no"/></spine></package>
     """
     let epub = zip([
         ("mimetype", Data("application/epub+zip".utf8), false),
@@ -68,6 +69,7 @@ func typingTestSmokeFixture() -> TypingTestSmokeFixture {
         ("OEBPS/Text/cover.xhtml", xhtml("<p>封面</p>"), false),
         ("OEBPS/Text/ch 01.xhtml", xhtml(chapterOne), true),
         ("OEBPS/Text/ch2.xhtml", xhtml("<h2>Chapter Two</h2>" + english), true),
+        ("OEBPS/Text/toc2.xhtml", xhtml("<h1>目录</h1>" + (1...14).map { "<p>第\($0)章 标题 \($0 * 7)</p>" }.joined()), false),
         ("OEBPS/Text/note.xhtml", xhtml("<p>脚注不应进入正文脚注不应进入正文脚注不应进入正文</p>"), false),
     ])
 
@@ -88,21 +90,36 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
         guard book.chapters[0].title == "01 · 第一章清晨", book.chapters[1].title == "02 · Chapter Two" else { return fail("chapter titles \(book.chapters.map(\.title))") }
         let all = book.chapters.flatMap(\.passages)
         guard all.allSatisfy({ $0.count <= TypingTestPassageSplitter.pieceLimit && $0.count > 0 && $0 == $0.trimmingCharacters(in: .whitespacesAndNewlines) }) else { return fail("passage size/trim") }
-        guard book.chapters[0].passages.count == 1, book.chapters[1].passages.count == 2 else {
-            return fail("a short chapter is one piece, a long one splits evenly: \(book.chapters.map(\.passages.count))")
+        let parts0 = book.chapters[0].passages.count, parts1 = book.chapters[1].passages.count
+        guard (2...3).contains(parts0), (3...5).contains(parts1) else {
+            return fail("pieces should be short: chapter parts \(book.chapters.map(\.passages.count))")
         }
-        let halves = book.chapters[1].passages.map(\.count)
-        guard abs(halves[0] - halves[1]) < 200 else { return fail("parts must be balanced: \(halves)") }
+        // A tiny last piece may be merged into its neighbour (up to a sixth over the limit).
+        guard book.chapters[0].passages.allSatisfy({ $0.count <= 940 }), book.chapters[1].passages.allSatisfy({ $0.count <= 1_170 }) else {
+            return fail("piece length limits")
+        }
+        // Pieces end on a paragraph or sentence boundary, never mid-sentence.
+        guard book.chapters[0].passages.dropLast().allSatisfy({ $0.hasSuffix("！") }),
+              book.chapters[1].passages.allSatisfy({ $0.hasSuffix(".") }) else {
+            return fail("pieces must end at paragraph/sentence ends: \(book.chapters[1].passages.map { String($0.suffix(6)) })")
+        }
         let first = book.chapters[0].passages.joined()
         guard first.hasPrefix("第1段：清晨的街道很安静，老板把热气腾腾的豆浆放在柜台上。"), !first.contains("SCRIPTTEXT"),
               !first.contains("hidden comment"), !first.contains("han"), !first.contains("ignored head"), !first.contains("\n"),
               first.contains("汉字&一 —结束。") else { return fail("markup clean-up: prefix=\(first.hasPrefix("第1段：清晨的街道很安静，老板把热气腾腾的豆浆放在柜台上。")) script=\(first.contains("SCRIPTTEXT")) comment=\(first.contains("hidden comment")) han=\(first.contains("han")) head=\(first.contains("ignored head")) nl=\(first.contains("\n")) tail=\(Array(first.suffix(9).unicodeScalars.map { String($0.value, radix: 16) }))") }
+        guard !first.contains("★"), !first.contains("※"), !first.contains("[12]"), !first.contains("http"), !first.contains("@"),
+              !first.contains("，，"), !first.contains("。。"), !first.contains("----"), first.contains("请参阅附录") else {
+            return fail("practice text must drop symbols, footnotes, links and repeated punctuation")
+        }
+        guard book.cut == TypingTestBook.currentCut else { return fail("a fresh import carries the current cut") }
         guard book.chapters[0].passages.allSatisfy({ TypingTestPassageSplitter.language(of: $0) == .chinese }),
               book.chapters[1].passages.allSatisfy({ TypingTestPassageSplitter.language(of: $0) == .english }) else { return fail("language detection") }
         guard book.chapters[1].passages[0].contains("Dr. Smith waved"), book.chapters[1].passages[0].contains("smiled & nodded.") else { return fail("english text") }
-        let article = book.article(number: 2)!
-        guard article.id == "epub.\(book.id).2", book.passageCount == 3, book.article(number: book.passageCount + 1) == nil,
-              article.title.hasSuffix("02 · Chapter Two · 1/2"), book.article(number: 1)?.title.hasSuffix("01 · 第一章清晨") == true,
+        let article = book.article(number: parts0 + 1)!
+        guard article.id == "epub.\(book.id).\(parts0 + 1)", book.passageCount == parts0 + parts1,
+              book.article(number: book.passageCount + 1) == nil,
+              article.title.hasSuffix("02 · Chapter Two · 1/\(parts1)"), book.article(number: 1)?.title.hasSuffix("01 · 第一章清晨 · 1/\(parts0)") == true,
+              article.version == TypingTestBook.currentCut,
               let scored = Optional(TypingTestSession(article: article, context: TypingTestContext(schemaID: "smoke"))) else { return fail("article ids") }
         scored.start(at: 1)
         guard scored.reconcileCommittedText(article.text, at: 11), scored.snapshot(at: 11).canComplete else { return fail("imported passage must be scorable") }
@@ -118,10 +135,22 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
         guard library.books.isEmpty, case .added = try library.importEPUB(at: file) else { return fail("first import") }
         guard case .alreadyPresent = try library.importEPUB(at: file), library.books.count == 1 else { return fail("duplicate import must not add") }
         let reopened = TypingTestLibraryStore(storageRoot: root)
-        guard reopened.books.count == 1, reopened.article(id: "epub.\(book.id).2")?.text == article.text,
+        guard reopened.books.count == 1, reopened.article(id: "epub.\(book.id).\(parts0 + 1)")?.text == article.text,
               reopened.article(id: "epub.\(book.id).9999") == nil, reopened.article(id: "rimes.morning-street") == nil else { return fail("reload/resolve") }
         guard reopened.remove(id: book.id), reopened.books.isEmpty,
               TypingTestLibraryStore(storageRoot: root).books.isEmpty else { return fail("remove") }
+
+        // An older cut of the same file is replaced on re-import; a current one is left alone.
+        let oldRoot = root.appendingPathComponent("old-cut", isDirectory: true)
+        let oldLibrary = TypingTestLibraryStore(storageRoot: oldRoot)
+        var older = book
+        older.cut = 1
+        guard case .added = try oldLibrary.add(older), oldLibrary.book(id: book.id)?.cut == 1 else { return fail("seed an old-cut book") }
+        guard case .replaced = try oldLibrary.importEPUB(at: file), oldLibrary.book(id: book.id)?.cut == TypingTestBook.currentCut,
+              oldLibrary.books.count == 1, TypingTestLibraryStore(storageRoot: oldRoot).book(id: book.id)?.cut == TypingTestBook.currentCut else {
+            return fail("re-import must replace an older cut")
+        }
+        guard case .alreadyPresent = try oldLibrary.importEPUB(at: file) else { return fail("re-import of a current cut must be a no-op") }
 
         // Hostile or unsupported input fails closed with an error, never a crash.
         for (name, data) in [("not a zip", Data("hello".utf8)), ("empty", Data()),
@@ -142,7 +171,7 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
 
         // Splitter limits for one huge unbroken sentence.
         let huge = TypingTestPassageSplitter.passages(from: [String(repeating: "字", count: 5_000)])
-        guard huge.count == 3, huge.allSatisfy({ $0.count <= TypingTestPassageSplitter.pieceLimit }) else { return fail("unbroken text must be hard-cut under the limit") }
+        guard huge.count == 7, huge.allSatisfy({ $0.count <= 800 }) else { return fail("unbroken text must be hard-cut under the limit") }
         for url in files {
             let started = Date()
             do {
