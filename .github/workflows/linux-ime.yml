@@ -30,6 +30,7 @@ on:
       - "Sources/RimeBuffer/Mailbox/**"
       - "Sources/RimeBuffer/Resources/PluginIcons/**"
       - "scripts/prepare-official-plugins.py"
+      - "scripts/ci/install-ubuntu-packages.sh"
       - "scripts/input-schemes/fetch_fixture.py"
       - "scripts/input-schemes/repair-rime-table.py"
       - "platforms/ios/scripts/prepare-lua.py"
@@ -70,8 +71,7 @@ jobs:
 
       - name: Install build and test dependencies
         run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          bash scripts/ci/install-ubuntu-packages.sh \
             build-essential g++ cmake extra-cmake-modules pkg-config gettext \
             libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev \
             fcitx5-modules-dev fcitx5 fcitx5-modules \
