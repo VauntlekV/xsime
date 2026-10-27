@@ -102,6 +102,7 @@ int main(int argc, char **argv) {
         for (const auto *theme : {"night", "day", "quiet", "rasta"})
             for (const auto *language : {"chinese", "english"})
                 for (const auto *phase : {"ready", "live", "complete", "history"}) {
+                    std::cerr << "Render " << language << '-' << phase << '-' << theme << '\n';
                     Theme(theme);
                     const auto fixture = Read(std::filesystem::path(PRACTICE_DASHBOARD) /
                                               (std::string(language) + "-" + phase + ".json"));

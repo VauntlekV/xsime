@@ -67,7 +67,7 @@ does nothing under another IM (including stock `fcitx5-rime`). The
 9. **Copy.** Open Capsule, press `Ctrl+C`. Paste into the host with the
    host's own paste (`Ctrl+Shift+V` in a terminal, `Ctrl+V` elsewhere).
    You get `RIMES`. Capsule itself must not synthesize Ctrl+V.
-10. **Buffer priority.** Open Buffer (`Ctrl+Shift+B`), stage `你好`, then
+10. **Buffer priority.** Open Buffer (`Alt+Shift+B`), stage `你好`, then
     open Capsule. Return must send the Buffer chip, not a Capsule note.
     Pause Buffer, then Return inserts the selected note.
 11. **X11 placement.** On Xfce the rail sits at the **bottom**, about

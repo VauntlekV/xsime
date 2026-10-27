@@ -382,9 +382,9 @@ void PracticeEditor::DrawTrack(cairo_t* cr) {
         const auto& source = rows_[row]; const auto chars = rimes::practice::materials::Characters(source.text);
         for (std::size_t i = 0; i < chars.size(); ++i) {
             const auto index = source.start + i;
-            const auto state = index < states_.size() ? states_[index].get<int>() : 0;
+            const auto state = index < states_.size() ? states_[index].get<std::string>() : "pending";
             GdkRGBA color{}; gtk_style_context_get_color(gtk_widget_get_style_context(view_), GTK_STATE_FLAG_NORMAL, &color);
-            if (state == 1) gdk_rgba_parse(&color, "#24945b"); else if (state >= 2) gdk_rgba_parse(&color, "#d45151"); else color.alpha *= .65;
+            if (state == "correct") gdk_rgba_parse(&color, "#24945b"); else if (state == "incorrect" || state == "omitted") gdk_rgba_parse(&color, "#d45151"); else color.alpha *= .65;
             const auto cell_x = x + 19 + (source.indent + static_cast<int>(i)) * 28;
             auto border = color; border.alpha = .12; gdk_cairo_set_source_rgba(cr, &border); cairo_set_line_width(cr, .5);
             cairo_rectangle(cr, cell_x, y, 28, 28); cairo_rectangle(cr, cell_x, y + 32, 28, 28); cairo_stroke(cr);
