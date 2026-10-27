@@ -7450,14 +7450,14 @@ func runBufferWindowSmokeTest() -> Bool {
     defer { hotKeyDefaults.removePersistentDomain(forName: hotKeyDefaultsSuite) }
 
     // Upgrade fixture: preserve a pre-existing custom binding on Capsule's
-    // default Command-Shift-V and give the rail the deterministic first free
+    // default Command-Shift-C and give the rail the deterministic first free
     // fallback instead of registering a duplicate hot key.
     let migrationDefaultsSuite =
         "RimeBuffer.ClipboardShortcutMigrationSmoke.\(UUID().uuidString)"
     guard let migrationDefaults = UserDefaults(suiteName: migrationDefaultsSuite),
-          let customCommandShiftV = try? JSONEncoder().encode(
+          let customCommandShiftC = try? JSONEncoder().encode(
             RimeKeyboardShortcut(
-                keyCode: UInt16(kVK_ANSI_V),
+                keyCode: UInt16(kVK_ANSI_C),
                 modifiers: [.command, .shift]
             )
           ) else {
@@ -7468,7 +7468,7 @@ func runBufferWindowSmokeTest() -> Bool {
         migrationDefaults.removePersistentDomain(forName: migrationDefaultsSuite)
     }
     migrationDefaults.set(
-        customCommandShiftV,
+        customCommandShiftC,
         forKey: "keyboardShortcut.v1.\(RimeShortcutAction.openSettings.rawValue)"
     )
     let migratedClipboardShortcut = RimeShortcutPreferences.shortcut(
@@ -7479,22 +7479,33 @@ func runBufferWindowSmokeTest() -> Bool {
         for: .toggleClipboardHistory,
         defaults: migrationDefaults
     )
-    // With Capsule's manager shortcut retired, Command-Shift-C is free again
-    // and is the first fallback.
+    // Preserve the custom C binding and use the first free fallback, D.
     guard migratedClipboardShortcut == RimeKeyboardShortcut(
-            keyCode: UInt16(kVK_ANSI_C),
+            keyCode: UInt16(kVK_ANSI_D),
             modifiers: [.command, .shift]
           ),
           RimeShortcutPreferences.shortcut(
             for: .openSettings,
             defaults: migrationDefaults
           ) == RimeKeyboardShortcut(
-            keyCode: UInt16(kVK_ANSI_V),
+            keyCode: UInt16(kVK_ANSI_C),
             modifiers: [.command, .shift]
           ),
-          migratedClipboardHotKey.keyCode == UInt32(kVK_ANSI_C),
+          migratedClipboardHotKey.keyCode == UInt32(kVK_ANSI_D),
           migratedClipboardHotKey.modifiers == UInt32(cmdKey | shiftKey) else {
         print("FAILED: Clipboard shortcut migration overwrote an existing binding")
+        return false
+    }
+
+    do {
+        let customClipboard = RimeKeyboardShortcut(keyCode: UInt16(kVK_ANSI_V), modifiers: [.command, .shift])
+        try RimeShortcutPreferences.set(customClipboard, for: .toggleClipboardHistory, defaults: migrationDefaults)
+        guard RimeShortcutPreferences.shortcut(for: .toggleClipboardHistory, defaults: migrationDefaults) == customClipboard else {
+            print("FAILED: updated Capsule default replaced an explicit saved shortcut")
+            return false
+        }
+    } catch {
+        print("FAILED: could not preserve the custom Capsule shortcut: \(error)")
         return false
     }
 
@@ -7737,7 +7748,7 @@ func runBufferWindowSmokeTest() -> Bool {
     guard workbenchHotKey.keyCode == UInt32(kVK_ANSI_B),
           workbenchHotKey.modifiers == UInt32(cmdKey | shiftKey),
           workbenchHotKey.registrationOptions == OptionBits(kEventHotKeyNoOptions),
-          clipboardHotKey.keyCode == UInt32(kVK_ANSI_V),
+          clipboardHotKey.keyCode == UInt32(kVK_ANSI_C),
           clipboardHotKey.modifiers == UInt32(cmdKey | shiftKey),
           clipboardHotKey.registrationOptions
             == OptionBits(kEventHotKeyExclusive),

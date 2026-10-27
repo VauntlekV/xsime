@@ -150,10 +150,11 @@ bool CapsuleService::IsToggleHotkey(const KeyEvent& event) {
     const auto& key = event.rawKey();
     const bool shift = key.states().test(KeyState::Shift);
     const bool ctrl = key.states().test(KeyState::Ctrl);
+    const bool alt = key.states().test(KeyState::Alt);
     const bool super = key.states().test(KeyState::Super);
-    const bool letter_v = key.check(FcitxKey_V) || key.check(FcitxKey_v) ||
-                          key.sym() == FcitxKey_V || key.sym() == FcitxKey_v;
-    return letter_v && shift && (ctrl || super) && !(ctrl && super);
+    const bool letter_c = key.check(FcitxKey_C) || key.check(FcitxKey_c) ||
+                          key.sym() == FcitxKey_C || key.sym() == FcitxKey_c;
+    return letter_c && shift && alt && !ctrl && !super;
 }
 
 bool CapsuleService::IsReturnKey(const Key& key) {

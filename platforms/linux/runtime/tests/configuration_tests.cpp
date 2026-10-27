@@ -88,9 +88,16 @@ int main() {
     Reject([&] { store.Save(invalid_habits, invalid_habits.at("revision")); });
     Check(store.Load().at("inputOptions") == habits.at("inputOptions"), "invalid settings overwrite saved choices");
     ValidateShortcuts(DefaultShortcuts());
+    const auto defaults = DefaultShortcuts();
+    Check(defaults.at("buffer") == "ALT+SHIFT+b" && defaults.at("capsule") == "ALT+SHIFT+c" &&
+          defaults.at("mailbox") == "ALT+SHIFT+m" && defaults.at("settings") == "ALT+SHIFT+s",
+          "fresh application shortcuts use Alt+Shift and Capsule uses C");
     for (const auto* chord : {"b", "SHIFT+b", "CTRL+a", "CTRL+v", "LOGO+v", "CTRL+CTRL+b", "CTRL+SHIFT+B", "SHIFT+CTRL+b", "CTRL+bad", "CTRL+b\n"})
       Reject([&] { ParseShortcut(chord); });
     Check(!ParseShortcut("") && ParseShortcut("CTRL+ALT+F12")->Fcitx() == "Control+Alt+F12", "shortcut encoding failed");
+    auto customized = store.Load(); customized["shortcuts"]["capsule"] = "CTRL+SHIFT+v";
+    store.Save(customized, customized.at("revision"));
+    Check(store.Load().at("shortcuts").at("capsule") == "CTRL+SHIFT+v", "existing custom shortcuts remain unchanged when defaults change");
     auto duplicate = store.Load(); duplicate["shortcuts"]["capsule"] = duplicate["shortcuts"]["buffer"];
     Reject([&] { store.Save(duplicate, duplicate.at("revision")); });
     auto invalid_lifetime = store.Load();

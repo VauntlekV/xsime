@@ -431,7 +431,7 @@ alone does not prove Windows librime, TSF or the final installer works.
   `ITfDisplayAttributeProvider`. The registrar does not add a new TSF
   category, so some hosts may skip the dotted underline.
 - This development tree adds Capsule and Mailbox preview windows through the tray,
-  Settings and Alt+Shift+V / Alt+Shift+M. See [PERIPHERALS.md](PERIPHERALS.md) for
+  Settings and Alt+Shift+C / Alt+Shift+M. See [PERIPHERALS.md](PERIPHERALS.md) for
   implemented workflows and remaining macOS parity gaps. This is not an installed-version claim.
 - The 1.1.0 release uses an unsigned EXE installer. Windows security prompts may appear; signing is optional.
 - The EXE installer handles elevated dual-architecture registration. The actual upgrade was verified; fresh-install coverage and broader host acceptance remain separate follow-up checks.

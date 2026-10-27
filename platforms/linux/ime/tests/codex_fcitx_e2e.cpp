@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
                         }
                         driver = std::thread([&, frontend, uuid] {
                             try {
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Command(root, "select_plugin", "builtin.codex-cli");
                                 Command(root, "paste", "原文🙂");
                                 Wait([&] { return Snapshot(root).can_generate; },
@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
                                       "final delivery did not consume source");
                                 home.Remove("release-text");
                                 home.Remove("text-started");
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Command(root, "paste", "取消后的原文");
                                 Wait([&] { return Snapshot(root).can_generate; },
                                      "second request unavailable");
@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
                                 Check(Snapshot(root).results.empty() &&
                                           Snapshot(root).staged_text == "取消后的原文",
                                       "late text restored closed Buffer");
-                                main([&] { Key(frontend, uuid, "Control+Shift+B"); });
+                                main([&] { Key(frontend, uuid, "Alt+Shift+B"); });
                                 Wait([&] { return Snapshot(root).visible; },
                                      "image workbench did not reopen");
                                 Command(root, "configure_plugin", "imagegen", "skill");

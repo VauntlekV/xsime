@@ -15,8 +15,8 @@
 //
 // 2. Keys
 //    BufferService::HandleEarlyKey sits in front of CapsuleService::HandleEarlyKey
-//    and RimesState::keyEvent. Ctrl/Super+Shift+B toggles Buffer.
-//    Ctrl/Super+Shift+V toggles Capsule. While Buffer is capturing, Return,
+//    and RimesState::keyEvent. Alt+Shift+B toggles Buffer.
+//    Alt+Shift+C toggles Capsule. While Buffer is capturing, Return,
 //    Backspace, Escape (this IC only), Ctrl+A and Ctrl+V stay with Buffer.
 //    While Capsule is armed and Buffer is not capturing, Tab, arrows, Return,
 //    Escape (this IC only), Ctrl+1–9, Ctrl+C and printable search keys are

@@ -61,10 +61,10 @@ statistics files, alongside user dictionaries and learning records.
 - Isolated user directory: `$XDG_DATA_HOME/rimes` (not `…/fcitx5/rime`)
 - Shared data: `$prefix/share/rimes/data` (the 57-file core closure plus 12
   hash-verified native chord files and their Linux manifest)
-- Default Buffer workbench (configurable, default `Ctrl+Shift+B`): Rime commits
+- Default Buffer workbench (configurable, default `Alt+Shift+B`): Rime commits
   stage as blocks, Return tap/hold and the paper plane send through the same
   `commitText` → `commitString` path
-- Capsule rail (configurable, default `Ctrl+Shift+V`): structured/Bullet/rich
+- Capsule rail (configurable, default `Alt+Shift+C`): structured/Bullet/rich
   notes, grouped detail rows and opt-in clipboard history. Text uses native
   `commitString` after an armed-IC recheck; rich clipboard items restore original
   MIME formats for explicit paste. The GTK manager exposes read-only history
@@ -103,8 +103,8 @@ In **Settings → Buffer → 快捷键**, click a recorder and press a combinati
 Escape cancels; unmodified Delete restores that action's default. Duplicate
 bindings and Ctrl/Super+A/V are rejected. The defaults and action titles are
 imported from macOS `ShortcutPreferences.swift`, mapping Command to Ctrl:
-Buffer `Ctrl+Shift+B`, Capsule `Ctrl+Shift+V`, settings `Ctrl+Shift+S`.
-Mailbox uses `Ctrl+Shift+M`; it opens its independent workspace without changing
+Buffer `Alt+Shift+B`, Capsule `Alt+Shift+C`, settings `Alt+Shift+S`.
+Mailbox uses `Alt+Shift+M`; it opens its independent workspace without changing
 the current input method. Super can be selected explicitly in the recorder.
 Global grabs pause during recording and resume on completion, cancellation,
 settings-process exit or a two-minute timeout.

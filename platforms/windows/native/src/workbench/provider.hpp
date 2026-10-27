@@ -54,7 +54,7 @@ struct Settings {
   unsigned previous_plugin_modifiers = MOD_ALT | MOD_SHIFT, previous_plugin_key = VK_UP;
   unsigned next_plugin_modifiers = MOD_ALT | MOD_SHIFT, next_plugin_key = VK_DOWN;
   unsigned settings_modifiers = MOD_ALT | MOD_SHIFT, settings_key = 'S';
-  unsigned capsule_modifiers = MOD_ALT | MOD_SHIFT, capsule_key = 'V';
+  unsigned capsule_modifiers = MOD_ALT | MOD_SHIFT, capsule_key = 'C';
   unsigned capture_modifiers = MOD_ALT | MOD_SHIFT, capture_key = '4';
 };
 void MigrateConnections(Settings* settings);

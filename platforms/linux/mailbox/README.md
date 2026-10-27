@@ -1,6 +1,6 @@
 # Linux Mailbox
 
-`rimes-mailbox --show` 打开独立 GTK 工作区。应用菜单的 **XSIME Mailbox**、已启用的 `Ctrl+Shift+M` 和 `rimes-launch mailbox` 复用同一用户目录的窗口。后两者经 Fcitx 快捷键宿主检查；Mailbox 自身监听桌面会话保护。关闭窗口或在非终端输入区按 `Ctrl+W` 隐藏窗口；终端获得焦点时 `Ctrl+W` 和 Escape 交给终端。`rimes-mailbox --quit` 退出进程并结束本次 Mailbox 的 PTY，保留已保存收件。
+`rimes-mailbox --show` 打开独立 GTK 工作区。应用菜单的 **XSIME Mailbox**、已启用的 `Alt+Shift+M` 和 `rimes-launch mailbox` 复用同一用户目录的窗口。后两者经 Fcitx 快捷键宿主检查；Mailbox 自身监听桌面会话保护。关闭窗口或在非终端输入区按 `Ctrl+W` 隐藏窗口；终端获得焦点时 `Ctrl+W` 和 Escape 交给终端。`rimes-mailbox --quit` 退出进程并结束本次 Mailbox 的 PTY，保留已保存收件。
 
 窗口包含终端、对话、收件三个官方模块入口、收件未读角标、列表搜索和筛选。支持查看已有对话/收件、重命名、归档/恢复和本地备注；备注只保存在本机。窗口正常大小为 1000×700，最小 680×500；窄窗口通过顶部侧栏按钮展开列表，点击正文外侧或 Escape 收起。显示并激活的收件才标记已读。窗口尺寸与最后模块自动保存；未发送草稿按模块/会话保留在当前进程，退出进程不持久化草稿，与当前 macOS 行为一致。
 

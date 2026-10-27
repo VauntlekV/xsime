@@ -21,7 +21,7 @@ Las cinco plataformas incluyen **Wubi 86** y **XSIME Wubi**. Wubi 86 permite bus
 Con un solo método de entrada se cubren la traducción, la generación y la revisión del día a día, sin salir de la aplicación en la que estás. El método de entrada y sus complementos se encargan:
 
 - **Buffer** (`⌘⇧B`): un banco de trabajo para el texto antes de confirmarlo. El chino y el inglés entran primero en el búfer. Ahí se puede traducir en tiempo real, o generar y reescribir con el conector de IA elegido. Solo después de confirmar se **entrega de forma explícita** al campo actual.
-- **Capsule** (`⌘⇧V`): una barra en la parte inferior de la pantalla. El texto, los enlaces, las imágenes, los archivos y los colores recién copiados aparecen en Recientes. Lo que quieras conservar pasa a notas, imágenes, PDF, habilidades o contraseñas.
+- **Capsule** (`⌘⇧C`): una barra en la parte inferior de la pantalla. El texto, los enlaces, las imágenes, los archivos y los colores recién copiados aparecen en Recientes. Lo que quieras conservar pasa a notas, imágenes, PDF, habilidades o contraseñas.
 - **Mailbox** (`⌘⇧M`): las conversaciones de IA, las notas y los envíos externos pendientes de revisión se quedan en esta ventana. Puedes abrir una conversación y elegir un conector ya configurado.
 
 ## Sobre las funciones principales
@@ -38,7 +38,7 @@ Con un solo método de entrada se cubren la traducción, la generación y la rev
 |---|---|---|---|---|---|
 | Esquemas | — | Pinyin completo Rime Ice, Natural Code, Xiaohe, Wubi 86, XSIME Wubi, inglés | — | — | — |
 | Búfer | `⌘⇧B` | Texto antes de confirmarlo | Cambia a XSIME y luego captura y entrega por bloques | — | Si cambias de método, solo se usa el portapapeles del sistema, no IMK |
-| Barra Capsule | `⌘⇧V` | Copias recientes; notas, imágenes, PDF, habilidades, contraseñas | Clic para elegir, doble clic o Retorno para pegar. `⌘S` guarda | Solo en este Mac | Pegar exige Accesibilidad; si no hay permiso, solo llega al portapapeles |
+| Barra Capsule | `⌘⇧C` | Copias recientes; notas, imágenes, PDF, habilidades, contraseñas | Clic para elegir, doble clic o Retorno para pegar. `⌘S` guarda | Solo en este Mac | Pegar exige Accesibilidad; si no hay permiso, solo llega al portapapeles |
 | Mailbox | `⌘⇧M` | Conversaciones de IA, notas, envíos por revisar | Conversación nueva; el primer Retorno inicia la generación | El modelo queda ligado a esa conversación | Los CLI usan su modelo predeterminado |
 | Gestión de Capsule | Engranaje o pincel | Cinco tipos de entradas, con vista previa y copia | Cuatro acordes muestran una contraseña, como máximo 15 segundos | iCloud opcional; contraseñas y claves se quedan en este Mac | La frase de acceso solo se guarda como un resumen local |
 | Ajustes | `⌘⇧S` | Atajos, estado, sincronización y seguridad | Solo se abre si XSIME es el método de entrada actual | — | No incrusta las ventanas de Mailbox ni de Capsule |

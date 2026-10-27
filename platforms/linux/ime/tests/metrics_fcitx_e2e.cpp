@@ -259,7 +259,7 @@ int main(int argc, char** argv) {
                     consent(true, true);
                     clear();
                     main([&] {
-                        tap(first, "Control+Shift+b");
+                        tap(first, "Alt+Shift+b");
                         for (char c : std::string("nihao"))
                             tap(first, std::string(1, c));
                         tap(first, "space");

@@ -93,7 +93,10 @@ int main() {
           "absent file uses Alt+Shift+B and Alt+Shift+Enter");
     Check(!settings.chord_enabled && settings.align_to_input_box && !settings.reset_on_app_switch,
           "fresh profile disables chord and preserves Buffer across apps with alignment enabled");
-    Check(settings.settings_key == 'S' && settings.capsule_key == 'V' && settings.capture_key == '4', "fresh global shortcut defaults");
+    Check(settings.settings_key == 'S' && settings.capsule_key == 'C' && settings.capture_key == '4', "fresh global shortcut defaults");
+    for (const auto modifiers : {settings.hotkey_modifiers, settings.send_modifiers, settings.previous_plugin_modifiers,
+                                settings.next_plugin_modifiers, settings.settings_modifiers, settings.capsule_modifiers, settings.capture_modifiers})
+      Check(modifiers == (MOD_ALT | MOD_SHIFT), "every fresh application shortcut uses Alt+Shift");
     for (const auto* theme : {"night", "day", "quiet", "rasta"}) {
       settings.theme = theme;
       settings.connections.front().model = "fixture-model";

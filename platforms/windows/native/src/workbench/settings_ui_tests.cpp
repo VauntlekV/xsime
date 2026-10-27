@@ -1727,7 +1727,7 @@ void TestGlobalShortcutsAndWindowPreferences() {
   host.OpenPage(nullptr, ui::SettingsPage::kBuffer, 2);
   for (int id = 430; id <= 441; ++id) Check(IsVisibleWithinFixture(GetDlgItem(host.hwnd(), id), host.hwnd()), "global shortcuts and window controls are visible");
   SendMessageW(GetDlgItem(host.hwnd(), 436), BM_CLICK, 0, 0);
-  host.RecordShortcut('V', MOD_ALT | MOD_SHIFT);
+  host.RecordShortcut('C', MOD_ALT | MOD_SHIFT);
   Check(host.RecordingShortcut() && saves == 0, "settings shortcut cannot duplicate Capsule");
   host.RecordShortcut('M', MOD_ALT | MOD_SHIFT);
   Check(host.RecordingShortcut() && saves == 0, "Mailbox binding remains reserved");

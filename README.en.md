@@ -23,7 +23,7 @@ All five platforms include **Wubi 86** and **XSIME Wubi**. Wubi 86 supports `z` 
 One input method covers everyday translation, generation, and polishing, without leaving the app you are in. The input method and its plug-ins do the work:
 
 - **Buffer** (`⌘⇧B`): a text workbench before commit. Chinese or English enters the buffer first, where you can translate it live or generate and rewrite it with the selected AI connector. After you confirm, it is **explicitly delivered** into the current field.
-- **Capsule** (`⌘⇧V`): a bar at the bottom of the screen. Text, links, images, files, and colors you just copied appear in Recent. What you want to keep goes into notes, images, PDFs, skills, or passwords.
+- **Capsule** (`⌘⇧C`): a bar at the bottom of the screen. Text, links, images, files, and colors you just copied appear in Recent. What you want to keep goes into notes, images, PDFs, skills, or passwords.
 - **Mailbox** (`⌘⇧M`): AI conversations, notes, and external items waiting for review stay in this window. You can start a conversation and choose a connector you have already configured.
 
 ## Notes on the main capabilities
@@ -40,7 +40,7 @@ One input method covers everyday translation, generation, and polishing, without
 |---|---|---|---|---|---|
 | Input schemes | — | Rime Ice full Pinyin, Natural Code, Xiaohe, Wubi 86, XSIME Wubi, English | — | — | — |
 | Buffer | `⌘⇧B` | Text before it is committed | Switch to XSIME, then capture and deliver in chunks | — | After you switch away, only the system clipboard is used, not IMK |
-| Capsule bar | `⌘⇧V` | Recent copies; notes, images, PDFs, skills, passwords | Click to select, double-click or Return to paste. `⌘S` saves | This Mac only | Paste needs Accessibility; otherwise it only reaches the clipboard |
+| Capsule bar | `⌘⇧C` | Recent copies; notes, images, PDFs, skills, passwords | Click to select, double-click or Return to paste. `⌘S` saves | This Mac only | Paste needs Accessibility; otherwise it only reaches the clipboard |
 | Mailbox | `⌘⇧M` | AI conversations, notes, items waiting for review | New conversation; the first Return starts generation | The model is bound to that conversation | CLIs use their default model |
 | Capsule manager | Gear or brush | Five kinds of items, with preview and copy | Four chords reveal a password, for at most 15 seconds | Optional iCloud; passwords and keys stay on this Mac | The passphrase is stored only as a local digest |
 | Settings | `⌘⇧S` | Shortcuts, status, sync, and security | Opens only while XSIME is the current input method | — | Does not embed the Mailbox or Capsule windows |

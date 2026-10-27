@@ -590,9 +590,10 @@ void Window::PopupTrayMenu() {
   std::wstring startup_command;
   bool startup_enabled = false;
   broker::QueryBrokerAutostart(&startup_command, &startup_enabled);
+  const auto config = runtime.Configuration();
   auto menu = BuildOwnerMenu(
       {{kToggle, L"打开 / 绑定 Buffer"},
-       {kCapsule, L"Capsule 内容库    Alt+Shift+V"},
+       {kCapsule, L"Capsule 内容库    " + ShortcutTitle(config.capsule_key, config.capsule_modifiers)},
        {kMailbox, L"Mailbox 工作区    Alt+Shift+M"},
        {kSettings, L"设置"},
        {kDeploy, L"重新部署词库"},

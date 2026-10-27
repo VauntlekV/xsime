@@ -140,7 +140,7 @@ struct SettingsDraft {
   wchar_t hotkey = L'B';
   unsigned send_modifiers = MOD_ALT | MOD_SHIFT, send_key = VK_RETURN;
   std::array<unsigned, 2> plugin_keys{VK_UP, VK_DOWN}, plugin_modifiers{MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT};
-  std::array<unsigned, 3> global_keys{'S', 'V', '4'}, global_modifiers{MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT};
+  std::array<unsigned, 3> global_keys{'S', 'C', '4'}, global_modifiers{MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT, MOD_ALT | MOD_SHIFT};
   std::wstring base_url;
   std::wstring model;
   int ai_connector_index = 0;

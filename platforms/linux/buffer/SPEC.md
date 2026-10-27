@@ -40,7 +40,7 @@ content; blocks are not persisted.
 
 ## Capture and delivery
 
-1. `Ctrl+Shift+B` or `Super+Shift+B` (hidden → visible) grants capture to the
+1. `Alt+Shift+B` (hidden → visible) grants capture to the
    current Fcitx5 input context and shows the workbench. The host stays the
    delivery anchor; the workbench does not take keyboard focus.
 2. The same hotkey, unmodified Escape **on the captured IC**, or Close

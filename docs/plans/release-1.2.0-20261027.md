@@ -40,3 +40,7 @@
 维护者明确授权在构建完成后协调 [Publish-appstore](codex://threads/01a0e122-f4e2-7ec2-a923-f323d862a17f)；交接冻结提交、构建号、归档来源、SHA-256 和远端检查结果，再由该对话继续 TF 与商店。构建未完成前不报告已提交上架。
 
 已发现并备份主工作区中唯一与插件源不同的生成文件 `platforms/ios/Support/BufferPlugins.swift`，将其中的助手实现补回官方插件源码，避免干净 CI 构建丢失工作副本能力。
+
+## 本次默认快捷键
+
+维护者确认：Windows / Linux 的应用默认快捷键统一使用 Alt + Shift，保留原功能键；三桌面端 Capsule 的打开键从 V 改为 C。macOS 为 ⌘⇧C，Windows / Linux 为 Alt+Shift+C。Buffer 为 B、Mailbox 为 M、设置为 S；保留已保存的个人快捷键及系统原有的复制、粘贴等编辑操作。新安装、恢复默认、输入法内回退路径和全局快捷键宿主使用同一组新默认值。

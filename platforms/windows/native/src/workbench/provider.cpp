@@ -262,7 +262,7 @@ bool LoadSettings(Settings* value, std::string* error) {
     candidate.next_plugin_modifiers = j.value("next_plugin_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
     candidate.settings_key = j.value("settings_key", unsigned('S'));
     candidate.settings_modifiers = j.value("settings_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
-    candidate.capsule_key = j.value("capsule_key", unsigned('V'));
+    candidate.capsule_key = j.value("capsule_key", unsigned('C'));
     candidate.capsule_modifiers = j.value("capsule_modifiers", unsigned(MOD_ALT | MOD_SHIFT));
     candidate.capture_key = j.value("capture_key", unsigned('4'));
     candidate.capture_modifiers = j.value("capture_modifiers", unsigned(MOD_ALT | MOD_SHIFT));

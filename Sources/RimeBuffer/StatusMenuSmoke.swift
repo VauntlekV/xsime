@@ -103,7 +103,7 @@ func runStatusMenuSmokeTest() -> Bool {
     let refreshedState = InputSourceMenuState(
         healthy: true,
         bufferTitle: "Buffer…（⇧⌘B）",
-        clipboardTitle: "Capsule…（⇧⌘V）",
+        clipboardTitle: "Capsule…（⇧⌘C）",
         mailboxTitle: "Mailbox…（⇧⌘M）"
     )
     let refreshedMenu = StatusMenu.makeInputSourceMenu(target: spy, state: refreshedState)

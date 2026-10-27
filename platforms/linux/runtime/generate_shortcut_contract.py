@@ -21,7 +21,7 @@ def generate():
         modifiers = re.search(r"modifiers: \[([^\]]+)\]", block[1] if block else "")
         if not title or not key or not modifiers:
             raise ValueError(f"Review macOS shortcut contract for {native}")
-        names = {".command": "CTRL", ".control": "CTRL", ".shift": "SHIFT", ".option": "ALT"}
+        names = {".command": "ALT", ".control": "CTRL", ".shift": "SHIFT", ".option": "ALT"}
         mapped = [names[v.strip()] for v in modifiers[1].split(",")]
         if len(set(mapped)) != len(mapped):
             raise ValueError(f"Review Linux mapping of combined Command/Control for {native}")
