@@ -185,6 +185,7 @@ int main(int argc, char** argv) {
                      "hide/navigation, final reply, cancel/retry, protection and unavailable "
                      "channel passed\n";
     } catch (...) {
+        std::cerr << "Mailbox chat fixture failed during: " << stage << '\n';
         const auto failed = store.Read();
         for (const auto& row : failed.document.at("threads"))
             std::cerr << "public fixture: " << row.at("generation").dump()

@@ -1,9 +1,12 @@
 #include "plugin_store.hpp"
 #include "package_binding.hpp"
 #include "http_download.hpp"
+#include <atomic>
 #include <cstdlib>
+#include <exception>
 #include <fstream>
 #include <iostream>
+#include <thread>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -27,6 +30,34 @@ Json Catalog(Json manifest) {
     entry["sha256"] = Sha256(manifest.dump());
     entry["downloadURL"] = "https://github.com/scholay/rimes-plugins/releases/download/v1.1.0/test.json";
     return {{"schemaVersion", 1}, {"plugins", Json::array({entry})}};
+}
+
+void CheckConcurrentSnapshots(const std::filesystem::path& root) {
+    PrivateDirectory files(root);
+    const std::string a(4096, 'a'), b(4096, 'b');
+    files.Write("snapshot", a);
+    std::atomic<bool> started{false}, done{false};
+    std::exception_ptr writer_error, reader_error;
+    std::thread writer([&] {
+        while (!started.load()) std::this_thread::yield();
+        try {
+            for (int i = 0; i < 512; ++i)
+                files.Write("snapshot", i % 2 ? a : b);
+        } catch (...) { writer_error = std::current_exception(); }
+        done.store(true);
+    });
+    started.store(true);
+    try {
+        for (std::size_t reads = 0; !done.load() || reads < 2048; ++reads) {
+            const auto snapshot = files.Read("snapshot", a.size());
+            Check(snapshot && (*snapshot == a || *snapshot == b),
+                  "atomic replacement exposed a partial private snapshot");
+        }
+    } catch (...) { reader_error = std::current_exception(); }
+    writer.join();
+    if (writer_error) std::rethrow_exception(writer_error);
+    if (reader_error) std::rethrow_exception(reader_error);
+    Check(files.Read("snapshot", a.size()) == a, "final snapshot was not published");
 }
 
 int main() {
@@ -138,6 +169,7 @@ int main() {
         Reject([&] { permissions.Install(id, escalation.dump(), permissions.Inspect(id).grant); });
 
         PrivateDirectory files(root / "private");
+        CheckConcurrentSnapshots(root / "concurrent");
         files.Write("test", "exact bytes");
         Check(files.Read("test", 32) == "exact bytes", "private file round-trip failed");
         Reject([&] { files.Read("test", 2); });
