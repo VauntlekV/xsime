@@ -1,4 +1,5 @@
 #include "candidate_matrix_window.hpp"
+#include "gtk_window_retirement.hpp"
 #include "session/protected_input.hpp"
 #include <algorithm>
 #include <cmath>
@@ -105,8 +106,8 @@ CandidateMatrixWindow::CandidateMatrixWindow(Instance* instance) : impl_(std::ma
 CandidateMatrixWindow::~CandidateMatrixWindow() = default;
 void CandidateMatrixWindow::hide() {
     impl_->select = {}; impl_->move = {}; impl_->queuedSelection.reset(); impl_->queuedMove = 0; impl_->numbers.clear();
-    if (impl_->window) gtk_widget_hide(impl_->window);
     if (impl_->timer) impl_->timer->setEnabled(false);
+    rimes::linuxime::RetireGtkWindow(impl_->window);
 }
 std::optional<std::size_t> CandidateMatrixWindow::digit(std::size_t index) const {
     return index < impl_->numbers.size() ? std::optional<std::size_t>(impl_->numbers[index]) : std::nullopt;
