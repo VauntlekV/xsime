@@ -55,6 +55,9 @@ void RunTypingSuite(fcitx::Instance& instance,
                     fcitx::AddonInstance* frontend,
                     const fcitx::ICUUID& uuid,
                     fcitx::InputContext* ic) {
+    std::cout << "testfrontend focus before activation: " << ic->hasFocus() << '\n';
+    ic->focusIn();
+    if (!ic->hasFocus()) Die("typing suite requires a focused input context");
     ic->setCapabilityFlags(fcitx::CapabilityFlags{fcitx::CapabilityFlag::Preedit} |
                            fcitx::CapabilityFlag::ClientUnfocusCommit);
 

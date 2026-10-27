@@ -105,6 +105,9 @@ jobs:
             exit 1
           fi
 
+      - name: Headless typing E2E
+        run: platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
+
       - name: Real Wayland capture portal and PipeWire
         run: dbus-run-session -- /usr/bin/python3 platforms/linux/capsule/tests/capture_wayland_test.py platforms/linux/ime/build/rimes-capsule-capture --allow-headless-no-dmabuf
 
@@ -221,9 +224,6 @@ jobs:
           platforms/linux/ime/build/rimes-schemes --verify "$RUNNER_TEMP/wanxiang-import" nihao 你好
           platforms/linux/ime/build/rimes-schemes --import "$RUNNER_TEMP/wanxiang-t9-import" "$RUNNER_TEMP/wanxiang-original.zip" wanxiang_t9
           platforms/linux/ime/build/rimes-schemes --verify "$RUNNER_TEMP/wanxiang-t9-import" 64426 你好
-
-      - name: Headless typing E2E
-        run: platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 
       - name: Actual GTK, Qt and XIM terminal hosts
         run: |

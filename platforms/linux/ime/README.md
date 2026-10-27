@@ -194,8 +194,9 @@ Use the `fcitx5-rimes_<version>_amd64.deb` and matching `.sha256` attached to
 the project's [GitHub Release](https://github.com/scholay/xsime/releases).
 Older releases may not have a deb; until a release with this asset is
 published, build one locally using the packaging instructions below.
-The release workflow builds on Ubuntu 24.04 amd64. Other Debian/Ubuntu
-versions must satisfy the package's declared dependencies; rebuild on the
+The release workflow builds on Ubuntu 24.04 amd64 and validates the same DEB
+on Ubuntu 26.04 amd64. Versioned engine dependencies stay in its private library
+directory. Other Debian/Ubuntu versions must satisfy the package's declared dependencies; rebuild on the
 target distribution or architecture when they do not. This is a Fcitx5
 package, not an IBus engine.
 
@@ -336,7 +337,7 @@ Buffer/Capsule and control clients, settings/plugin/resource managers, Mailbox,
 gateway and native helpers, ordinary chord data, statistics/practice resources,
 pinned official plugins, private Rime/Lua and reviewed dictionaries. The deferred
 stream-input feature is not part of this Linux delivery.
-The release package targets Ubuntu 24.04 amd64; install with `sudo apt install ./fcitx5-rimes_1.1.5_amd64.deb`. The package manager removes application files while user dictionaries remain in the user data directory.
+The release package targets Ubuntu 24.04 / 26.04 amd64; install with `sudo apt install ./fcitx5-rimes_<version>_amd64.deb`. The package manager removes application files while user dictionaries remain in the user data directory.
 The package recommends `libgtk-layer-shell0`, `wl-clipboard` and the Inter/Noto
 fonts (including emoji). GStreamer base/good/PipeWire plugins and
 `xdg-desktop-portal` are runtime dependencies for capture. Install the portal
@@ -360,7 +361,9 @@ The reusable `linux-deb.yml` workflow builds on Ubuntu 24.04 amd64, runs source
 install/uninstall tests, then installs, upgrades, reinstalls and removes the exact deb
 on a disposable runner. Every phase checks user/CLI data bytes, ownership,
 permissions and directory layout. Installed binary/runtime checks run after
-fresh installation and upgrade. The workflow downloads the highest strictly
+fresh installation and upgrade. A separate Ubuntu 26.04 container installs the
+same DEB, imports and types with a third-party scheme, then removes the package
+while retaining its data. The workflow downloads the highest strictly
 older matching-architecture deb from a published project `v*` Release and verifies
 its checksum and package identity before upgrading it. If no older deb exists,
 it explicitly uses an older-version fixture built from the current payload,

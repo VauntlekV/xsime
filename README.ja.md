@@ -81,7 +81,7 @@
 
 ## インストール
 
-[1.1.6 リリース](https://github.com/scholay/xsime/releases/tag/v1.1.6)から、macOS PKG、Android APK／AAB、Windows EXE／ZIP、Linux DEB（Ubuntu 24.04 amd64／Fcitx5）をダウンロードできます。macOS は署名・公証済み、Android は従来の長期署名鍵を使用し、Windows EXE は未署名です。iOS は [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242)／[TestFlight 公開招待](https://testflight.apple.com/join/Kdj9RB4q)を利用してください。インストール可能なバージョンは Apple のページに表示されます。5つのプラットフォームで共通の Rime ZIP やコード付き UTF-8 TXT／TSV 辞書を読み込めます。[インポートガイド](docs/portable-scheme-import.md)と[1.1.6 の検証記録](docs/releases/1.1.6.md)を参照してください。ソースからのローカルビルドも可能です。
+[1.2.0 リリース](https://github.com/scholay/xsime/releases/tag/v1.2.0)から、macOS PKG、Android APK／AAB、Windows EXE／ZIP、Linux DEB（Ubuntu 24.04 / 26.04 amd64／Fcitx5）と再署名用の未署名 iOS IPA をダウンロードできます。macOS は署名・公証済み、Android は従来の長期署名鍵を使用し、Windows EXE は未署名です。iOS は [App Store](https://apps.apple.com/us/app/lingxi-ime/id6814620242)／[TestFlight 公開招待](https://testflight.apple.com/join/Kdj9RB4q)を利用してください。インストール可能なバージョンは Apple のページに表示されます。5つのプラットフォームで共通の Rime ZIP やコード付き UTF-8 TXT／TSV 辞書を読み込めます。[インポートガイド](docs/portable-scheme-import.md)と[1.2.0 の検証記録](docs/releases/1.2.0.md)を参照してください。ソースからのローカルビルドも可能です。
 
 ```bash
 git clone --recurse-submodules https://github.com/scholay/xsime.git
