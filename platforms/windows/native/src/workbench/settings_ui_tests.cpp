@@ -1590,17 +1590,28 @@ void TestBrandHome() {
   Check(!shown(415), "up from input returns to home");
   const wchar_t* expected[] = {L"https://xsime.com", L"mailto:pm@scholay.com", L"https://github.com/scholay/xsime",
       L"https://github.com/scholay/xsime/blob/main/README.md", L"https://github.com/scholay/xsime/blob/main/LICENSE"};
-  for (int tab = 1; tab < 6; ++tab) {
-    Click(window, layout.subpage_tabs[tab]);
-    Check(shown(417) && opened.size() == static_cast<std::size_t>(tab - 1), "selecting a home tab exposes its button without opening anything");
-    // Native button keeps Tab focus, accessibility text, and Enter activation.
-    SetFocus(window);
-    MSG message{}; message.hwnd = window; message.message = WM_KEYDOWN; message.wParam = VK_TAB;
-    Check(host.HandleDialogMessage(&message) && GetFocus() == GetDlgItem(window, 417), "Tab reaches the home link button");
-    message.hwnd = GetFocus(); message.wParam = VK_RETURN;
+  Check(ui::SettingsTabCount(ui::SettingsPage::kHome) == 3, "home has About, README and License tabs");
+  for (int link = 0; link < 5; ++link) {
+    const auto button = GetDlgItem(window, 6200 + link);
+    Check(shown(6200 + link) && opened.size() == static_cast<std::size_t>(link), "all project links are inline without opening on selection");
+    SetFocus(button);
+    MSG message{}; message.hwnd = button; message.message = WM_KEYDOWN; message.wParam = VK_RETURN;
     host.HandleDialogMessage(&message);
-    Check(opened.size() == static_cast<std::size_t>(tab) && opened.back() == expected[tab - 1] && saves == 0 && host.IsOpen(),
-          "Enter opens exactly the selected home destination without saving or closing");
+    Check(opened.size() == static_cast<std::size_t>(link + 1) && opened.back() == expected[link] && saves == 0 && host.IsOpen(),
+          "Enter opens exactly the focused project link without saving or closing");
+  }
+  for (int tab = 1; tab < 3; ++tab) {
+    Click(window, layout.subpage_tabs[tab]);
+    Check(shown(6210) && !shown(417) && !shown(6200) && opened.size() == 5,
+          "README and License use the native document reader without opening a browser");
+    const auto document = GetDlgItem(window, 6210);
+    const int length = GetWindowTextLengthW(document);
+    std::wstring text(static_cast<std::size_t>(length) + 1, L'\0');
+    GetWindowTextW(document, text.data(), length + 1);
+    Check((GetWindowLongPtrW(document, GWL_STYLE) & ES_READONLY) != 0 && length > 8000,
+          "full bundled document is readable and read-only");
+    Check(tab == 1 ? text.find(L"English") != std::wstring::npos : text.find(L"Apache License") != std::wstring::npos,
+          "document matches the selected README or license tab");
   }
   Click(window, layout.nav[0]);
   SendMessageW(GetDlgItem(window, 417), BM_CLICK, 0, 0);

@@ -26,6 +26,10 @@ PracticeEditor::PracticeEditor()
         static_cast<GtkInputHints>(GTK_INPUT_HINT_NO_SPELLCHECK | GTK_INPUT_HINT_NO_EMOJI));
     atk_object_set_name(gtk_widget_get_accessible(view_), "跟打输入，首键计时，组字不判错");
     Enable(false);
+    auto* font_style = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(font_style, "textview.practice-editor { font-family: 'Noto Sans CJK SC'; font-size: 22px; }", -1, nullptr);
+    gtk_style_context_add_provider(gtk_widget_get_style_context(view_), GTK_STYLE_PROVIDER(font_style), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    g_object_unref(font_style);
     g_signal_connect(view_, "size-allocate", G_CALLBACK(+[](GtkWidget* widget, GtkAllocation* allocation, gpointer data) {
         auto* self = static_cast<PracticeEditor*>(data);
         const auto columns = std::max(4, (allocation->width - 38) / 28);
@@ -267,6 +271,7 @@ void PracticeEditor::Source(const std::string& text, const Json& states, bool ch
     track_ = true;
     const bool changed = source_ != text || chinese_ != chinese;
     source_ = text; states_ = states; chinese_ = chinese;
+    gtk_text_view_set_left_margin(GTK_TEXT_VIEW(view_), 19 + (chinese_ ? 56 : 0));
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view_), GTK_WRAP_NONE);
     gtk_text_view_set_pixels_above_lines(GTK_TEXT_VIEW(view_), 32);
     gtk_text_view_set_pixels_below_lines(GTK_TEXT_VIEW(view_), 14);
@@ -349,6 +354,8 @@ void PracticeEditor::LayoutTrack() {
     } catch (const std::exception& error) { g_warning("Typing track: %s", error.what()); }
     suppressed_ = old_suppressed;
     formatting_ = false;
+    const int lines = gtk_text_buffer_get_line_count(buffer_);
+    gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(view_), 24 + std::max(0, static_cast<int>(rows_.size()) - lines) * 78);
     gtk_widget_queue_draw(view_);
 }
 void PracticeEditor::DrawTrack(cairo_t* cr) {
@@ -360,8 +367,17 @@ void PracticeEditor::DrawTrack(cairo_t* cr) {
     auto* font = pango_font_description_from_string("Noto Sans CJK SC 16.5");
     pango_layout_set_font_description(layout, font); pango_font_description_free(font);
     const auto height = gtk_widget_get_allocated_height(view_);
+    GtkTextIter first; gtk_text_buffer_get_start_iter(buffer_, &first);
+    GdkRectangle initial{}; gtk_text_view_get_iter_location(view, &first, &initial);
+    const int line_count = gtk_text_buffer_get_line_count(buffer_);
+    const int pitch = std::max(1, initial.height) + 46;
     for (std::size_t row = 0; row < rows_.size(); ++row) {
-        const auto y = top + 12 + static_cast<int>(row) * 78;
+        int source_y = initial.y + static_cast<int>(row) * pitch - 32;
+        if (row < static_cast<std::size_t>(line_count)) {
+            GtkTextIter at; gtk_text_buffer_get_iter_at_line(buffer_, &at, static_cast<int>(row));
+            GdkRectangle location{}; gtk_text_view_get_iter_location(view, &at, &location); source_y = location.y - 32;
+        }
+        const auto y = top + source_y;
         if (y + 28 < 0 || y > height) continue;
         const auto& source = rows_[row]; const auto chars = rimes::practice::materials::Characters(source.text);
         for (std::size_t i = 0; i < chars.size(); ++i) {
@@ -369,10 +385,13 @@ void PracticeEditor::DrawTrack(cairo_t* cr) {
             const auto state = index < states_.size() ? states_[index].get<int>() : 0;
             GdkRGBA color{}; gtk_style_context_get_color(gtk_widget_get_style_context(view_), GTK_STATE_FLAG_NORMAL, &color);
             if (state == 1) gdk_rgba_parse(&color, "#24945b"); else if (state >= 2) gdk_rgba_parse(&color, "#d45151"); else color.alpha *= .65;
+            const auto cell_x = x + 19 + (source.indent + static_cast<int>(i)) * 28;
+            auto border = color; border.alpha = .12; gdk_cairo_set_source_rgba(cr, &border); cairo_set_line_width(cr, .5);
+            cairo_rectangle(cr, cell_x, y, 28, 28); cairo_rectangle(cr, cell_x, y + 32, 28, 28); cairo_stroke(cr);
             gdk_cairo_set_source_rgba(cr, &color);
             pango_layout_set_text(layout, chars[i].c_str(), static_cast<int>(chars[i].size())); int width = 0;
             pango_layout_get_pixel_size(layout, &width, nullptr);
-            cairo_move_to(cr, x + 19 + (source.indent + static_cast<int>(i)) * 28 + (28 - width) / 2., y);
+            cairo_move_to(cr, cell_x + (28 - width) / 2., y);
             pango_cairo_show_layout(cr, layout);
         }
     }

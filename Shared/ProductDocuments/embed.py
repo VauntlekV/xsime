@@ -4,9 +4,9 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parents[2]
-readme = '\n\n'.join((root / name).read_text() for name in
+readme = '\n\n'.join((root / name).read_text(encoding="utf-8") for name in
                      ('README.md', 'README.en.md', 'README.ja.md', 'README.ko.md', 'README.es.md'))
-license_text = (root / 'LICENSE').read_text() + '\n\n' + (root / 'NOTICE').read_text()
+license_text = (root / 'LICENSE').read_text(encoding="utf-8") + '\n\n' + (root / 'NOTICE').read_text(encoding="utf-8")
 out = ['// Generated from the exact source snapshot.\n#pragma once\n#include <string>\nnamespace rimes::documents {\n']
 for symbol, text in [('Readme', readme), ('License', license_text)]:
     if ')XSIMEDOC"' in text or '\0' in text:
@@ -19,4 +19,4 @@ for symbol, text in [('Readme', readme), ('License', license_text)]:
 out.append('}\n')
 path = Path(sys.argv[1])
 path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(''.join(out))
+path.write_text(''.join(out), encoding='utf-8')

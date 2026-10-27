@@ -547,7 +547,7 @@ struct PracticePane::Impl {
                              const char *id = gtk_combo_box_get_active_id(picker);
                              if (!id)
                                  return;
-                             for (const auto &article : articles)
+                             for (const auto &article : s->articles)
                                  if (article.at("id") == id)
                                      s->article = article;
                              if (s->history) {
