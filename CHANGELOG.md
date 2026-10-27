@@ -4,6 +4,109 @@
 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/) 生成，请勿手工编辑。
 每个版本的安装方式与校验和见 [GitHub Releases](https://github.com/scholay/xsime/releases)。
 
+## [v1.2.0](https://github.com/scholay/xsime/releases/tag/v1.2.0) — 2026-10-27
+
+### 合并的 PR
+
+- #281
+- #274
+- #273
+- #272
+
+### 新功能
+
+- **shortcuts:** use Alt-Shift desktop defaults and open Capsule with C (242d8d9d)
+- **linux:** select built-in schemes from settings without dropping composition (5bd04b96)
+- **release:** complete desktop documents and mobile Buffer parity (da9d0e85)
+- **android:** align scheme cards and assistant starters with iOS (4c024106)
+- **linux:** add EPUB library and two-track native practice surface (e706e210)
+- **desktop:** wire shared material library and refresh actual native contracts (a8e84d68)
+- **android:** align keyboard gestures and assistant settings for 1.2.0 (c3047cd0)
+- **macos:** the chord extension's scheme is one more card on the input page (a38cbd2f)
+- **macos:** settings pages get top padding, link rows and the full multilingual README (c5ffa65d)
+- **macos:** bump official plugins pin for grid cells, paragraph indent and the page-scrolled typing card (72cd66a9)
+- **macos:** bump official plugins pin for the double-track typing view and tabbed material sidebar (5c6f658b)
+- **macos:** bump official plugins pin for the card material column and chapter pieces (4bad9ad0)
+- **macos:** settings without page titles, inline XSIME pages, typing results leave Statistics (3d74e85d)
+- **ios:** chords live in the isaac2026 scheme; orthogonal layout no longer needs the plugin (12cc1305)
+- **ios:** customizable AI assistant presets and a configurable quick entrance bar (a2547a71)
+- **ios:** scheme packages as a gallery of cards (d11023f1)
+- **macos:** typing practice material column and EPUB import (b064343a)
+- **ios:** official plugins as a gallery of cards (e24ecab3)
+- **ios:** the Buffer closes when a person sends its last content (68e89b2c)
+- **ios:** Apple-style callout for swipe symbols, menu icons, animated two-finger Buffer slide (a7169391)
+- **ios:** two-finger slide opens and closes the Buffer; soft blurred ripple (439f80de)
+- **ios:** hold Insert for a second to send everything, with an edge line; icon stats chips (7a6853cc)
+- **ios:** spreading two fingers on Space puts the whole Buffer on screen and closes it (687aa51e)
+- **ios:** fixed unit widths on the orthogonal bottom row (3113116e)
+- **ios:** narrower side keys and a longer Space in the orthogonal layout (7e77da53)
+- **ios:** prompts float over the keys; Space is wider (780ad1f9)
+- **ios:** gesture-driven Space (163743d5)
+- **ios:** two-thumb candidate mode on the split Space (8661df7d)
+- **ios:** iOS-style direction and decoupled axes for the held-half drum; full-square expand control (012aa045)
+- **ios:** ripple press on Space and a candidate drum while the left half is held (a3f3338a)
+- **ios:** whole-cap Space; hold-left slide turns single-row lines (3e02bcbc)
+- **ios:** Space shows the input mode; Return disables in empty fields (9c3e61a0)
+- **ios:** split Space into two halves with cross-half gestures (456d4257)
+- **ios:** make the orthogonal grid a layout any scheme can use (c52d3800)
+- **ios:** key style setting, symbol row fill, drop candidate hold-select (6aff8ec6)
+
+### 修复
+
+- **linux:** open the candidate matrix with page keys in every schema (ffe031af)
+- **linux:** preserve private snapshots across atomic replacement (6dae23d1)
+- **linux:** settle native track allocations before offscreen rendering (64663a34)
+- **linux:** bundle the versioned ICU internationalization runtime (eaf38270)
+- **linux:** use native practice states and current shortcut conflict fixtures (ef42f0f8)
+- **desktop:** keep history routes and typing panel bounds stable (4b84448c)
+- **desktop:** share original paragraph layout without changing scoring identity (41c471c9)
+- **desktop:** preserve UTF-8 documents and native practice geometry (c60df018)
+- **desktop:** align home navigation, Linux paging and portable runtime (0bcf6f1e)
+- **linux:** retire GTK candidate windows before suspending events (65135b2c)
+- **macos:** settings shell hosts self-scrolling plugin pages directly (2f285815)
+- **ios:** settings page links to xsime.com (201745f8)
+- **ios:** hold-to-send line belongs to the input box, clipped to its corners (39fd3c58)
+- **ios:** keep the previous translation visible, finish AI output at once, bordered stats chips (24986a89)
+- **ios:** soften the drum's neighbouring lines (22% opacity) (6af793a8)
+- **ios:** make the candidate expand button wider with extra touch reach (66e63122)
+- **ios:** carry the Space-bar highlight across matrix rows (080c7e30)
+- **windows:** align capture cards and remove hover repaint flicker (5e035a88)
+- **windows:** validate visible paging and warm commit metrics (4d7e69df)
+- **windows:** align Buffer, Capsule, candidates and settings (691dc908)
+- **ios:** prepare complete 1.1.9 keyboard build 66 (59fbacfa)
+- **ios:** prepare 1.1.9 Keychain repair for Apple distribution (#277) (ddf11f17)
+- **ios:** preserve shared Keychain group through unsigned archives (#276) (9ed518ba)
+- **ios:** centre number-page marks by their ink and shrink them to 21 pt (814ad6b9)
+- **ios:** make flat keys more translucent (78% opacity) (f08310d8)
+- **ios:** lower the key block 2 pt and let flat keys show the glass (4866a8be)
+- **ios:** let drags that start in candidate gaps scroll the matrix (78eba4be)
+- **ios:** match Apple's number-page glyph sizes and mark positions (97ec0027)
+- **ios:** calmer candidate taps, no dead gaps, full-width expanded rows (bbb67b4e)
+
+### 重构
+
+- **ios:** drop the two-finger spread; pinch fills the Buffer directly (ce08fd29)
+- **ios:** remove the Buffer input line's paste button (63f40dbd)
+- **ios:** remove the two-finger spread selection; cursor hold is 1 s (ab5fa1c5)
+- **ios:** drop the Buffer's tap-to-import hint text (d15f8919)
+
+### 文档
+
+- **release:** prepare 1.2.0 delivery notes and refreshed plugin host checks (5aa10a23)
+- **release:** publish verified 1.1.8 downloads and channel status (5168b3ad)
+- **ios:** verify 1.1.8 storefront availability (f9ba500f)
+- **ios:** record 1.1.8 store and external TestFlight submissions (62239a1b)
+
+### 维护
+
+- **linux:** retain ordinary-input diagnostics after unit failures (7bbdffd3)
+- **release:** converge verified Linux fixes and 1.2.0 download documentation (bb3c9d08)
+- **linux:** use the Ubuntu archive with bounded dependency retries (c305954d)
+- **linux:** measure the allocated practice view after rendering (f56be54f)
+- **linux:** restore explicit Pinyin fixture and updated desktop launch keys (1a6798a3)
+- export current desktop contracts from the remote macOS build (c5cf581e)
+- **windows:** bound and diagnose the native settings suite (7f540461)
+
 ## [v1.1.8](https://github.com/scholay/xsime/releases/tag/v1.1.8) — 2026-10-22
 
 ### 合并的 PR
