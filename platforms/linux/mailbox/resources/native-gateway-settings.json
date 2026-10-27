@@ -32,6 +32,6 @@
   "purpose": "public-gateway-settings",
   "schemaVersion": 1,
   "sources": {
-    "Sources/RimeBuffer/SettingsWindow.swift": "f45672309246a939d81cf67bc9889ee1b673bce40a503b7ff459735d331421c2"
+    "Sources/RimeBuffer/SettingsWindow.swift": "99d72d6da1c8d5f3b046768b9fb70001a76908bb4a548ec6afa1b06cc69e195f"
   }
 }

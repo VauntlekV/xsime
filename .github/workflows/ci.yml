@@ -623,6 +623,9 @@ jobs:
           "$BIN" gateway-settings-render "$RUNNER_TEMP/native-gateway-settings/gateway"
           "$BIN" codex-settings-render "$RUNNER_TEMP/native-gateway-settings/codex"
           "$BIN" claude-settings-render "$RUNNER_TEMP/native-gateway-settings/claude"
+          "$BIN" chord-linux-fixtures "$RUNNER_TEMP/native-gateway-settings/native-chord.json"
+          "$BIN" typing-practice-linux-fixtures "$RUNNER_TEMP/native-gateway-settings/native-practice.json"
+          "$BIN" typing-practice-linux-ui "$RUNNER_TEMP/native-gateway-settings/practice-dashboard"
 
       - name: Save native settings contracts and renderings
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

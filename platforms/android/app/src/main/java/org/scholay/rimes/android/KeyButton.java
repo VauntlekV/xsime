@@ -152,7 +152,7 @@ final class KeyButton extends Button {
             if(!isEnabled()) paint.setAlpha(Math.round(paint.getAlpha()*0.4f));
             canvas.drawRoundRect(cap,7*density,7*density,paint);
         } else if(plain) {
-            if(pressed) {
+            if(pressed || selected) {
                 cap.set(x,y,x+width,y+height); paint.setColor(palette.accent); paint.setAlpha(alpha);
                 canvas.drawRoundRect(cap,4*density,4*density,paint);
             }
