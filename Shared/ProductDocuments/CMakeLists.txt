@@ -1,0 +1,15 @@
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+get_filename_component(RIMES_DOCUMENT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(RIMES_DOCUMENT_HEADER "${CMAKE_CURRENT_BINARY_DIR}/rimes_product_documents.hpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${RIMES_DOCUMENT_ROOT}/README.md" "${RIMES_DOCUMENT_ROOT}/README.en.md"
+    "${RIMES_DOCUMENT_ROOT}/README.ja.md" "${RIMES_DOCUMENT_ROOT}/README.ko.md"
+    "${RIMES_DOCUMENT_ROOT}/README.es.md" "${RIMES_DOCUMENT_ROOT}/LICENSE"
+    "${RIMES_DOCUMENT_ROOT}/NOTICE")
+execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/embed.py" "${RIMES_DOCUMENT_HEADER}"
+    RESULT_VARIABLE RIMES_DOCUMENT_RESULT)
+if(NOT RIMES_DOCUMENT_RESULT EQUAL 0)
+    message(FATAL_ERROR "Unable to embed the exact project documents")
+endif()
+add_library(RimesProductDocuments INTERFACE)
+target_include_directories(RimesProductDocuments INTERFACE "${CMAKE_CURRENT_BINARY_DIR}")

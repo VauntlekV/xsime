@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstring>
 #include <fstream>
+#include "rimes_product_documents.hpp"
 #include <iostream>
 #include <memory>
 
@@ -289,12 +290,6 @@ struct Settings {
     gtk_widget_set_margin_end(feedback, 24);
     Add(tabs, feedback, true);
     Add(content, tabs);
-    auto *heading = Label(
-        route == "core.rimes" ? "关于 XSIME" : r.at("title").get<std::string>(),
-        "heading");
-    gtk_widget_set_size_request(heading, -1, Metric("headingHeight"));
-    gtk_widget_set_margin_start(heading, 24);
-    Add(content, heading);
     auto *scroll = gtk_scrolled_window_new(nullptr, nullptr);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -305,6 +300,7 @@ struct Settings {
     gtk_widget_set_margin_start(body, 24);
     gtk_widget_set_margin_end(body, 24);
     gtk_widget_set_margin_bottom(body, 22);
+    gtk_widget_set_margin_top(body, route.rfind("extension.", 0) == 0 ? 0 : 18);
     gtk_container_add(GTK_CONTAINER(scroll), body);
     if (route == "extension.fly-chord-learning") {
       chord_pane = std::make_unique<ChordPane>(GTK_WINDOW(window), subpage, rendering,
@@ -336,6 +332,19 @@ struct Settings {
       Add(body, Button("导入与管理…", [this] { Launch("rimes-schemes"); }));
       Add(body, Label("导入方案和移除方案均保留学习记录。", "caption"));
       if (subpage == "encoding") InputHabits(body);
+    } else if (route == "core.rimes" && (subpage == "readme" || subpage == "license")) {
+      auto* document = gtk_text_view_new();
+      gtk_text_view_set_editable(GTK_TEXT_VIEW(document), FALSE);
+      gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(document), FALSE);
+      gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(document), GTK_WRAP_WORD_CHAR);
+      gtk_widget_set_size_request(document, Metric("contentWidth"), -1);
+      const auto& text = subpage == "license" ? rimes::documents::License() : rimes::documents::Readme();
+      gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(document)), text.c_str(), -1);
+      auto* document_scroll = gtk_scrolled_window_new(nullptr, nullptr);
+      gtk_widget_set_size_request(document_scroll, Metric("contentWidth"), 500);
+      gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(document_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+      gtk_container_add(GTK_CONTAINER(document_scroll), document);
+      Add(body, document_scroll, true);
     } else if (route == "core.rimes") {
       auto* hero = Class(Row(20), "settings-hero");
       auto* logo = gtk_image_new_from_icon_name("rimes", GTK_ICON_SIZE_DIALOG);

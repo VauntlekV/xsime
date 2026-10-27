@@ -56,6 +56,7 @@ public final class RimesInputMethodService extends InputMethodService {
     private KeyboardRoot keyboard;
     private LinearLayout bufferRow, candidateRow, spellingRow, chordFooter;
     private BufferRail bufferRail,pluginOutput;
+    private BufferSendTouch bufferSendTouch;
     private final PluginSession pluginSession=new PluginSession();
     private BufferPluginExecutor pluginExecutor;
     private OfficialPluginStore officialPlugins;
@@ -324,6 +325,7 @@ public final class RimesInputMethodService extends InputMethodService {
     private void cancelChord() {
         deferredSpaceIndex=-1; deferredSpaceTicket=null; deferredSpaceTarget=null;
         if(footerSpaceTouch!=null) footerSpaceTouch.cancel();
+        if(bufferSendTouch!=null) bufferSendTouch.cancel();
         if(keyboard!=null) keyboard.cancelPendingInputEvents();
         heldPreview=null; chordPreview=""; if(chords!=null) chords.cancel();
     }
@@ -1005,6 +1007,10 @@ public final class RimesInputMethodService extends InputMethodService {
         bufferRail=new BufferRail(this); input.addView(bufferRail,new LinearLayout.LayoutParams(0,-1,1));
         insertNext=button(input,"↑",() -> insert(false),0); fixedWidth(insertNext,32); gapLeft(insertNext,4);
         ((KeyButton)insertNext).icon(KeyboardIcon.PAPER_PLANE); ((KeyButton)insertNext).appearance(false,false,true); insertNext.setContentDescription(getString(R.string.insert_next)); insertNext.setOnLongClickListener(v -> { insert(true); return true; });
+        bufferSendTouch=new BufferSendTouch(insertNext,bufferRail::sendProgress,() -> {
+            final InputConnection connection=target;final InputEpoch.Ticket ticket=epoch.issue();final BufferSession.Capture captured=buffer.capture();
+            return () -> { if(connection==target && epoch.current(ticket) && ownsTarget() && buffer.isCurrent(captured) && pending==0 && !snapshot.composing()) insert(true); };
+        });
         LinearLayout details=new LinearLayout(this); bufferBottom=details; bufferRow.addView(details,new LinearLayout.LayoutParams(-1,dp(railHeight)));
         bufferSettings=button(details,"设置",() -> openPluginSettings(activePlugin),0); fixedWidth(bufferSettings,32); gapRight(bufferSettings,4); bufferSettings.icon(KeyboardIcon.SLIDERS); bufferSettings.setContentDescription("Buffer 设置");
         metrics=new TextView(this); metrics.setGravity(Gravity.CENTER); metrics.setTextSize(landscape()?14:16);
@@ -1382,6 +1388,7 @@ public final class RimesInputMethodService extends InputMethodService {
             button.setSelected(i==1 && uppercase || i==3 && english || i==4 && returnSelected());
         }
         insertNext.setSelected(insertNext.isEnabled());
+        if(!insertNext.isEnabled() && bufferSendTouch!=null) bufferSendTouch.cancel();
         if(appearanceOpen) appearancePanel.schemes(schema,this::chooseSchema);
         appearancePanel.setVisibility(appearanceOpen?View.VISIBLE:View.GONE);
         if(appearanceOpen) {

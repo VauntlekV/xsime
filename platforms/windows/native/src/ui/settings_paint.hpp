@@ -170,7 +170,7 @@ inline void PaintSettingsShell(HDC dc, const SettingsLayout& layout,
   DrawTextW(dc, heading_text.c_str(), -1, &heading,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-  if (draft.page == SettingsPage::kHome) {
+  if (draft.page == SettingsPage::kHome && draft.subpage == 0) {
     auto text = [&](const DipRect& bounds, const std::wstring& value, HFONT font, std::uint32_t color) {
       RECT rect = px(bounds);
       SelectObject(dc, font);

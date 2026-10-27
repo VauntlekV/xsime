@@ -1,4 +1,7 @@
-﻿#include "../core/product_brand.hpp"
+#include "rimes_product_documents.hpp"
+#include <Windows.h>
+#include <richedit.h>
+#include "../core/product_brand.hpp"
 #include "settings_ui.hpp"
 #include "application_update.hpp"
 
@@ -382,6 +385,7 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
         if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
       for (const auto control : {plugin_filter_, plugin_previous_, plugin_next_, clipboard_recording_, peripheral_open_, home_action_})
         if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
+      if (home_document_ && IsWindowVisible(home_document_)) controls.push_back(home_document_);
       for (const auto control : home_links_)
         if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
       for (std::size_t i = 0; i < plugin_labels_.size(); ++i)
@@ -475,6 +479,12 @@ void SettingsUiHost::CreateOrUpdateChildren() {
   EnableWindow(input_habits_, static_cast<bool>(callbacks_.input_options));
   make_button(peripheral_open_, L"打开独立窗口…", 416);
   make_button(home_action_, L"", 417);
+  if (!home_document_) {
+    LoadLibraryW(L"Msftedit.dll");
+    home_document_ = CreateWindowExW(0, MSFTEDIT_CLASS, L"", WS_CHILD | WS_TABSTOP | WS_VSCROLL | ES_MULTILINE | ES_READONLY,
+        0, 0, 1, 1, hwnd_, reinterpret_cast<HMENU>(6210), GetModuleHandleW(nullptr), nullptr);
+    SendMessageW(home_document_, EM_EXLIMITTEXT, 0, 1024 * 1024);
+  }
   for (std::size_t i = 0; i < home_links_.size(); ++i)
     make_button(home_links_[i], ui::kSettingsHomeLinks[i].title, 6200 + static_cast<int>(i));
   EnableWindow(schemes_button_, static_cast<bool>(callbacks_.open_schemes));
@@ -806,7 +816,18 @@ void SettingsUiHost::Relayout() {
   const auto peripheral_y = layout_.body.top + (capsule ? 204 : 150);
   Place(peripheral_open_, {layout_.body.left,peripheral_y,layout_.body.left+220,peripheral_y+34}, dpi_, peripheral);
   SendMessageW(peripheral_open_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
-  const auto* home_link = draft_.page == ui::SettingsPage::kHome ? ui::HomeLink(draft_.subpage) : nullptr;
+  const auto* home_link = static_cast<const ui::SettingsHomeLink*>(nullptr);
+  const bool show_document = draft_.page == ui::SettingsPage::kHome && draft_.subpage > 0;
+  Place(home_document_, layout_.body, dpi_, show_document);
+  if (show_document) {
+    const auto text = Wide(draft_.subpage == 2 ? rimes::documents::License() : rimes::documents::Readme());
+    if (GetWindowTextLengthW(home_document_) != static_cast<int>(text.size())) SetWindowTextW(home_document_, text.c_str());
+    SendMessageW(home_document_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+    SendMessageW(home_document_, EM_SETBKGNDCOLOR, 0, ui::ToColorRef(ui::Palette(draft_.preview_theme).settings_background));
+    CHARFORMAT2W format{};format.cbSize=sizeof(format);format.dwMask=CFM_COLOR;
+    format.crTextColor=ui::ToColorRef(ui::Palette(draft_.preview_theme).text_primary);
+    SendMessageW(home_document_, EM_SETCHARFORMAT, SCF_ALL, reinterpret_cast<LPARAM>(&format));
+  }
   Place(home_action_, layout_.home_action, dpi_, home_link != nullptr || (draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0));
   if (draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0) SetWindowTextW(home_action_, L"检查更新…");
   if (home_link) SetWindowTextW(home_action_, home_link->action);
@@ -1592,7 +1613,7 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       self->hwnd_ = nullptr;
       self->schemes_button_ = self->imported_label_ = self->input_habits_ = nullptr;
       self->lexicon_button_ = nullptr;
-      self->peripheral_open_ = self->home_action_ = nullptr;
+      self->peripheral_open_ = self->home_action_ = self->home_document_ = nullptr;
       self->home_links_ = {};
       self->clipboard_recording_ = nullptr;
       self->plugin_filter_ = self->plugin_previous_ = self->plugin_next_ = self->plugin_page_ = nullptr;

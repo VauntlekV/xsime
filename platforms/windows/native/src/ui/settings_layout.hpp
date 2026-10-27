@@ -64,9 +64,9 @@ inline const wchar_t* const kSettingsSubpageLabels[][6] = {
     {L"工作区", L"说明"},
     {L"文章跟打", L"成绩"},
     {L"每日", L"热力图"},
-    {rimes::branding::Name()},
+    {rimes::branding::Name(), L"README", L"License"},
 };
-inline int SettingsTabCount(SettingsPage page) { return page == SettingsPage::kCapsule || page == SettingsPage::kHome ? 1 : page == SettingsPage::kPlugins ? 5 : page == SettingsPage::kBuffer ? 3 : 2; }
+inline int SettingsTabCount(SettingsPage page) { return page == SettingsPage::kCapsule ? 1 : page == SettingsPage::kHome ? 3 : page == SettingsPage::kPlugins ? 5 : page == SettingsPage::kBuffer ? 3 : 2; }
 
 struct SettingsHomeLink {
   const wchar_t* title;
@@ -99,9 +99,9 @@ struct SettingsMetrics {
   int sidebar_icon_dip = 18;
   int sidebar_font_dip = 12;
   int subpage_bar_height_dip = 46;
-  int heading_band_height_dip = 84;
+  int heading_band_height_dip = 0;
   int body_origin_x_dip = 184;
-  int body_origin_y_dip = 130;
+  int body_origin_y_dip = 64;
   int body_max_width_dip = 650;
   int choice_card_height_dip = 68;
   int choice_gap_dip = 8;

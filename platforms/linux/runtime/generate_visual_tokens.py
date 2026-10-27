@@ -47,7 +47,7 @@ def extract():
     for name, identity in ids:
         block = re.search(r"case \." + name + r":(.*?)(?=\n        case |\n        \})", subpages, re.S).group(1)
         pages = re.findall(r'\("([^"]+)", "([^"]+)"\)', block)
-        if name == "rimes": pages.insert(0, ("about", "XSIME"))
+        if name == "rimes" and not any(p[0] == "about" for p in pages): pages.insert(0, ("about", "XSIME"))
         if name == "plugins": pages = [(key, plugin_titles[field]) for field, key in plugin_ids]
         if not pages: raise ValueError(f"Missing native subpages: {name}")
         routes.append({"id": identity, "title": titles.get(name, "XSIME"), "icon": symbols[name], "subpages": pages})
@@ -55,12 +55,16 @@ def extract():
         found = re.search(pattern, source)
         if not found: raise ValueError(f"Native layout contract changed: {pattern}")
         return int(found.group(1))
+    # The current native shell is navigation + body, with page-owned padding.
+    # A future structural change must be reviewed rather than reviving the old heading band.
+    if "let root = NSStackView(views: [tabsBar, bodyHost])" not in settings or "let headingBar =" in settings:
+        raise ValueError("Review the native settings shell before importing geometry")
     metrics = {
         "settingsWidth": number(r"previewContentSize = NSSize\(width: (\d+)"),
         "settingsHeight": number(r"previewContentSize = NSSize\(width: \d+, height: (\d+)"),
         "sidebarWidth": number(r"sidebarScrollView.widthAnchor.constraint\(equalToConstant: (\d+)"),
         "tabsHeight": number(r"tabsBar.heightAnchor.constraint\(equalToConstant: (\d+)"),
-        "headingHeight": number(r"headingBar.heightAnchor.constraint\(equalToConstant: (\d+)"),
+        "headingHeight": 0,
         "contentWidth": number(r"grid.widthAnchor.constraint\(equalToConstant: (\d+)"),
         "cardHeight": number(r"card.heightAnchor.constraint\(equalToConstant: (\d+)"),
         "controlSize": number(r"enum BufferWorkbenchMetrics.*?controlSize: CGFloat = (\d+)", buffer.replace("\n", " ")),

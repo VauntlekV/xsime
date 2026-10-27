@@ -46,6 +46,9 @@ public final class EngineInstrumentation extends Instrumentation {
             if(arguments!=null && "delete-repeat".equals(arguments.getString("mode"))) {
                 result.putString("stream","PASS native delete repeat checks="+DeleteRepeatContract.run(this)+"\n"); finish(-1,result); return;
             }
+            if(arguments!=null && "buffer-hold".equals(arguments.getString("mode"))) {
+                result.putString("stream","PASS native Buffer hold checks="+BufferHoldContract.run(this)+"\n"); finish(-1,result); return;
+            }
             if(arguments!=null && "space-touch".equals(arguments.getString("mode"))) {
                 result.putString("stream","PASS native space touch checks="+SpaceTouchContract.run(this)+"\n"); finish(-1,result); return;
             }

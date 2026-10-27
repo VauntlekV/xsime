@@ -27,7 +27,7 @@ def manifest(root: Path, version: str, commit: str, android_build: int):
                                         "size": file.stat().st_size, "sha256": digest.hexdigest()}
     result["platforms"]["macos"].update(architecture="universal", minimumOS="13.0")
     result["platforms"]["windows"].update(architecture="x64-x86", minimumOS="10.0")
-    result["platforms"]["linux"].update(architecture="amd64", distribution="ubuntu-24.04")
+    result["platforms"]["linux"].update(architecture="amd64", distribution="ubuntu-24.04", distributions=["ubuntu-24.04", "ubuntu-26.04"])
     result["platforms"]["android"].update(build=android_build, minimumOS=26, architecture="arm64-v8a,x86_64")
     return result
 
