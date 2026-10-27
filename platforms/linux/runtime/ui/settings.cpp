@@ -401,7 +401,8 @@ struct Settings {
     Add(body, grid);
     if (!rendering) ChordCall({{"op", "status"}}, cancel, [this, life, revision, buttons](Json value) {
       if (!life->load() || revision != page_revision || !value.value("ok", false)) return;
-      const auto selected = value.value("selectedSchema", std::string("rime_ice"));
+      auto selected = value.value("selectedSchema", std::string("rime_ice"));
+      if (selected.empty()) selected = "rime_ice";
       for (const auto& [id, card] : buttons)
         if (id == selected || (id == "isaac2026" && rimes::chord::IsChordSchema(selected))) Class(card, "selected");
     });

@@ -11,12 +11,23 @@
 #include <sstream>
 #include <thread>
 #include "material_library.hpp"
+#include "article_inventory.hpp"
 
 namespace rimes::desktop {
 namespace pt = rimes::practice;
 namespace {
 const Json &BuiltInArticles() {
-    static const Json value = Json::parse(pt::kNativeArticles);
+    static const Json value = [] {
+        auto articles = Json::parse(pt::kNativeArticles);
+        const auto paragraphs = Json::parse(rimes::practice::materials::ArticleInventory());
+        if (articles.size() != paragraphs.size()) throw std::runtime_error("内置跟打素材数量与原生导出不一致");
+        for (auto& article : articles) {
+            auto found = std::find_if(paragraphs.begin(), paragraphs.end(), [&](const Json& p) { return p.at("id") == article.at("id"); });
+            if (found == paragraphs.end() || found->at("version") != article.at("version") || found->at("text") != article.at("text")) throw std::runtime_error("内置跟打素材与原生评分文本不一致");
+            article["displayText"] = found->at("displayText");
+        }
+        return articles;
+    }();
     return value;
 }
 std::string Number(double value) {

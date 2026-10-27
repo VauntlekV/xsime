@@ -472,7 +472,7 @@ std::string ChordService::SelectedSchema() const {
 }
 std::string ChordService::FallbackSchema() const { return impl_->Fallback(); }
 void ChordService::ObserveSchema(const std::string& schema) {
-    if (schema.empty() || impl_->applying || !impl_->verified || impl_->imported)
+    if (schema.empty() || impl_->applying || impl_->imported)
         return;
     if (IsChordSchema(schema) && (!Enabled() || schema != Profile().SchemaID()))
         return;
