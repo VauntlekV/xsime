@@ -114,6 +114,8 @@ void Theme(const std::string &name, GdkScreen *screen) {
       "px; } .shortcut-title { font-size: " + std::to_string(Visuals().at("metrics").at("shortcutTitleFont").get<int>()) +
       "px; font-weight: 600; } .shortcut-recorder { font-family: monospace; font-size: " +
       std::to_string(Visuals().at("metrics").at("shortcutRecorderFont").get<int>()) + "px; font-weight: 500; }"
+      ".choice-card { background: " + c("surfaceSecondary") + "; color: " + c("textPrimary") + "; border: 1px solid " + c("border") + "; border-radius: 10px; font-size: 13px; padding: 12px; }"
+      ".choice-card:hover { background: " + c("surfaceTertiary") + "; } .choice-card.selected { border-color: " + c("accentGreen") + "; color: " + c("accentText") + "; }"
       ".chord-card { background: " + c("surfaceSecondary") + "; border: 0; box-shadow: inset 0 0 0 0.5px " + c("border") + "; border-radius: 8px; padding: 10px 12px; }"
       ".chord-capture { background: " + c("surfaceTertiary") + "; border: 1px solid " + c("border") + "; border-radius: 6px; }"
       ".chord-capture:focus { border-color: " + c("accentGreen") + "; }"

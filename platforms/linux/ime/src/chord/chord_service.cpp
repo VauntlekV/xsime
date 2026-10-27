@@ -8,6 +8,7 @@
 #include <fcitx-utils/event.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fstream>
+#include <algorithm>
 #include <yaml-cpp/yaml.h>
 
 namespace fcitx {
@@ -399,6 +400,7 @@ struct ChordService::Impl {
                 {"active", active.profile.Value()},
                 {"activeRevision", active.revision},
                 {"selectedSchema", state.at("selectedSchema")},
+                {"defaultSchemas", default_schemas},
                 {"recovery", state.at("recovery")}};
     }
     Json Command(const Json& request) {
@@ -411,6 +413,25 @@ struct ChordService::Impl {
             if (request.value("revision", std::string{}) != active.revision)
                 throw std::runtime_error("已应用版本发生变化，请刷新后重试");
             Begin(rimes::chord::Profile::Parse(request.at("profile")));
+            return Status();
+        }
+        if (action == "selectBuiltin") {
+            if (imported) throw std::runtime_error("请先在方案管理中恢复内置方案并重启 Fcitx5");
+            if (applying || queued_enable) throw std::runtime_error("方案正在部署，请稍后选择");
+            auto schema = request.value("schema", std::string{});
+            if (schema == "isaac2026") {
+                const auto grant = ime.plugins().Authorize(kPluginID, "input.chord");
+                if (!Effective() || !grant || !ime.acceptsPluginResult(*grant)) throw std::runtime_error("请先启用并应用并击扩展");
+                schema = active.profile.SchemaID();
+            } else {
+                if (std::find(default_schemas.begin(), default_schemas.end(), Json(schema)) == default_schemas.end()) throw std::runtime_error("不是可用的内置方案");
+                state["lastOrdinarySchema"] = schema;
+            }
+            state["selectedSchema"] = schema; SaveState();
+            ime.instance()->inputContextManager().foreach ([&](InputContext* ic) {
+                if (auto* input = ic->propertyFor(&ime.factory())) input->requestSchema(schema);
+                return true;
+            });
             return Status();
         }
         if (action == "makeCurrent") {

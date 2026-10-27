@@ -331,7 +331,7 @@ struct Settings {
       Add(body, Label(subpage == "encoding" ? "输入方案" : "词库", "section"));
       Add(body, Button("导入与管理…", [this] { Launch("rimes-schemes"); }));
       Add(body, Label("导入方案和移除方案均保留学习记录。", "caption"));
-      if (subpage == "encoding") InputHabits(body);
+      if (subpage == "encoding") { BuiltInSchemes(body); InputHabits(body); }
     } else if (route == "core.rimes" && (subpage == "readme" || subpage == "license")) {
       auto* document = gtk_text_view_new();
       gtk_text_view_set_editable(GTK_TEXT_VIEW(document), FALSE);
@@ -376,6 +376,35 @@ struct Settings {
       Add(body, Label("此页面随对应 Linux 模块接入。", "caption"));
     }
     gtk_widget_show_all(content);
+  }
+  void BuiltInSchemes(GtkWidget* body) {
+    auto* grid = gtk_grid_new(); gtk_grid_set_row_spacing(GTK_GRID(grid), 8); gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
+    const std::vector<std::pair<const char*, const char*>> schemes = {{"rime_ice", "雾凇全拼"}, {"double_pinyin", "自然码双拼"}, {"double_pinyin_flypy", "小鹤双拼"},
+      {"wubi86", "五笔 86"}, {"lingxi_wubi", "犀术五笔"}, {"english", "英文"}, {"isaac2026", "isaac2026"}};
+    const auto revision = page_revision; auto life = alive;
+    std::vector<std::pair<std::string, GtkWidget*>> buttons;
+    int index = 0;
+    for (const auto& scheme : schemes) {
+      const std::string id = scheme.first;
+      auto* card = Button(scheme.second, [this, id, life, revision] {
+        if (rendering) return;
+        ChordCall({{"op", "selectBuiltin"}, {"schema", id}}, cancel, [this, life, revision](Json value) {
+          if (!life->load() || revision != page_revision) return;
+          Message(value.value("ok", false) ? "已选择方案，当前组字完成后切换" : value.value("message", std::string("输入法服务暂不可用，请先启用输入法")));
+          if (value.value("ok", false)) Select(route, subpage);
+        });
+      }, "choice-card");
+      gtk_widget_set_size_request(card, 210, 68);
+      gtk_grid_attach(GTK_GRID(grid), card, index % 3, index / 3, 1, 1); ++index;
+      buttons.emplace_back(id, card);
+    }
+    Add(body, grid);
+    if (!rendering) ChordCall({{"op", "status"}}, cancel, [this, life, revision, buttons](Json value) {
+      if (!life->load() || revision != page_revision || !value.value("ok", false)) return;
+      const auto selected = value.value("selectedSchema", std::string("rime_ice"));
+      for (const auto& [id, card] : buttons)
+        if (id == selected || (id == "isaac2026" && rimes::chord::IsChordSchema(selected))) Class(card, "selected");
+    });
   }
   void InputHabits(GtkWidget* body) {
     Add(body, Label("方案输入习惯", "section"));
