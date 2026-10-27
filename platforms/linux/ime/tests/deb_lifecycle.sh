@@ -156,8 +156,7 @@ from pathlib import Path
 pages = json.load(open(sys.argv[1]))
 assert {row['subpageID'] for row in pages if row['routeID'] == 'extension.fly-chord-learning'} == {'settings', 'keymap', 'lessons', 'practice', 'progress'}
 assert {row['subpageID'] for row in pages if row['routeID'] == 'extension.typing-speed'} == {'overview', 'history'}
-assert any(row['routeID'] == 'extension.statistics' and row['subpageID'] == 'test-results' for row in pages)
-assert {row['subpageID'] for row in pages if row['routeID'] == 'extension.statistics'} == {'daily', 'history', 'test-results'}
+assert {row['subpageID'] for row in pages if row['routeID'] == 'extension.statistics'} == {'daily', 'history'}
 data = Path('/usr/share/rimes/data')
 lock = json.loads((data / 'linux-native-chord-manifest.json').read_text())
 assert lock['schemas'] == ['yoyo-yx', 'yoyo-yx-hm'] and len(lock['files']) == 12

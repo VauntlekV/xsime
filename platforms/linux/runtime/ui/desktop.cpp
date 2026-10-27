@@ -717,6 +717,14 @@ GtkWidget *ThemeCard(const std::string &theme, const std::string &title,
   return button;
 }
 bool Render(GtkWidget *widget, const std::string &path, int scale) {
+  // Offscreen snapshots do not get a regular compositor frame. Complete
+  // deferred text-layout allocations before asking GTK to draw synchronously.
+  auto *top = gtk_widget_get_toplevel(widget);
+  for (unsigned pass = 0; pass < 4; ++pass) {
+    for (unsigned event = 0; event < 32 && g_main_context_pending(nullptr); ++event)
+      g_main_context_iteration(nullptr, FALSE);
+    if (GTK_IS_CONTAINER(top)) gtk_container_check_resize(GTK_CONTAINER(top));
+  }
   const auto width = gtk_widget_get_allocated_width(widget),
              height = gtk_widget_get_allocated_height(widget);
   auto *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width * scale,

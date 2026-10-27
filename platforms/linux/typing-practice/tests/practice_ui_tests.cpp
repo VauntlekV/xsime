@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     try {
         gtk_init(&argc, &argv);
         g_object_set(gtk_settings_get_default(), "gtk-enable-animations", FALSE, nullptr);
-        const auto output = argc == 2 ? std::filesystem::path(argv[1]) : std::filesystem::path();
+        const auto output = argc == 2 ? std::filesystem::path(argv[1]) : root / "renders";
         if (!output.empty())
             std::filesystem::create_directories(output);
         for (const auto *theme : {"night", "day", "quiet", "rasta"})

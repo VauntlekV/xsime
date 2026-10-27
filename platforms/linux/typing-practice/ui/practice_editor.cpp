@@ -33,7 +33,17 @@ PracticeEditor::PracticeEditor()
     g_signal_connect(view_, "size-allocate", G_CALLBACK(+[](GtkWidget* widget, GtkAllocation* allocation, gpointer data) {
         auto* self = static_cast<PracticeEditor*>(data);
         const auto columns = std::max(4, (allocation->width - 38) / 28);
-        if (self->track_ && columns != self->columns_) { self->columns_ = columns; self->LayoutTrack(); }
+        if (self->track_ && columns != self->columns_) {
+            self->columns_ = columns;
+            // Changing text tags/line spacing from size-allocate invalidates
+            // the allocation currently being drawn. Apply it after this pass.
+            if (!self->layout_idle_) self->layout_idle_ = g_idle_add(+[](gpointer data) -> gboolean {
+                auto* editor = static_cast<PracticeEditor*>(data);
+                editor->layout_idle_ = 0;
+                editor->LayoutTrack();
+                return G_SOURCE_REMOVE;
+            }, self);
+        }
         (void)widget;
     }), this);
     g_signal_connect_after(view_, "draw", G_CALLBACK(+[](GtkWidget*, cairo_t* cr, gpointer data) -> gboolean {
@@ -231,6 +241,7 @@ PracticeEditor::PracticeEditor()
                            this);
 }
 PracticeEditor::~PracticeEditor() {
+    if (layout_idle_) g_source_remove(layout_idle_);
     g_signal_handlers_disconnect_by_data(view_, this);
     g_signal_handlers_disconnect_by_data(buffer_, this);
     gtk_widget_destroy(view_);
@@ -373,6 +384,10 @@ void PracticeEditor::DrawTrack(cairo_t* cr) {
     const int pitch = std::max(1, initial.height) + 46;
     for (std::size_t row = 0; row < rows_.size(); ++row) {
         int source_y = initial.y + static_cast<int>(row) * pitch - 32;
+        // Asking GtkTextView to validate offscreen lines during draw can
+        // invalidate its parent's allocation. Visible native lines are already
+        // laid out; untyped source rows use the reserved fixed-height track.
+        if (top + source_y + 28 < 0 || top + source_y > height) continue;
         if (row < static_cast<std::size_t>(line_count)) {
             GtkTextIter at; gtk_text_buffer_get_iter_at_line(buffer_, &at, static_cast<int>(row));
             GdkRectangle location{}; gtk_text_view_get_iter_location(view, &at, &location); source_y = location.y - 32;

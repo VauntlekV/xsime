@@ -36,6 +36,7 @@ class PracticeEditor {
     std::string source_;
     Json states_ = Json::array();
     int columns_ = 20;
+    guint layout_idle_ = 0;
     bool track_ = false, chinese_ = true, formatting_ = false;
     std::vector<rimes::practice::materials::TrackRow> rows_;
     void LayoutTrack();
