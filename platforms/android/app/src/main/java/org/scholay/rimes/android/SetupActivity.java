@@ -298,13 +298,30 @@ public final class SetupActivity extends Activity {
         row.setContentDescription(label+(selected?t("，已选择",", selected"):"")+(detail==null?"":", "+detail));
         if(selected) row.addView(icon(KeyboardIcon.CHECK,accent,20));
     }
+    private void galleryCard(LinearLayout line,KeyboardIcon image,String label,String detail,String tag,boolean selected,Runnable action) {
+        LinearLayout tile=column(); tile.setTag(tag); tile.setMinimumHeight(dp(154)); tile.setPadding(dp(16),dp(16),dp(16),dp(16));
+        GradientDrawable background=shape(card,20); background.setStroke(dp(selected?2:1),selected?accent:separator);
+        tile.setBackground(background); tile.setClipToOutline(true); tile.setSelected(selected);
+        LinearLayout top=new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(icon(image,selected?accent:secondary,28));
+        View spacer=new View(this); top.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
+        top.addView(icon(selected?KeyboardIcon.CHECK:KeyboardIcon.CHEVRON_RIGHT,selected?accent:secondary,18));
+        tile.addView(top); TextView title=text(label,17,ink,true); title.setPadding(0,dp(12),0,dp(5)); tile.addView(title);
+        tile.addView(text(detail,12,secondary,false));
+        tile.setContentDescription(label+(selected?t("，已选择",", selected"):"")+", "+detail); clickable(tile,action);
+        LinearLayout.LayoutParams frame=new LinearLayout.LayoutParams(0,-1,1); frame.setMarginStart(line.getChildCount()==0?0:dp(10)); line.addView(tile,frame);
+    }
     private void schemas() {
         LinearLayout imports=group(t("第三方输入方案","Imported input schemes"));
         row(imports,KeyboardIcon.STACK_LAYERS,t("导入和管理 Rime 方案","Import and manage Rime schemes"),
             t("ZIP · 方案、词典、Lua 与 OpenCC","ZIP · schemas, dictionaries, Lua and OpenCC"),null,"settings.schema.import",
             () -> startActivity(new Intent(this,RimeSchemesActivity.class)));
         LinearLayout choices=group(t("中文输入方案","Chinese input scheme")); String[] ids={"rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi","isaac2026"}; String[] samples={"nihao → 你好","nihk → 你好","wq → 你 · zni → 你 (wq)","wq / ni → 你",t("正交布局中的自然码并击","Natural Code chords on the orthogonal grid")};
-        for(int i=0;i<ids.length;i++) { String id=ids[i]; choice(choices,schemeName(id),samples[i],"settings.schema."+id,settings.getSchema().equals(id),() -> {
+        choices.setBackgroundColor(android.graphics.Color.TRANSPARENT); choices.setClipToOutline(false);
+        LinearLayout line=null;
+        for(int i=0;i<ids.length;i++) {
+            if(i%2==0) { line=new LinearLayout(this); line.setOrientation(LinearLayout.HORIZONTAL); LinearLayout.LayoutParams frame=new LinearLayout.LayoutParams(-1,-2);frame.topMargin=i==0?0:dp(10);choices.addView(line,frame); }
+            String id=ids[i]; galleryCard(line,KeyboardIcon.STACK_LAYERS,schemeName(id),samples[i],"settings.schema."+id,settings.getSchema().equals(id),() -> {
             try { new RimeSchemeStore(this).activate(null,null); settings.setSchema(id); render(); }
             catch(Exception e) { android.widget.Toast.makeText(this,e.getMessage(),android.widget.Toast.LENGTH_LONG).show(); }
         }); }
@@ -535,6 +552,22 @@ public final class SetupActivity extends Activity {
                 }).show();
             });
         }
+        LinearLayout starters=group(t("助手模板","Assistant starters"));
+        try (java.io.InputStream input=getAssets().open("assistant-starters.json")) {
+            java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream(); byte[] block=new byte[4096]; int length;
+            while((length=input.read(block))!=-1) { bytes.write(block,0,length); if(bytes.size()>65536) throw new java.io.IOException("Starter catalog too large"); }
+            org.json.JSONArray templates=new org.json.JSONObject(bytes.toString("UTF-8")).getJSONArray("starters");
+            for(int i=0;i<templates.length();i++) {
+                org.json.JSONObject template=templates.getJSONObject(i);
+                String zh=template.getString("nameZH"),en=template.getString("nameEN");
+                if(library.presets.stream().anyMatch(p -> p.name.equals(zh)||p.name.equals(en))) continue;
+                String name=t(zh,en),instruction=t(template.getString("instructionZH"),template.getString("instructionEN")),hint=t(template.getString("placeholderZH"),template.getString("placeholderEN"));
+                row(starters,KeyboardIcon.CHAT_QUESTION,name,t(template.getString("taglineZH"),template.getString("taglineEN")),t("添加","Add"),"settings.assistant.starter."+template.getString("id"),() -> {
+                    try { AssistantSettings.Preset preset=AssistantSettings.create(name,instruction,hint); store.save(preset);render(); }
+                    catch(Exception error) { android.widget.Toast.makeText(this,error.getMessage(),android.widget.Toast.LENGTH_LONG).show(); }
+                });
+            }
+        } catch(Exception error) { paragraph(starters,t("模板暂时不可用，仍可创建自定义助手。","Starters unavailable; custom assistants can still be created.")); }
         LinearLayout bar=group(t("键盘快捷入口","Keyboard shortcut bar"));
         java.util.List<String> all=new java.util.ArrayList<>(AssistantSettings.BUILT_INS);
         for(AssistantSettings.Preset preset:library.presets) all.add(preset.id);

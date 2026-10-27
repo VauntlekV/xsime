@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "starters": [
+    {
+      "id": "sleep",
+      "nameZH": "哄睡",
+      "nameEN": "Lullaby",
+      "taglineZH": "用温柔的话把对方哄睡着",
+      "taglineEN": "Coax someone gently to sleep",
+      "instructionZH": "把用户写的内容当作他想对对方说的意思或对方的情况，写一段哄对方入睡的话：语气温柔、放松、节奏慢，像在耳边轻声说；先接住情绪，再引导放松，最后道晚安。不超过 120 字，不用列表和 Markdown，只输出这段话。",
+      "instructionEN": "Treat the user's text as what they want to say or the other person's situation, and write a short message that coaxes that person to sleep: gentle, slow, soothing, like whispering beside them. Acknowledge feelings first, then guide relaxation, then say goodnight. Under 100 words, no lists or Markdown. Output only the message.",
+      "placeholderZH": "写下对方的情况，再点 ▶ 哄睡",
+      "placeholderEN": "Describe their situation, then tap ▶"
+    },
+    {
+      "id": "eq",
+      "nameZH": "高情商回复",
+      "nameEN": "Tactful reply",
+      "taglineZH": "把想说的话改成体面又暖心的回复",
+      "taglineEN": "Turn a blunt reply into a tactful one",
+      "instructionZH": "用户会给出对方说的话，或自己想回的意思。写一条高情商的回复：先认可对方的感受，再表达立场，语气真诚得体，不卑不亢，不说教。用与原文相同的语言，一到三句，只输出回复本身。",
+      "instructionEN": "The user gives what someone said, or what they want to reply. Write a tactful, emotionally intelligent reply: acknowledge the other person's feelings first, then state the position, sincere and composed, never preachy. Same language as the input, one to three sentences. Output only the reply.",
+      "placeholderZH": "写下对方的话或你想说的，再点 ▶",
+      "placeholderEN": "Write what they said or what you mean, then tap ▶"
+    },
+    {
+      "id": "gentle",
+      "nameZH": "更温柔",
+      "nameEN": "Softer",
+      "taglineZH": "保持原意，语气更柔和",
+      "taglineEN": "Same meaning, kinder tone",
+      "instructionZH": "保持原意和语言，把用户的文字改得更温柔、更体谅对方，不增加新的意思。只输出改写后的文字。",
+      "instructionEN": "Keep the meaning and language, but rewrite the user's text to be kinder and more considerate, without adding new points. Output only the rewrite.",
+      "placeholderZH": "写下要改温柔的话，再点 ▶",
+      "placeholderEN": "Write the text to soften, then tap ▶"
+    },
+    {
+      "id": "short",
+      "nameZH": "更简短",
+      "nameEN": "Shorter",
+      "taglineZH": "删去枝节，留下要点",
+      "taglineEN": "Cut it down to the point",
+      "instructionZH": "保持原意和语言，把用户的文字压缩到最短，删去客套和重复，保留关键信息。只输出压缩后的文字。",
+      "instructionEN": "Keep the meaning and language, and compress the user's text as much as possible: drop filler and repetition, keep the key facts. Output only the shortened text.",
+      "placeholderZH": "写下要精简的话，再点 ▶",
+      "placeholderEN": "Write the text to shorten, then tap ▶"
+    }
+  ]
+}
