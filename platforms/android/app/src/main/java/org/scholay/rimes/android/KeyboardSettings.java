@@ -12,6 +12,8 @@ import java.util.Map;
 public final class KeyboardSettings {
     public static final String PREFERENCES_NAME="keyboard";
     public static final String KEY_SCHEMA="schema";
+    public static final String KEY_KEY_STYLE="key_style_v1";
+    private static final String KEY_LAYOUT_REVISION="layout_schema_v120";
     public static final String KEY_LAYOUT="layout";
     public static final String KEY_THEME="theme";
     public static final String KEY_TRANSLATION_DIRECTION="translation_direction";
@@ -30,7 +32,7 @@ public final class KeyboardSettings {
     public static final boolean DEFAULT_LEARNING=true;
     public static final boolean DEFAULT_AI_MOCK_ENABLED=true;
 
-    private static final List<String> SCHEMA_VALUES=values("rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi");
+    private static final List<String> SCHEMA_VALUES=values("rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi","isaac2026");
     private static final List<String> LAYOUT_VALUES=values("qwerty","nineKey","orthogonal","splitOrthogonal");
     private static final List<String> DIRECTION_VALUES=values("auto","zh-en","en-zh");
     private static final List<String> THEME_VALUES=themeIDs();
@@ -42,6 +44,12 @@ public final class KeyboardSettings {
     public KeyboardSettings(SharedPreferences preferences) {
         if(preferences==null) throw new IllegalArgumentException("Keyboard preferences are required");
         this.preferences=preferences;
+        if(!preferences.contains(KEY_LAYOUT_REVISION)) {
+            Map<String,?> old=preferences.getAll();
+            SharedPreferences.Editor migration=preferences.edit().putBoolean(KEY_LAYOUT_REVISION,true);
+            if(old.get(KEY_LAYOUT) instanceof String && chord((String)old.get(KEY_LAYOUT))) migration.putString(KEY_SCHEMA,"isaac2026");
+            migration.apply();
+        }
     }
     private static SharedPreferences preferences(Context context) {
         if(context==null) throw new IllegalArgumentException("Keyboard context is required");
@@ -89,20 +97,23 @@ public final class KeyboardSettings {
     public String getLayout() { return snapshot().layout; }
     public String builtInRuntimeSchema(boolean chordEnabled) {
         Snapshot saved=snapshot();
-        if(chordEnabled && chord(saved.layout)) return "rimes_ziranma";
+        if("isaac2026".equals(saved.schema)) return "rimes_ziranma";
         return "nineKey".equals(saved.layout)?"rimes_pinyin9":saved.schema;
     }
+    public String keyStyle() { Object value=preferences.getAll().get(KEY_KEY_STYLE); return value instanceof String && values("auto","flat","legacy").contains(value)?(String)value:"flat"; }
+    public void setKeyStyle(String value) { preferences.edit().putString(KEY_KEY_STYLE,normalized(value,values("auto","flat","legacy"),"flat")).apply(); }
     public String getTheme() { return snapshot().theme; }
     public String getTranslationDirection() { return snapshot().translationDirection; }
     public boolean isLearningEnabled() { return snapshot().learning; }
     public boolean isAiMockEnabled() { return snapshot().aiMockEnabled; }
 
-    /** Selecting any schema leaves chord mode; non-Pinyin schemas also leave nine-key mode. */
+    /** Layout and schema are independent. Only isaac2026 requests chord resolution. */
     public void setSchema(String value) {
         String schema=normalized(value,SCHEMA_VALUES,DEFAULT_SCHEMA);
         synchronized(preferences) {
             String layout=snapshot().layout;
-            if(chord(layout) || "nineKey".equals(layout) && !DEFAULT_SCHEMA.equals(schema)) layout=DEFAULT_LAYOUT;
+            if("isaac2026".equals(schema)) layout="orthogonal";
+            else if("nineKey".equals(layout) && !DEFAULT_SCHEMA.equals(schema)) layout=DEFAULT_LAYOUT;
             preferences.edit().putString(KEY_SCHEMA,schema).putString(KEY_LAYOUT,layout).apply();
         }
     }

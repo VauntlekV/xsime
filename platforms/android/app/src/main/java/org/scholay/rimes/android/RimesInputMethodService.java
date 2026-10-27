@@ -63,7 +63,7 @@ public final class RimesInputMethodService extends InputMethodService {
     private final SharedPreferences.OnSharedPreferenceChangeListener officialPluginListener=(prefs,key) -> main.post(() -> {
         if(this.destroyed) return;
         cancelChord(); invalidatePlugin();
-        if(this.activePlugin!=null && !officialPlugins.enabled(this.activePlugin)) { this.activePlugin=null; pluginSession.clear(); this.pluginSettingsOpen=false; }
+        if(this.activePlugin!=null && !pluginInstalled(this.activePlugin)) { this.activePlugin=null; pluginSession.clear(); this.pluginSettingsOpen=false; }
         resetEngine(); render();
     });
     private BufferPluginExecutor.Job pluginJob;
@@ -85,7 +85,16 @@ public final class RimesInputMethodService extends InputMethodService {
     private InputConnection clipboardTarget;
     private PluginShortcutBar pluginShortcuts;
     private BufferPluginPanel pluginPanel;
+    private SpaceKeyTouch footerSpaceTouch;
+    private int spaceCandidate=-1, deferredSpaceIndex=-1;
+    private InputConnection deferredSpaceTarget;
+    private InputEpoch.Ticket deferredSpaceTicket;
+    private String deferredSpaceRaw="";
+    private String spaceRaw="";
+    private InputConnection spaceTarget;
+    private InputEpoch.Ticket spaceTicket;
     private String activePlugin;
+    private AssistantSettings assistants;
     private String pluginResultAuthorization;
     private boolean pluginSettingsOpen, renderedPluginMode;
     private LinearLayout bufferTop,bufferBottom;
@@ -139,8 +148,8 @@ public final class RimesInputMethodService extends InputMethodService {
         }
     }
     private long session;
-    private static final String[] SCHEMAS={"rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi"};
-    private static final String[] NAMES={"拼音","自然码","五笔","犀术五笔"};
+    private static final String[] SCHEMAS={"rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi","isaac2026"};
+    private static final String[] NAMES={"拼音","自然码","五笔","犀术五笔","isaac2026"};
 
     @Override public void onCreate() {
         super.onCreate();
@@ -149,6 +158,7 @@ public final class RimesInputMethodService extends InputMethodService {
         officialPluginPreferences.registerOnSharedPreferenceChangeListener(officialPluginListener);
         preferences=getSharedPreferences(KeyboardSettings.PREFERENCES_NAME,MODE_PRIVATE);
         settings=new KeyboardSettings(preferences);
+        assistants=new AssistantSettings(preferences);
         cometSettings=new OpenAiSettings(this);
         preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
         restoreSettings();
@@ -215,7 +225,7 @@ public final class RimesInputMethodService extends InputMethodService {
     }
     private String effectiveSchema() {
         if(importedScheme!=null) return importedScheme.layouts==null?importedScheme.schemaID:importedScheme.layouts.schema(layout);
-        return (chordLayout()?"rimes_ziranma":nineKeyEngine()?"rimes_pinyin9":schema)+(privateField || !learningEnabled ? "_private" : "");
+        return ("isaac2026".equals(schema)?"rimes_ziranma":nineKeyEngine()?"rimes_pinyin9":schema)+(privateField || !learningEnabled ? "_private" : "");
     }
     // Called on the serial engine worker. Publish the loaded layout before queued keys run.
     private void selectRuntimeSchema(RimeSchemeStore.Selection imported,String selected,InputEpoch.Ticket ticket) {
@@ -308,9 +318,12 @@ public final class RimesInputMethodService extends InputMethodService {
         };
         if(ownsTarget()) settleAndSwitch(change); else { cancelChord(); change.run(); render(); }
     }
-    private boolean chordLayout() { return importedScheme==null && officialPlugins!=null && officialPlugins.enabled("chord") && (layout.equals("orthogonal") || layout.equals("splitOrthogonal")); }
+    private boolean chordLayout() { return layout.equals("orthogonal") || layout.equals("splitOrthogonal"); }
+    private boolean chordsResolve() { return importedScheme==null && "isaac2026".equals(schema) && officialPlugins!=null && officialPlugins.enabled("chord"); }
     private boolean chordVisible() { return ready && chordLayout() && !directOnly && !numeric && !emoji; }
     private void cancelChord() {
+        deferredSpaceIndex=-1; deferredSpaceTicket=null; deferredSpaceTarget=null;
+        if(footerSpaceTouch!=null) footerSpaceTouch.cancel();
         if(keyboard!=null) keyboard.cancelPendingInputEvents();
         heldPreview=null; chordPreview=""; if(chords!=null) chords.cancel();
     }
@@ -335,9 +348,11 @@ public final class RimesInputMethodService extends InputMethodService {
     private void preferenceChanged(SharedPreferences changed,String key) {
         if(destroyed || changingSettingsPair) return;
         KeyboardSettings.Snapshot saved=settings.snapshot();
+        if(AssistantSettings.KEY.equals(key)) { invalidatePlugin(); pluginResultAuthorization=null; if(AssistantSettings.isPreset(activePlugin) && assistants.snapshot().preset(activePlugin)==null) { activePlugin=null; pluginSession.clear(); } render(); return; }
         if(OpenAiSettings.KEY.equals(key)) {
             cometProfile=cometSettings.snapshot(); invalidatePlugin(); render(); return;
         }
+        if(KeyboardSettings.KEY_KEY_STYLE.equals(key)) { if(keys!=null) keys.applyPreferences(settings); render(); return; }
         if(KeyboardSettings.KEY_THEME.equals(key)) { theme=KeyboardTheme.named(saved.theme); render(); return; }
         if(KeyboardSettings.KEY_SCHEMA.equals(key) || KeyboardSettings.KEY_LAYOUT.equals(key)) {
             // Both per-key notifications see the same atomic pair. Settle the old code only once.
@@ -430,7 +445,7 @@ public final class RimesInputMethodService extends InputMethodService {
                 if(!retainedResults.isEmpty() || !applyResult(result)) {
                     retainedResults.add(result); retained="pending"; notice(buffer.isEnabled()?R.string.buffer_limit:R.string.delivery_pending);
                 }
-                render();
+                render(); confirmDeferredSpace();
             });
         });
     }
@@ -543,7 +558,7 @@ public final class RimesInputMethodService extends InputMethodService {
         InputConnection connection=target;
         if(!ownsTarget() || !buffer.isCurrent(delivery)) return;
         int end=selection<0 ? -1 : selection+delivery.text.length();
-        if(connection.commitText(delivery.text,1) && connection==target && ownsTarget()) { expect(end); buffer.acknowledge(delivery); }
+        if(connection.commitText(delivery.text,1) && connection==target && ownsTarget()) { expect(end); buffer.acknowledge(delivery); closeDrainedBuffer(); }
         render();
     }
     private void retryRetained() {
@@ -782,6 +797,77 @@ public final class RimesInputMethodService extends InputMethodService {
         if(appearanceOpen) appearancePanel.showPets();
         render();
     }
+    private final SpaceKeyTouch.Listener spaceListener=new SpaceKeyTouch.Listener() {
+        public void begin() {
+            spaceTarget=target;spaceTicket=epoch.issue();spaceRaw=snapshot.raw;
+            spaceCandidate=snapshot.composing()?Math.max(0,snapshot.highlighted):-1;
+        }
+        public void cancel() {
+            spaceCandidate=-1;spaceTarget=null;spaceTicket=null;spaceRaw="";
+            for(Button candidate:candidates) candidate.setSelected(false);
+        }
+        public void action(org.scholay.rimes.core.SpaceGesture.Kind kind,int delta) {
+            if(spaceTicket==null || !epoch.current(spaceTicket) || spaceTarget!=target || !ownsTarget() || privateField) return;
+            switch(kind) {
+                case PICK:
+                    if(pending==0 && snapshot.composing() && snapshot.raw.equals(spaceRaw) && !snapshot.candidates.isEmpty()) {
+                        spaceCandidate=Math.max(0,Math.min(snapshot.candidates.size()-1,Math.max(0,spaceCandidate)+delta));
+                        render(); if(spaceCandidate<candidates.size()) candidateScroll.scrollTo(Math.max(0,candidates.get(spaceCandidate).getLeft()-dp(24)),0);
+                    }
+                    break;
+                case PAGE:
+                    if(snapshot.composing() && snapshot.raw.equals(spaceRaw)) { spaceCandidate=0;page(delta>0); }
+                    break;
+                case CONFIRM:
+                    if(spaceCandidate>=0 && snapshot.raw.equals(spaceRaw)) {
+                        if(pending==0) select(spaceCandidate);
+                        else { deferredSpaceIndex=spaceCandidate;deferredSpaceTarget=target;deferredSpaceTicket=spaceTicket;deferredSpaceRaw=spaceRaw; }
+                    }
+                    break;
+                case CURSOR:
+                    if(!buffer.isEnabled() && !snapshot.composing() && pending==0) {
+                        InputConnection current=target;int key=delta<0?android.view.KeyEvent.KEYCODE_DPAD_LEFT:android.view.KeyEvent.KEYCODE_DPAD_RIGHT;
+                        for(int i=0;i<Math.min(32,Math.abs(delta)) && current==target && ownsTarget();i++) {
+                            current.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,key));
+                            current.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,key));
+                        }
+                    }
+                    break;
+                case OPEN_BUFFER: case CLOSE_BUFFER:
+                    if(pending!=0 || snapshot.composing() || !retained.isEmpty() || !buffer.isPermitted()) break;
+                    boolean open=kind==org.scholay.rimes.core.SpaceGesture.Kind.OPEN_BUFFER;
+                    cancelPlugin();pluginSession.clear();activePlugin=null;pluginSettingsOpen=false;buffer.setEnabled(open);render();break;
+                case IMPORT_BUFFER: importFieldToBuffer();break;
+                default:break;
+            }
+        }
+    };
+    private void confirmDeferredSpace() {
+        if(deferredSpaceIndex<0 || pending!=0) return;
+        int index=deferredSpaceIndex; deferredSpaceIndex=-1;
+        if(deferredSpaceTicket!=null && epoch.current(deferredSpaceTicket) && deferredSpaceTarget==target && ownsTarget()
+                && deferredSpaceRaw.equals(snapshot.raw) && retained.isEmpty() && snapshot.composing()) select(index);
+        deferredSpaceTicket=null;deferredSpaceTarget=null;
+    }
+    private void importFieldToBuffer() {
+        if(!ownsTarget() || privateField || directOnly || !buffer.isPermitted() || pending!=0 || snapshot.composing() || !retained.isEmpty()) return;
+        InputConnection connection=target;InputEpoch.Ticket ticket=epoch.issue();
+        android.view.inputmethod.ExtractedTextRequest request=new android.view.inputmethod.ExtractedTextRequest();
+        request.hintMaxChars=BufferSession.MAX_CHARACTERS+1;request.hintMaxLines=1024;
+        android.view.inputmethod.ExtractedText result=connection.getExtractedText(request,0);
+        if(connection!=target || !epoch.current(ticket) || !ownsTarget() || privateField) return;
+        if(result==null || result.text==null || result.startOffset!=0 || result.partialStartOffset>=0
+                || result.text.length()==0 || result.text.length()>BufferSession.MAX_CHARACTERS) {
+            Toast.makeText(this,"当前输入框不支持读取完整文字，或文字超过 16 KiB",Toast.LENGTH_SHORT).show();return;
+        }
+        String text=result.text.toString();
+        // Validate on a temporary session so a rejected import leaves the old draft untouched.
+        BufferSession preview=new BufferSession();preview.beginTarget(true);preview.setEnabled(true);
+        if(!preview.replaceImported(text)) return;
+        cancelPlugin();pluginSession.clear();activePlugin=null;pluginSettingsOpen=false;
+        buffer.setEnabled(true);buffer.replaceImported(text);render();
+    }
+
     private final KeyboardSurface.Handler keyHandler=new KeyboardSurface.Handler() {
         @Override public String label(KeyboardLayout.Key key) {
             switch(key.action) {
@@ -831,6 +917,7 @@ public final class RimesInputMethodService extends InputMethodService {
                     || key.action==KeyboardLayout.Action.RETURN && returnSelected();
         }
         @Override public void onAlternate(String text) { punctuate(text); }
+        @Override public SpaceKeyTouch.Listener spaceGestures() { return spaceListener; }
         @Override public boolean shiftLocked() { return ordinaryShift.locked(); }
         @Override public void holdShift() { toggleOrdinaryShift(true); }
         @Override public boolean canRepeatDelete() { return RimesInputMethodService.this.canRepeatDelete(); }
@@ -1003,14 +1090,17 @@ public final class RimesInputMethodService extends InputMethodService {
         for(KeyboardLayout.Action action:actions) {
             KeyButton button=button(chordFooter,"",() -> chordControl(action),action==KeyboardLayout.Action.SPACE?3.5f:1);
             button.classic(true); button.fontStyle(false,action==KeyboardLayout.Action.SHIFT?17:14,true); button.appearance(action!=KeyboardLayout.Action.SPACE,true,action==KeyboardLayout.Action.RETURN); if(!chordControls.isEmpty()) gapLeft(button,2); chordControls.add(button);
+            if(action==KeyboardLayout.Action.SPACE) footerSpaceTouch=new SpaceKeyTouch(button,spaceListener);
         }
         rebuildKeys(); render(); return keyboard;
     }
-    private static String pluginName(String id) {
+    private String pluginName(String id) {
+        AssistantSettings.Preset preset=assistants==null?null:assistants.snapshot().preset(id); if(preset!=null) return preset.name;
         if(id==null) return "";
         switch(id) { case "translate":return "翻译";case "ask":return "快问";case "polish":return "润色";case "poem":return "作诗";case "art":return "画画";default:throw new IllegalArgumentException("Unknown plugin"); }
     }
-    private static String pluginPlaceholder(String id) {
+    private String pluginPlaceholder(String id) {
+        AssistantSettings.Preset preset=assistants==null?null:assistants.snapshot().preset(id); if(preset!=null) return preset.placeholder.isEmpty()?"写下内容，再点执行":preset.placeholder;
         switch(id) { case "translate":return "输入要翻译的文字";case "ask":return "问点什么";case "polish":return "写下要润色的文字";case "poem":return "写下主题或要藏的字";case "art":return "写下要画的东西";default:throw new IllegalArgumentException("Unknown plugin"); }
     }
     private boolean canSelectPlugin() {
@@ -1018,7 +1108,7 @@ public final class RimesInputMethodService extends InputMethodService {
     }
     private void selectPlugin(String id) {
         pluginName(id);
-        if(!canSelectPlugin() || !officialPlugins.enabled(id)) return;
+        if(!canSelectPlugin() || !pluginInstalled(id)) return;
         closeClipboard();
         cancelChord(); cancelPlugin(); if(!buffer.isEnabled()) buffer.setEnabled(true); activePlugin=id.equals(activePlugin)?null:id;
         pluginSession.select(activePlugin);
@@ -1088,35 +1178,41 @@ public final class RimesInputMethodService extends InputMethodService {
     }
     private void runPlugin() {
         if(activePlugin==null || !canSelectPlugin() || !buffer.isEnabled() || !pluginAllowed()) return;
-        final String authorization=officialPlugins.grant(activePlugin);
+        final String authorization=pluginGrant(activePlugin);
         if(authorization==null) return;
         pluginResultAuthorization=authorization;
         PluginSession.Request request=pluginSession.start(buffer);
         if(request==null) return;
         InputEpoch.Ticket ticket=epoch.issue(); InputConnection connection=target;
         pluginSettingsOpen=false; render();
-        pluginJob=pluginExecutor.run(request.plugin,request.source.text,translationDirection,cometProfile,new BufferPluginExecutor.Listener() {
+        pluginJob=pluginExecutor.run(AssistantSettings.basePlugin(request.plugin),request.source.text,translationDirection,cometProfile,assistants.instruction(request.plugin),new BufferPluginExecutor.Listener() {
             public void onUpdate(String text,boolean complete) { main.post(() -> {
                 if(!epoch.current(ticket) || connection!=target || !ownsTarget() || privateField || !pluginAllowed()
-                        || !authorization.equals(officialPlugins.grant(request.plugin))) return;
+                        || !authorization.equals(pluginGrant(request.plugin))) return;
                 if(pluginSession.update(request,buffer,text,complete)) { if(pluginSession.snapshot(buffer).status==PluginSession.Status.ERROR) cancelPlugin(); else if(complete) pluginJob=null; render(); }
             }); }
             public void onFailure(String message) { main.post(() -> {
                 if(!epoch.current(ticket) || connection!=target || !ownsTarget() || privateField || !pluginAllowed()
-                        || !authorization.equals(officialPlugins.grant(request.plugin))) return;
+                        || !authorization.equals(pluginGrant(request.plugin))) return;
                 if(pluginSession.fail(request,buffer,message)) { pluginJob=null; render(); }
             }); }
         });
     }
-    private boolean pluginAllowed() { return officialPlugins.enabled(activePlugin) && ("translate".equals(activePlugin) || cometProfile.enabled || aiMockEnabled); }
+    private boolean pluginInstalled(String id) { return officialPlugins.enabled(AssistantSettings.basePlugin(id)) && (!AssistantSettings.isPreset(id) || assistants.snapshot().preset(id)!=null); }
+    private String pluginGrant(String id) { String grant=officialPlugins.grant(AssistantSettings.basePlugin(id)); return grant==null?null:grant+(AssistantSettings.isPreset(id)?":"+assistants.revision():""); }
+    private boolean pluginAllowed() { return pluginInstalled(activePlugin) && ("translate".equals(activePlugin) || cometProfile.enabled || aiMockEnabled); }
     private void insertPluginResult() {
         if(!canSelectPlugin() || !buffer.isEnabled() || !pluginAllowed()
-                || pluginResultAuthorization==null || !pluginResultAuthorization.equals(officialPlugins.grant(activePlugin))) return;
+                || pluginResultAuthorization==null || !pluginResultAuthorization.equals(pluginGrant(activePlugin))) return;
         PluginSession.Delivery delivery=pluginSession.prepare(buffer); InputConnection connection=target;
         if(!ownsTarget() || !pluginSession.isCurrent(delivery,buffer)) return;
         int end=selection<0?-1:Math.min(selectionStart,selection)+delivery.text.length();
-        if(connection.commitText(delivery.text,1) && connection==target && ownsTarget()) { expect(end); pluginSession.acknowledge(delivery,buffer); }
+        if(connection.commitText(delivery.text,1) && connection==target && ownsTarget()) { expect(end); pluginSession.acknowledge(delivery,buffer); closeDrainedBuffer(); }
         render();
+    }
+    private void closeDrainedBuffer() {
+        if(buffer.blockCount()!=0 || !retainedResults.isEmpty()) return;
+        buffer.setEnabled(false); cancelPlugin(); pluginSession.clear(); activePlugin=null; pluginSettingsOpen=false;
     }
     private void chordControl(KeyboardLayout.Action action) {
         cancelChord();
@@ -1200,7 +1296,7 @@ public final class RimesInputMethodService extends InputMethodService {
         candidateRow.setVisibility(View.VISIBLE);
         boolean idle=!snapshot.composing() && snapshot.candidates.isEmpty() && heldPreview==null && chordPreview.isEmpty() && !chords.isChordActive() && !punctuationOpen;
         pluginShortcuts.setVisibility(idle && !privateField && !directOnly?View.VISIBLE:View.GONE);
-        pluginShortcuts.render(theme,buffer.isEnabled()?activePlugin:null,canSelectPlugin(),officialPlugins::enabled);
+        pluginShortcuts.render(theme,buffer.isEnabled()?activePlugin:null,canSelectPlugin(),this::pluginInstalled);
         candidateScroll.setVisibility(!matrixExpanded && heldPreview==null && !idle?View.VISIBLE:View.GONE); chordReadout.setVisibility(heldPreview==null?View.GONE:View.VISIBLE);
         chordReadout.render(heldPreview,theme,landscape());
         candidateMatrix.setVisibility(matrixExpanded?View.VISIBLE:View.GONE);
@@ -1222,6 +1318,7 @@ public final class RimesInputMethodService extends InputMethodService {
                 ((KeyButton)item).candidate(value,comment);
                 item.setContentDescription(marks?value:"候选"+(i+1)+" "+value+(comment.isEmpty()?"":" "+comment));
             }
+            item.setSelected(spaceCandidate==i && spaceTarget==target && snapshot.raw.equals(spaceRaw));
             item.setEnabled(exists && pending==0 && chordPreview.isEmpty());
         }
         if(renderedPage!=snapshot.pageStart || !renderedRaw.equals(snapshot.raw)) {
@@ -1271,7 +1368,7 @@ public final class RimesInputMethodService extends InputMethodService {
         int desiredHeight=Math.round(surfaceHeight*getResources().getDisplayMetrics().density);
         if(surfaceContainer.getLayoutParams().height!=desiredHeight) { surfaceContainer.getLayoutParams().height=desiredHeight; surfaceContainer.requestLayout(); }
         keys.render(visibleMode(),chinesePages(),theme); keys.setVisibility(panelOpen || chord?View.GONE:View.VISIBLE);
-        chords.render("splitOrthogonal".equals(layout),!english && !uppercase,uppercase,theme); chords.setVisibility(panelOpen || !chord?View.GONE:View.VISIBLE);
+        chords.render("splitOrthogonal".equals(layout),chordsResolve() && !english && !uppercase,uppercase,theme); chords.setVisibility(panelOpen || !chord?View.GONE:View.VISIBLE);
         chordFooter.setVisibility(!panelOpen && chord?View.VISIBLE:View.GONE);
         ((LinearLayout.LayoutParams)surfaceContainer.getLayoutParams()).bottomMargin=chord && !panelOpen?dp(1):0;
         String[] footerLabels={"123",uppercase?"⇪":"⇧","空格",english?"EN":"中",returnLabel()};

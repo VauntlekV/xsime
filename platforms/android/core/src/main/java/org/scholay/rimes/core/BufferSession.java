@@ -48,6 +48,17 @@ public final class BufferSession {
         projectedText=""; projectedBlocks=java.util.Collections.emptyList(); projectionRevision=revision;
     }
 
+    /** Explicit whole-field import is an atomic replacement, never a partial overwrite. */
+    public boolean replaceImported(String text) {
+        if (!enabled || !permitted || text == null || text.isEmpty() || text.length() > MAX_CHARACTERS || text.indexOf('\0') >= 0) return false;
+        for (int i=0;i<text.length();i++) {
+            char c=text.charAt(i);
+            if (Character.isHighSurrogate(c)) { if (++i>=text.length() || !Character.isLowSurrogate(text.charAt(i))) return false; }
+            else if (Character.isLowSurrogate(c)) return false;
+        }
+        clear(); blocks.add(text); committed.add(true); revision++; return true;
+    }
+
     /** One Rime confirmation is an immutable block boundary, including non-BMP text. */
     public boolean appendCommittedBlock(String text) {
         if (!enabled || !permitted || text == null || text.isEmpty()

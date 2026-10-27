@@ -126,7 +126,7 @@ public final class SetupActivity extends Activity {
             case "home":home();break;case "setup":setup();break;case "playground":playground();break;
             case "schema":schemas();break;case "chords":chords();break;case "appearance":appearance();break;
             case "resources":resources();break;case "translation":translation();break;case "ai":ai();break;
-            case "mappings":mappings();break;case "plugins":plugins();break;
+            case "mappings":mappings();break;case "plugins":plugins();break;case "assistant":assistant();break;
             case "data":data();break;case "privacy":privacy();break;case "licenses":licenses();break;
             case "license":document();break;case "differences":differences();break;
             default:page="home";render();return;
@@ -154,6 +154,7 @@ public final class SetupActivity extends Activity {
             case "plugins":return t("官方插件","Official plugins");
             case "mappings":return t("内置并击映射","Built-in chord mappings");
             case "appearance":return t("键盘布局与换肤","Keyboard layout & skins");case "resources":return t("Rime 方案与词典","Rime schemes & dictionaries");
+            case "assistant":return t("AI 助手与快捷入口","AI assistants & shortcuts");
             case "translation":return t("本机翻译词典","Local translation dictionary");case "ai":return t("AI 服务","AI services");
             case "data":return t("数据管理","Data management");case "privacy":return t("隐私与第三方许可","Privacy & licenses");
             case "licenses":return t("第三方许可","Third-party licenses");case "license":return license==null?t("许可","License"):license;
@@ -205,12 +206,13 @@ public final class SetupActivity extends Activity {
         TextView view=text(value,16,ink,false); view.setLineSpacing(dp(4),1); view.setPadding(dp(16),dp(16),dp(16),dp(16)); group.addView(view);
     }
     private String schemeName(String id) {
+        if(id.equals("isaac2026")) return "isaac2026";
         if(id.equals("rimes_ziranma")) return t("自然码双拼","Natural Code");
         if(id.equals("lingxi_wubi")) return t("犀术五笔","XSIME Wubi");
         if(id.equals("rimes_wubi")) return t("五笔 86","Wubi 86"); return t("全拼 · Pinyin","Pinyin");
     }
     private String layoutName(String id) {
-        switch(id) { case "nineKey":return t("九键全拼","9-key Pinyin");case "orthogonal":return t("并击矩阵","Chord grid");case "splitOrthogonal":return t("分离并击","Split chords");default:return "QWERTY"; }
+        switch(id) { case "nineKey":return t("九键全拼","9-key Pinyin");case "orthogonal":return t("正交矩阵","Orthogonal grid");case "splitOrthogonal":return t("分离并击","Split chords");default:return "QWERTY"; }
     }
     private String directionName(String id) { return id.equals("zh-en")?t("中 → 英","Chinese → English"):id.equals("en-zh")?t("英 → 中","English → Chinese"):t("自动中英","Automatic"); }
     private void home() {
@@ -301,12 +303,12 @@ public final class SetupActivity extends Activity {
         row(imports,KeyboardIcon.STACK_LAYERS,t("导入和管理 Rime 方案","Import and manage Rime schemes"),
             t("ZIP · 方案、词典、Lua 与 OpenCC","ZIP · schemas, dictionaries, Lua and OpenCC"),null,"settings.schema.import",
             () -> startActivity(new Intent(this,RimeSchemesActivity.class)));
-        LinearLayout choices=group(t("中文输入方案","Chinese input scheme")); String[] ids={"rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi"}; String[] samples={"nihao → 你好","nihk → 你好","wq → 你 · zni → 你 (wq)","wq / ni → 你"};
+        LinearLayout choices=group(t("中文输入方案","Chinese input scheme")); String[] ids={"rimes_pinyin","rimes_ziranma","rimes_wubi","lingxi_wubi","isaac2026"}; String[] samples={"nihao → 你好","nihk → 你好","wq → 你 · zni → 你 (wq)","wq / ni → 你",t("正交布局中的自然码并击","Natural Code chords on the orthogonal grid")};
         for(int i=0;i<ids.length;i++) { String id=ids[i]; choice(choices,schemeName(id),samples[i],"settings.schema."+id,settings.getSchema().equals(id),() -> {
             try { new RimeSchemeStore(this).activate(null,null); settings.setSchema(id); render(); }
             catch(Exception e) { android.widget.Toast.makeText(this,e.getMessage(),android.widget.Toast.LENGTH_LONG).show(); }
         }); }
-        note(t("九键使用全拼；选择其他方案会切换到 QWERTY。并击使用自然码编码，选择普通中文方案会退出并击布局。","9-key uses Pinyin; another scheme switches to QWERTY. Chords use Natural Code; selecting a regular scheme leaves the chord layout."));
+        note(t("正交矩阵可用于所有方案，普通方案逐键输入；选择 isaac2026 并启用并击插件后使用自然码并击。九键使用全拼。","The orthogonal grid works with every scheme using ordinary taps. Choose isaac2026 and enable the chord plugin for Natural Code chords. Nine-key uses Pinyin."));
         inputHabits();
     }
     private void inputHabits() {
@@ -366,10 +368,12 @@ public final class SetupActivity extends Activity {
         LinearLayout.LayoutParams frame=new LinearLayout.LayoutParams(-1,-2); frame.setMargins(dp(12),dp(4),dp(12),dp(12)); group.addView(preview,frame);
     }
     private void appearance() {
+        LinearLayout keyStyle=group(t("按键样式","Key style"));
+        segments(keyStyle,new String[]{"auto","flat","legacy"},new String[]{t("跟随主题","Automatic"),t("平面","Flat"),t("经典","Classic")},settings.keyStyle(),"settings.keyStyle.",value -> { settings.setKeyStyle(value); render(); });
         content.addView(text(t("熟悉的键位，喜欢的外观","Familiar keys. Your favorite look."),20,ink,true));
         note(t("标准键盘和并击共用配色，按下反馈也跟随主题。","Standard keys and chords share a palette, including press feedback."));
         LinearLayout standard=group(t("标准键盘","Standard keyboard"));
-        segments(standard,new String[]{"qwerty","nineKey"},new String[]{t("QWERTY · 26 键","QWERTY · 26 keys"),t("九键全拼","9-key Pinyin")},settings.getLayout(),"settings.layout.",id -> { settings.setLayout(id); render(); }); preview(standard);
+        segments(standard,new String[]{"qwerty","nineKey","orthogonal"},new String[]{t("QWERTY · 26 键","QWERTY · 26 keys"),t("九键全拼","9-key Pinyin"),t("正交矩阵","Orthogonal grid")},settings.getLayout(),"settings.layout.",id -> { settings.setLayout(id); render(); }); preview(standard);
         note(settings.getLayout().equals("nineKey")?t("九键仅用于全拼；英文和数字沿用标准键位。","9-key is for Pinyin; English and numbers use the standard keys."):t("当前布局：","Current layout: ")+layoutName(settings.getLayout()));
         LinearLayout behavior=group(t("普通键盘输入","Standard keyboard input"));
         String[] gestures={"off","hold","swipe"}, labels={t("关闭","Off"),t("长按后上滑","Hold then swipe"),t("直接上滑","Swipe directly")};
@@ -479,6 +483,8 @@ public final class SetupActivity extends Activity {
         toggle.setOnCheckedChangeListener((button,value) -> save.accept(value)); group.addView(toggle,new LinearLayout.LayoutParams(-1,-2));
     }
     private void ai() {
+        LinearLayout assistants=group(t("个性化助手","Personal assistants"));
+        row(assistants,KeyboardIcon.CHAT_QUESTION,t("助手与快捷入口","Assistants & shortcut bar"),t("自定义提示词、显示入口和排序","Custom prompts, visible entries and order"),null,"settings.ai.assistants",() -> navigate("assistant"));
         OpenAiSettings comet=new OpenAiSettings(this); OpenAiSettings.Snapshot profile=comet.snapshot();
         LinearLayout remote=group(t("联网 AI","Online AI"));
         row(remote,KeyboardIcon.MAGIC_WAND,t("联网 AI","Online AI"),profile.baseURL,profile.enabled?t("已启用","Enabled"):t("未启用","Off"),"settings.ai.comet",null);
@@ -514,6 +520,58 @@ public final class SetupActivity extends Activity {
         LinearLayout flow=group(t("在键盘中使用","Use from the keyboard")); paragraph(flow,t("候选栏没有候选字时显示 Buffer 插件快捷入口。选择插件，在 Buffer 确认原文后点执行；检查结果，再点发送。","When there are no candidates, the candidate bar shows Buffer plugin shortcuts. Choose a plugin, confirm text in Buffer, then run; review the result and insert it."));
         note(t("启用时优先使用联网 AI。联网失败会保留原文，不切换到模拟回复。画画目前只生成文字提示词。","Online AI takes priority when enabled. Network failures preserve the source without falling back to mock replies. Art currently produces text prompts only."));
     }
+
+    private void assistant() {
+        AssistantSettings store=new AssistantSettings(this); AssistantSettings.Snapshot library=store.snapshot();
+        LinearLayout presets=group(t("我的助手","My assistants"));
+        row(presets,KeyboardIcon.CHAT_QUESTION,t("新建助手","New assistant"),null,null,"settings.assistant.new",() -> editAssistant(null));
+        for(AssistantSettings.Preset preset:library.presets) {
+            row(presets,KeyboardIcon.CHAT_QUESTION,preset.name,preset.placeholder,null,"settings.assistant."+preset.id,() -> {
+                String[] actions={t("编辑","Edit"),t("删除","Delete")};
+                new android.app.AlertDialog.Builder(this).setTitle(preset.name).setItems(actions,(dialog,index) -> {
+                    if(index==0) editAssistant(preset);
+                    else new android.app.AlertDialog.Builder(this).setMessage(t("删除这个助手？","Delete this assistant?"))
+                        .setNegativeButton(android.R.string.cancel,null).setPositiveButton(android.R.string.ok,(d,w) -> { store.remove(preset.id); render(); }).show();
+                }).show();
+            });
+        }
+        LinearLayout bar=group(t("键盘快捷入口","Keyboard shortcut bar"));
+        java.util.List<String> all=new java.util.ArrayList<>(AssistantSettings.BUILT_INS);
+        for(AssistantSettings.Preset preset:library.presets) all.add(preset.id);
+        for(String id:all) {
+            AssistantSettings.Preset preset=library.preset(id);
+            String name=preset!=null?preset.name:id.equals("translate")?t("翻译","Translate"):id.equals("ask")?t("快问","Ask"):id.equals("polish")?t("润色","Polish"):id.equals("poem")?t("作诗","Poem"):t("画画","Art");
+            toggle(bar,name,"settings.assistant.entrance."+id,library.entrance.contains(id),enabled -> { store.entrance(id,enabled); render(); });
+        }
+        LinearLayout order=group(t("入口顺序","Shortcut order"));
+        for(int i=0;i<library.entrance.size();i++) {
+            String id=library.entrance.get(i); AssistantSettings.Preset preset=library.preset(id);
+            row(order,null,(i+1)+" · "+(preset==null?id:preset.name),t("点按调整顺序","Tap to reorder"),null,"settings.assistant.order."+id,() -> {
+                new android.app.AlertDialog.Builder(this).setItems(new String[]{t("向前移动","Move earlier"),t("向后移动","Move later")},(dialog,index) -> { store.move(id,index==0?-1:1); render(); }).show();
+            });
+        }
+        note(t("助手由快问插件执行，使用你已有的 AI 地址、模型和密钥。只有主动执行时才发送当前 Buffer 原文；编辑、删除或停用会撤销旧结果。","Assistants use the Ask plugin and your existing AI provider. Only Run sends the current Buffer source. Editing, removing or disabling revokes old results."));
+    }
+    private void editAssistant(AssistantSettings.Preset preset) {
+        LinearLayout fields=column();
+        EditText name=aiField(fields,t("名称","Name"),preset==null?"":preset.name,"settings.assistant.name",false);
+        EditText instruction=aiField(fields,t("提示词","Instruction"),preset==null?"":preset.instruction,"settings.assistant.instruction",false);
+        instruction.setSingleLine(false); instruction.setMinLines(4); instruction.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        instruction.getLayoutParams().height=dp(130);
+        EditText hint=aiField(fields,t("输入提示（可选）","Placeholder (optional)"),preset==null?"":preset.placeholder,"settings.assistant.placeholder",false);
+        ScrollView scroll=new ScrollView(this); scroll.addView(fields);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this).setTitle(t("AI 助手","AI assistant")).setView(scroll)
+            .setNegativeButton(android.R.string.cancel,null).setPositiveButton(android.R.string.ok,null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                AssistantSettings.Preset edited=preset==null?AssistantSettings.create(name.getText().toString(),instruction.getText().toString(),hint.getText().toString())
+                    :new AssistantSettings.Preset(preset.id,name.getText().toString(),instruction.getText().toString(),hint.getText().toString());
+                new AssistantSettings(this).save(edited); dialog.dismiss(); render();
+            } catch(IllegalArgumentException error) { android.widget.Toast.makeText(this,error.getMessage(),android.widget.Toast.LENGTH_LONG).show(); }
+        }));
+        dialog.show();
+    }
+
     private EditText aiField(LinearLayout group,String label,String value,String tag,boolean secret) {
         TextView title=text(label,14,secondary,false); title.setPadding(dp(16),dp(12),dp(16),0); group.addView(title);
         EditText field=new EditText(this); field.setTag(tag); field.setContentDescription(label); field.setTextSize(16); field.setTextColor(ink); field.setHintTextColor(secondary);

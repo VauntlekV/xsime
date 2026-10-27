@@ -10,13 +10,13 @@
     "native/android-core/ChordGesture.java": "05b3c674a96feb58859c00b396593928d46267d873bbae2ab14669ef0d9dd875",
     "native/android-core/ChordLayout.java": "b919fcba68087a3dff166865e60abb2ee680d1ea4f53dbbe3c4e7ec8897c3372",
     "native/android-core/ChordProfile.java": "3581a331c87877a6d120d9653074733d0179e5c4da2d3cbbfab6e71a4833d4e0",
-    "native/android/BufferPluginExecutor.java": "2466ac8a21034b12a9c0cbb6783c1da5b3776adc0216eadd86d4715900cc36e2",
-    "native/android/BufferPluginPanel.java": "8048c8d2f4ba887e86f2f159e100eee2114f4cbf66679ee6f4e20051fd3cda8e",
+    "native/android/BufferPluginExecutor.java": "4a04a8eeb52e96d4959eb429e890ad37c7cc86c1673fd751f05c9908a9df8b2f",
+    "native/android/BufferPluginPanel.java": "74ebdefee4d4824ccd780fac079289acdae8c6b60613431482216264d13604cf",
     "native/android/ChordPreview.java": "5fb23faae5a7e67ed736f5671fcf35ed6b06666c884147d313970c57e7032ff9",
     "native/android/ChordSurface.java": "ff2a460cd844c54167c0b80163a168c77f4083a6da73916077c5494e21bb23cc",
     "native/android/OfflineDictionary.java": "f1f5fd399243f22bd78fef82e023161bb3f97484521c4dbbba38914d664a8d87",
     "native/android/OpenAiChatCodec.java": "0ea916e2b42477130c57d246e2fd1c7811a331cf791e97655088a479aba08bae",
-    "native/ios/Support/BufferPlugins.swift": "52317c3575e042b4991a53542c845928e147c2a7709892b7725c05516a8b1eaf",
+    "native/ios/Support/BufferPlugins.swift": "c65f0abe73de210e6c8f119f46efec6afcc4fc9f69cdda1d0f3da795bfa38239",
     "native/linux/translation/NOTICE.md": "5eee3f64af272a595085cccef7d09a507a4051aa9d63e659c52c68b95f184fff",
     "native/linux/translation/resources.lock.json": "cbe9daee8bfc20e885ec409d4049e61450f7af2dfc0388d8fa5dc31951bfd8d7",
     "native/linux/translation/runtime.py": "f78157614941ac99f3433939ba4d1790bad7e828fd86fb647672cb6fb658878e",
@@ -120,6 +120,6 @@
     "source-map.json": "ad2085500c2268ad2b80904989a02c6f9e9f70a2918aac2d568b003108635898"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "ed5360fb7fa6614ff6ece1fb3c4aea94590375e1",
+  "revision": "e0bf005ed4daf1293e4d721bebc54053f08b2835",
   "schemaVersion": 1
 }

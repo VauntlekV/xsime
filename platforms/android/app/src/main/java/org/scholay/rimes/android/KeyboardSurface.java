@@ -27,11 +27,13 @@ final class KeyboardSurface extends ViewGroup {
         default boolean canRepeatDelete() { return true; }
         default boolean shiftLocked() { return false; }
         default void holdShift() {}
+        default SpaceKeyTouch.Listener spaceGestures() { return null; }
     }
     private KeyboardLayout.Mode mode;
     private boolean chinese;
     private String symbolGesture="hold";
     private boolean numericGrid,wideSpace=true;
+    private String keyStyle="flat";
     private int portraitHeight=100,landscapeHeight=100;
     private List<KeyboardLayout.Key> frames;
     private final Handler handler;
@@ -39,12 +41,14 @@ final class KeyboardSurface extends ViewGroup {
     private int themeUiMode=-1;
     private final List<DeleteRepeatTouch> deleteRepeats=new ArrayList<>();
     private final List<UpwardNumberTouch> alternates=new ArrayList<>();
+    private final List<SpaceKeyTouch> spaces=new ArrayList<>();
     private final Paint hintPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
     KeyboardSurface(Context context,Handler handler) { super(context); this.handler=handler; setLayoutDirection(LAYOUT_DIRECTION_LTR); }
     void applyPreferences(KeyboardSettings settings) {
         String gesture=settings.symbolGesture(); boolean grid=settings.numericGrid(), wide=settings.wideSpace();
         if(!gesture.equals(symbolGesture) || grid!=numericGrid || wide!=wideSpace) { cancelTouches(); mode=null; }
         symbolGesture=gesture; numericGrid=grid; wideSpace=wide;
+        keyStyle=settings.keyStyle();
         portraitHeight=settings.heightPercent(false); landscapeHeight=settings.heightPercent(true);
         requestLayout();
     }
@@ -59,10 +63,11 @@ final class KeyboardSurface extends ViewGroup {
         themeUiMode=uiMode;
         if(rebuild) {
             this.mode=mode; this.chinese=chinese; removeAllViews(); deleteRepeats.clear(); alternates.clear();
-            frames=KeyboardLayout.keys(400,landscape(),mode,chinese,numericGrid,wideSpace);
+            spaces.clear(); frames=KeyboardLayout.keys(400,landscape(),mode,chinese,numericGrid,wideSpace);
             for(KeyboardLayout.Key key:frames) {
                 KeyButton button=new KeyButton(getContext());
                 button.setOnClickListener(v -> handler.press(key));
+                if(key.action==KeyboardLayout.Action.SPACE && handler.spaceGestures()!=null) spaces.add(new SpaceKeyTouch(button,handler.spaceGestures()));
                 if(key.action==KeyboardLayout.Action.SHIFT) button.setOnLongClickListener(v -> { handler.holdShift(); return true; });
                 if(key.action==KeyboardLayout.Action.DELETE) deleteRepeats.add(new DeleteRepeatTouch(button,handler::canRepeatDelete));
                 String alternate=alternateFor(key);
@@ -77,7 +82,9 @@ final class KeyboardSurface extends ViewGroup {
             boolean glyph=letter || key.action==KeyboardLayout.Action.PUNCTUATION && !key.text.isEmpty();
             boolean functional=!letter && key.action!=KeyboardLayout.Action.SPACE;
             button.appearance(functional,false,key.action==KeyboardLayout.Action.RETURN);
-            int font=glyph?(mode==KeyboardLayout.Mode.NINE_KEY?20:25)
+            button.classic("legacy".equals(keyStyle)); button.flat("flat".equals(keyStyle));
+            button.setAlpha("flat".equals(keyStyle) && !functional?0.78f:1);
+            int font=glyph?(mode==KeyboardLayout.Mode.NINE_KEY?20:mode==KeyboardLayout.Mode.NUMERIC || mode==KeyboardLayout.Mode.SYMBOLS?21:25)
                     :key.action==KeyboardLayout.Action.LANGUAGE?18:system?18:14;
             button.fontStyle(false,font,!glyph && (!system || key.action==KeyboardLayout.Action.LANGUAGE));
             button.icon(key.action==KeyboardLayout.Action.SHIFT?(handler.shiftLocked()?KeyboardIcon.SHIFT_FILL:KeyboardIcon.SHIFT)
@@ -102,6 +109,7 @@ final class KeyboardSurface extends ViewGroup {
         if(alternates!=null) for(UpwardNumberTouch swipe:alternates) swipe.cancel();
     }
     private void cancelTouches() {
+        if(spaces!=null) for(SpaceKeyTouch space:spaces) space.cancel();
         cancelDeleteRepeats(); cancelAlternates();
         for(int i=0;i<getChildCount();i++) getChildAt(i).cancelLongPress();
     }
