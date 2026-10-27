@@ -868,7 +868,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
     private let heatmapView = KeyboardHeatmapView()
     private let pluginRowsStack = NSStackView()
     private let pluginStatusLabel = NSTextField(labelWithString: "")
-    private let settingsStatusLabel = NSTextField(labelWithString: "")
+    private let settingsStatusLabel = SettingsStatusLabel(labelWithString: "")
     private var pluginDownloadInProgress = false
     private var pluginRefreshScheduled = false
     private var chordExtensionDeploymentInProgress = false
@@ -2493,6 +2493,8 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         statusBar.identifier = NSUserInterfaceItemIdentifier("settings.status-bar")
         statusBar.translatesAutoresizingMaskIntoConstraints = false
         statusBar.addSubview(statusRow)
+        settingsStatusLabel.onVisibilityChange = { [weak statusBar] hidden in statusBar?.isHidden = hidden }
+        statusBar.isHidden = settingsStatusLabel.isHidden
         tabsBar.addSubview(statusBar)
         // The page has no title row of its own; a plugin's configuration button
         // sits at the end of the navigation bar.
@@ -2623,8 +2625,8 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             hero, spacer(6),
             sectionLabel("版本与更新"), update, spacer(8),
             sectionLabel("官网与联系"),
-            infoRow("官网", "xsime.com", id: "website"),
-            infoRow("邮箱", "pm@scholay.com", id: "contact"),
+            infoRow("官网", "xsime.com", url: "https://xsime.com", id: "website"),
+            infoRow("邮箱", "pm@scholay.com", url: "mailto:pm@scholay.com", id: "contact"),
             spacer(4), credit,
         ])
         let preferredWidth = hero.widthAnchor.constraint(equalToConstant: 650)
@@ -2636,29 +2638,15 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         return column
     }
 
-    /// Project address plus the README essentials, written out in the page.
+    /// The project addresses, then the complete README in every language it is published in.
     private func rimesReadmePage() -> NSView {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-        let sections: [(String, String)] = [
-            ("是什么", "犀术IME / XSIME，心有灵犀，落笔见术。基于 RIME 输入法引擎（librime），安装包自包含引擎与词库，开箱即用。支持全拼、双拼、声笔、五笔 86、犀术五笔、英文方案，以及速录行业的并击式键入，也可以导入第三方 Rime 方案。"),
-            ("三个插槽", "Buffer（⌘⇧B）：上屏前的文本工作台，可实时翻译或交给 AI 生成、改写，由你确认后显式投递到当前输入框。\nCapsule（⌘⇧V）：屏幕底部的底栏，管理最近复制的文本、链接、图片、文件，以及笔记、PDF、技能与密码。\nMailbox（⌘⇧M）：AI 会话、备注和待审核的外部推送都留在这个窗口里。"),
-            ("内置扩展与插件", "实时翻译、AI 生成、意识流输入是缓冲插件；并击、统计、打字测速是内置扩展。可在「插件」页启用、停用或安装。"),
-            ("平台", "macOS（\(version.map { "当前 \($0)，" } ?? "")PKG 安装包）、iOS、Android、Windows、Linux（Fcitx5）。各平台安装包与版本说明在项目的发布页。"),
-            ("隐私", "输入内容、统计与剪贴板历史只保存在本机；日常统计只记录计数，不记录正文。"),
-        ]
-        var views: [NSView] = [
+        contentColumn([
             sectionLabel("项目地址"),
-            infoRow("源码", "github.com/scholay/xsime", id: "source"),
-            infoRow("发布页", "github.com/scholay/xsime/releases", id: "releases"),
-        ]
-        for (title, body) in sections {
-            views.append(spacer(6))
-            views.append(sectionLabel(title))
-            views.append(bodyText(body))
-        }
-        views.append(spacer(4))
-        views.append(caption("完整 README、文档与发布记录在项目仓库中；上面的地址可以直接复制。"))
-        return contentColumn(views)
+            infoRow("源码", "github.com/scholay/xsime", url: "https://github.com/scholay/xsime", id: "source"),
+            infoRow("发布页", "github.com/scholay/xsime/releases", url: "https://github.com/scholay/xsime/releases", id: "releases"),
+            spacer(6),
+            SettingsReadmeView(),
+        ])
     }
 
     private func rimesLicensePage() -> NSView {
@@ -2694,36 +2682,29 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         return label
     }
 
-    /// A label and a selectable value with a copy button; no link to follow.
-    private func infoRow(_ label: String, _ value: String, id: String) -> NSView {
+    /// A label and a value that is itself the link: one click opens it.
+    private func infoRow(_ label: String, _ value: String, url: String, id: String) -> NSView {
         let name = NSTextField(labelWithString: label)
         name.font = .systemFont(ofSize: 12)
         name.textColor = RimeUI.textSecondary
         name.translatesAutoresizingMaskIntoConstraints = false
         name.widthAnchor.constraint(equalToConstant: 48).isActive = true
-        let text = NSTextField(labelWithString: value)
-        text.font = .systemFont(ofSize: 13)
-        text.textColor = RimeUI.textPrimary
+        let link = NSMutableAttributedString(string: value, attributes: [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: RimeUI.accentTextColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+        ])
+        if let target = URL(string: url) { link.addAttribute(.link, value: target, range: NSRange(location: 0, length: link.length)) }
+        let text = NSTextField(labelWithAttributedString: link)
         text.isSelectable = true
+        text.allowsEditingTextAttributes = true
+        text.toolTip = url
         text.identifier = .init("settings.rimes.\(id).value")
-        let copy = SettingsPointingButton(title: "复制", target: self, action: #selector(copyInfoValue(_:)))
-        copy.bezelStyle = .rounded
-        copy.controlSize = .small
-        copy.toolTip = value
-        copy.identifier = .init("settings.rimes.\(id).copy")
-        let row = NSStackView(views: [name, text, copy])
+        let row = NSStackView(views: [name, text])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 10
         return row
-    }
-
-    @objc private func copyInfoValue(_ sender: NSButton) {
-        guard let value = sender.toolTip else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(value, forType: .string)
-        settingsStatusLabel.stringValue = "已复制 \(value)"
-        settingsStatusLabel.textColor = RimeUI.textMuted
     }
 
     private func inputPage(subpageID: String) -> NSView {
@@ -4839,7 +4820,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 8
-        column.edgeInsets = NSEdgeInsets(top: 0, left: 24, bottom: 22, right: 24)
+        column.edgeInsets = NSEdgeInsets(top: 18, left: 24, bottom: 22, right: 24)
         return column
     }
 
@@ -6584,3 +6565,19 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
 /// (for example a fixed sidebar beside a scrolling main area). The settings shell
 /// hosts it directly instead of wrapping it in another scroll view.
 protocol SettingsSelfScrollingPage: NSView {}
+
+/// The note beside the page tabs. Confirmations such as "已打开 …" or "已复制 …"
+/// are noise there, so it shows only failures (red text) and hides its bar otherwise.
+final class SettingsStatusLabel: NSTextField {
+    var onVisibilityChange: ((Bool) -> Void)?
+    override var stringValue: String { didSet { refresh() } }
+    override var textColor: NSColor? { didSet { refresh() } }
+    private func refresh() {
+        let hidden = stringValue.isEmpty || textColor != .systemRed
+        guard hidden != isHidden else { return }
+        isHidden = hidden
+        onVisibilityChange?(hidden)
+    }
+    override init(frame frameRect: NSRect) { super.init(frame: frameRect); isHidden = true }
+    required init?(coder: NSCoder) { super.init(coder: coder); isHidden = true }
+}

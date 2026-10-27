@@ -321,7 +321,7 @@ jobs:
             [ -d "$resource_bundle" ] || continue
             cp -R "$resource_bundle" "$APP/Contents/Resources/"
           done
-          cp LICENSE NOTICE LICENSING.md ATTRIBUTION.md THIRD_PARTY_NOTICES.md "$APP/Contents/Resources/"
+          cp LICENSE NOTICE LICENSING.md ATTRIBUTION.md THIRD_PARTY_NOTICES.md README.md README.en.md README.ja.md README.ko.md README.es.md "$APP/Contents/Resources/"
           cp -R LICENSES "$APP/Contents/Resources/"
           cp Info.plist "$APP/Contents/Info.plist"
           cp -R Vendor/rime/Frameworks/* "$APP/Contents/Frameworks/"
