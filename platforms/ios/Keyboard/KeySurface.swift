@@ -6,7 +6,6 @@ import RimesCore
 
 final class KeySurface: UIView {
     let feedback = KeyboardFeedback()
-    private var reachable = ChordReachability(profile: .builtIn)
     var onTypingPress: (() -> Void)?
     var onKey: ((String) -> Void)?
     var onAlternate: ((String) -> Void)?
@@ -14,7 +13,7 @@ final class KeySurface: UIView {
     var onPreview: ((String) -> Void)?
     var onEmoji: ((String) -> Void)?
     var onLanguageToggle: (() -> Void)?
-    var profile = ChordProfile.builtIn { didSet { if oldValue != profile { reachable = ChordReachability(profile: profile) }; retire(); setNeedsLayout() } }
+    var profile = ChordProfile.builtIn { didSet { retire(); setNeedsLayout() } }
     var chordMode = false { didSet { retire(); setNeedsLayout() } }
     var numeric = false { didSet { retire(); setNeedsLayout() } }
     var shifted = false { didSet { if oldValue != shifted { retire() }; setNeedsDisplay() } }
@@ -127,8 +126,6 @@ final class KeySurface: UIView {
     func showEmoji() { retire(); emojiMode = true }
 
     private func redraw() {
-        let dimmed = resolvesChords && gesture.active
-        [emojiButton, languageButton].forEach { $0.alpha = dimmed ? 0.3 : 1 }
         setNeedsDisplay()
     }
     private func clearOrdinaryTouches() {
@@ -211,12 +208,10 @@ final class KeySurface: UIView {
     }
     override func draw(_ rect: CGRect) {
         let selected = gesture.keys ?? []
-        let eligible = gesture.availableKeys(in: reachable)
         for (key, box) in boxes {
             let active = (key.first.map(selected.contains) ?? false) || ordinary.values.contains { $0.key == key }
-            let dimmed = resolvesChords && gesture.active && !active && !(key.first.map(eligible.contains) ?? false)
             let context = UIGraphicsGetCurrentContext()!
-            context.saveGState(); context.setAlpha(dimmed ? 0.30 : 1)
+            context.saveGState()
             let cap = KeycapStyle.capRect(in: box, pressed: active, compact: chordMode && !numeric)
             KeycapStyle.draw(in: box, pressed: active, compact: chordMode && !numeric, theme: theme, legacy: legacyKeys)
             let base = labels[key] ?? key.uppercased()

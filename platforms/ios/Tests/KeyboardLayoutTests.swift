@@ -1597,7 +1597,7 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         keys.developmentPress("a", end: "s")
         tap(script); tap(emoji)
         XCTAssertEqual(toggles, 0); XCTAssertFalse(keys.emojiMode)
-        XCTAssertFalse(script.accessibilityActivate()); XCTAssertEqual(emoji.alpha, 0.3, accuracy: 0.001)
+        XCTAssertFalse(script.accessibilityActivate()); XCTAssertEqual(emoji.alpha, 1, "controls blocked mid-chord are not dimmed")
         keys.retire(); keys.layoutIfNeeded()
         script.sendActions(for: .touchDown); keys.retire(); script.sendActions(for: .touchUpInside)
         XCTAssertEqual(toggles, 0)
@@ -1658,9 +1658,9 @@ func L(_ zh: String, _ en: String) -> String { RIMES.L(zh, en) }
         XCTAssertGreaterThan(frame(v.candidates.scroll).minX, frame(v.settings).maxX)
         XCTAssertEqual(candidateFrame.minY, frame(controller.view).minY + 5, accuracy: 0.5)
         let schemes = try XCTUnwrap(v.settings.menu?.children.first as? UIMenu)
-        // Chord is a layout now, not a scheme: it is no longer listed, and the scheme underneath is Ziranma.
-        XCTAssertEqual(schemes.children.count, InputScheme.allCases.count - 1)
-        XCTAssertEqual((schemes.children.compactMap { $0 as? UIAction }.first { $0.state == .on })?.title, InputScheme.ziranma.title)
+        // isaac2026 is listed while the chord plugin is on, and is the selected scheme.
+        XCTAssertEqual(schemes.children.count, InputScheme.allCases.count)
+        XCTAssertEqual((schemes.children.compactMap { $0 as? UIAction }.first { $0.state == .on })?.title, "isaac2026")
         let toggle = try XCTUnwrap(v.candidates.superview?.subviews.first { $0.accessibilityIdentifier == "keyboard.buffer" })
         XCTAssertGreaterThan(frame(toggle).minX, frame(v.candidates.scroll).maxX)
         XCTAssertEqual(frame(toggle).maxX, frame(controller.view).maxX - 5)

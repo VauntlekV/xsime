@@ -46,7 +46,7 @@ import RimesCore
             controller.developmentChoose(.chord); controller.developmentSetLayout(chordLayout)
             window.layoutIfNeeded()
             let original = snapshot(controller)
-            controller.developmentChoose(.pinyin)
+            controller.developmentChoose(.pinyin); controller.developmentOrdinaryAppearance(layout: .qwerty)
             controller.developmentSetCustomLayout(CustomKeyboardLayout.templates[2])
             window.layoutIfNeeded()
             XCTAssertTrue(controller.layoutViews.keys.usesCustomLayout)

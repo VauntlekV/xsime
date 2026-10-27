@@ -174,12 +174,13 @@ final class KeyboardViewController: UIInputViewController {
         return preferences.ordinaryLayout == .nineKey && customLayoutSnapshot == nil && scheme == .pinyin
     }
     private var usesNineKey: Bool { usesNineKeyEngine && !directEnglish && !surface.shifted && !surface.numeric && !surface.emojiMode }
-    /// The orthogonal two-hand grid. It is a layout, chosen separately from the scheme, and needs the chord plugin.
-    private var usesChordLayout: Bool { chordPluginOn && preferences.ordinaryLayout == .orthogonal }
+    /// The orthogonal two-hand grid. It is only a layout: any 26-key scheme can tap on it, with or without the chord plugin.
+    private var usesChordLayout: Bool { preferences.ordinaryLayout == .orthogonal }
     /// Reading plugin state hashes packages, so it is sampled at presentation and on plugin changes, never per render.
     private var chordPluginOn = false
-    /// Chord tables exist for full pinyin and Ziranma only; other schemes tap the same grid.
-    private var chordsResolve: Bool { usesChordLayout && importedSchemeSelection == nil && (scheme == .pinyin || scheme == .ziranma) }
+    /// Slide chords exist only in the isaac2026 scheme, which appears when the chord plugin is on. Set by `choose`.
+    private var chordSchemeOn = false
+    private var chordsResolve: Bool { usesChordLayout && chordSchemeOn && importedSchemeSelection == nil }
     private var compactTypingKeys: Bool { surface.chordMode && !surface.numeric && !surface.emojiMode }
     /// Built-in Chinese input shows Chinese marks on the standard 123 and #+= pages and types
     /// them as shown. Chord keeps its own number page; imported schemes own their punctuation.
@@ -263,6 +264,8 @@ final class KeyboardViewController: UIInputViewController {
     private var preparingPresentation = false
     private struct MenuState: Equatable {
         var scheme: InputScheme
+        var chordScheme = false
+        var chordPlugin = false
         var imported: RimeSchemeSelection?
         var importedLayouts: ImportedRimeKeyboardLayouts?
         var nineKeyEngine: Bool
@@ -817,13 +820,22 @@ final class KeyboardViewController: UIInputViewController {
     private func button(_ title: String, action: @escaping () -> Void) -> KeycapButton {
         let button = KeycapButton(); configure(button, title, action: action); return button
     }
+    /// Picking isaac2026 also switches to the orthogonal grid, the only layout it chords on. The layout is
+    /// not forced again afterwards: choosing another layout later keeps the scheme and just stops chording.
+    private func pick(_ requested: InputScheme) {
+        if requested == .chord && officialPlugins?.isEnabled(legacyID: "chord") == true && preferences.ordinaryLayout != .orthogonal {
+            preferences.ordinaryLayout = .orthogonal; customLayoutSnapshot = nil
+        }
+        preferences.select(requested); preferencesStore.save(preferences)
+        choose(requested)
+    }
     private func choose(_ requested: InputScheme) {
         chordPluginOn = officialPlugins?.isEnabled(legacyID: "chord") == true
         var value = requested
+        chordSchemeOn = requested == .chord && chordPluginOn
         if requested == .chord {
-            // Chord used to be a scheme. It is now the orthogonal layout over pinyin or Ziranma.
+            // isaac2026 types through pinyin or Ziranma. With the plugin off it falls back to that scheme.
             value = config.keyboardChord.outputEncoding == .ziranma ? .ziranma : .pinyin
-            preferences.select(value); preferences.ordinaryLayout = .orthogonal; preferencesStore.save(preferences)
         }
         cancelDeletes()
         spellingChoicesOpen = false; symbolPage = false; punctuationOpen = false
@@ -1745,7 +1757,7 @@ final class KeyboardViewController: UIInputViewController {
         refreshDefaultBuffer()
     }
     private func refreshMoreMenu() {
-        let state = MenuState(scheme: scheme, imported: importedSchemeSelection,
+        let state = MenuState(scheme: scheme, chordScheme: chordSchemeOn, chordPlugin: chordPluginOn, imported: importedSchemeSelection,
             importedLayouts: importedKeyboardLayouts, nineKeyEngine: usesNineKeyEngine,
             schemas: importedSchemeLibrary.packages.flatMap { package in
                 package.schemas.flatMap { [package.id, $0.id, $0.name] }
@@ -1768,12 +1780,11 @@ final class KeyboardViewController: UIInputViewController {
                 self.surface.feedback.send(.commit); self.refreshMoreMenu()
             }
         })
-        var schemeActions: [UIMenuElement] = InputScheme.allCases.filter { $0 != .chord }.map { value in
-            UIAction(title: value.title, state: importedSchemeSelection == nil && value == scheme ? .on : .off) { [weak self] _ in
+        var schemeActions: [UIMenuElement] = InputScheme.allCases.filter { $0 != .chord || chordPluginOn }.map { value in
+            UIAction(title: value.title, state: importedSchemeSelection == nil && (value == .chord ? chordSchemeOn : value == scheme && !chordSchemeOn) ? .on : .off) { [weak self] _ in
                 guard let self else { return }
                 self.settle(); self.importedSchemeSelection = nil; self.saveImportedSchemeChoice()
-                self.preferences.select(value); self.preferencesStore.save(self.preferences)
-                self.choose(value); self.render()
+                self.pick(value); self.render()
             }
         }
         for package in importedSchemeLibrary.packages {
@@ -1802,15 +1813,14 @@ final class KeyboardViewController: UIInputViewController {
         }), at: 2)
         // Keep the remembered nine-key preference for built-in Pinyin, but show QWERTY selected
         // while the current schema cannot use nine-key. Orthogonal is a layout of its own.
-        let chordAvailable = chordPluginOn
         let selectedLayout: OrdinaryKeyboardLayout = usesChordLayout ? .orthogonal : usesNineKeyEngine ? .nineKey : .qwerty
-        items.append(UIMenu(title: L("键位布局", "Key layout"), image: UIImage(systemName: "square.grid.3x3"), children: OrdinaryKeyboardLayout.allCases.filter { $0 != .orthogonal || chordAvailable }.map { layout in
+        items.append(UIMenu(title: L("键位布局", "Key layout"), image: UIImage(systemName: "square.grid.3x3"), children: OrdinaryKeyboardLayout.allCases.map { layout in
             let supported = layout == .orthogonal ? true : importedSchemeSelection == nil
                 ? layout != .nineKey || scheme == .pinyin
                 : (layout == .nineKey ? importedKeyboardLayouts?.nineKeySchemaID : importedKeyboardLayouts?.qwertySchemaID) != nil
             return UIAction(title: layout == .qwerty ? "26 键 · QWERTY" : layout == .nineKey ? "9 键 · 全拼" : L("正交 · Orthogonal", "Orthogonal grid"),
                      subtitle: !supported && importedSchemeSelection != nil ? L("方案包未提供此布局的编码", "The package does not include an encoder for this layout")
-                         : layout == .orthogonal && !chordsResolve ? L("当前方案按键输入，不使用并击", "Tap typing: this scheme has no chord table") : nil,
+                         : layout == .orthogonal && !chordsResolve ? chordPluginOn ? L("按键输入；并击需要 isaac2026 方案", "Tap typing; chords need the isaac2026 scheme") : L("按键输入；并击需要开启并击插件", "Tap typing; chords need the chord plugin") : nil,
                      attributes: supported ? [] : .disabled,
                      state: selectedLayout == layout && (customLayoutSnapshot == nil || usesNineKeyEngine || usesChordLayout) ? .on : .off) { [weak self] _ in
                 guard let self else { return }; self.settle(); self.customLayoutSnapshot = nil
@@ -2123,7 +2133,9 @@ final class KeyboardViewController: UIInputViewController {
             if let selection = importedSchemeSelection { preferNativeImportedLayout(selection) }
             saveImportedSchemeChoice()
         }
+        let schemeBefore = preferences.scheme
         preferences.reconcile(scheme: config.scheme, revision: config.schemeSelectionRevision)
+        if preferences.scheme == .chord && schemeBefore != .chord, officialPlugins?.isEnabled(legacyID: "chord") == true { preferences.ordinaryLayout = .orthogonal }
         // A rotation picked in the RIMES app applies once, then the keyboard's own edits stand.
         if let revision = config.statusSkinsRevision, revision != preferences.appliedSkinRevision {
             preferences.statusSkinRotation = config.statusSkins ?? []; preferences.appliedSkinRevision = revision
@@ -2582,11 +2594,9 @@ final class KeyboardViewController: UIInputViewController {
         importedSchemeSelection = nil; importedSchemeEnglish = false; importedSchemeLibrary = .init(); customLayoutSnapshot = nil
         refreshPluginMenu(); choose(.pinyin); render()
     }
-    /// Mirrors the old scheme menu: picking a non-chord scheme here also leaves the orthogonal layout.
+    /// Mirrors the scheme menu: only isaac2026 changes the layout (to orthogonal); other schemes keep it.
     func developmentChoose(_ value: InputScheme) {
-        importedSchemeSelection = nil; preferences.select(value)
-        if value != .chord && preferences.ordinaryLayout == .orthogonal { preferences.ordinaryLayout = .qwerty }
-        choose(value); render()
+        importedSchemeSelection = nil; pick(value); render()
     }
     func developmentChooseImported(_ selection: RimeSchemeSelection, store: RimeSchemeStore? = nil) { if let store { importedSchemeStore = store }; importedSchemeSelection = selection; preferNativeImportedLayout(selection); choose(preferences.scheme); render() }
     var developmentImportedSelection: RimeSchemeSelection? { importedSchemeSelection }
@@ -2705,7 +2715,7 @@ final class KeyboardViewController: UIInputViewController {
     #if DEBUG
     /// Hosted rendering test only; never called by an installed keyboard session.
     func developmentLayout(bufferText: String?, expanded: Bool, chord: Bool) -> (UIView, UIView, KeySurface) {
-        loadViewIfNeeded(); preferences = .init(); choose(chord ? .chord : .pinyin)
+        loadViewIfNeeded(); preferences = .init(); pick(chord ? .chord : .pinyin)
         self.expanded = expanded; bufferEnabled = bufferText != nil
         if let bufferText {
             selectedPlugin = .translate; buffer.edit(bufferText); let id = buffer.begin(); buffer.finish("Hello, this is the translation preview.", id: id); refreshPluginMenu()
