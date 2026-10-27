@@ -94,6 +94,7 @@ jobs:
         run: python3 -m unittest discover -s platforms/linux/ime/tests -p 'test_*.py' -v
 
       - name: Build
+        id: native_build
         run: platforms/linux/ime/scripts/build.sh
 
       - name: Unit tests
@@ -106,6 +107,7 @@ jobs:
           fi
 
       - name: Headless typing E2E
+        if: ${{ !cancelled() && steps.native_build.conclusion == 'success' }}
         run: platforms/linux/ime/tests/e2e/e2e.sh --build-dir platforms/linux/ime/build
 
       - name: Real Wayland capture portal and PipeWire
