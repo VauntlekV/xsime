@@ -523,7 +523,10 @@ bool RimesState::HandleCandidateKey(KeyEvent& event) {
     if (modifiers || navigation_.empty() || !ic_->hasFocus() || ProtectedInput(ic_->capabilityFlags())) return false;
     const bool expanded = navigation_.expanded();
     const bool arrow = key == FcitxKey_Left || key == FcitxKey_Right || key == FcitxKey_Up || key == FcitxKey_Down;
-    const bool paging = expanded && (key == FcitxKey_Page_Up || key == FcitxKey_Page_Down || key == '-' || key == '=');
+    // Page keys enter the matrix for imported schemas too. Their ordinary
+    // '-' and '=' bindings remain owned by the schema until it is expanded.
+    const bool paging = key == FcitxKey_Page_Up || key == FcitxKey_Page_Down ||
+                        (expanded && (key == '-' || key == '='));
     const bool number = expanded && key >= '1' && key <= '9';
     const bool collapse = expanded && key == FcitxKey_Escape;
     if (!arrow && !paging && !number && !collapse && key != FcitxKey_space) return false;
