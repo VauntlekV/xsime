@@ -762,7 +762,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
     private var encodingRadios: [InputEncoding: RimeFixedAccentChoiceButton] = [:]
     private var externalSchemaRadios: [String: RimeFixedAccentChoiceButton] = [:]
     private var externalSchemaChoiceIDs: [String] = []
-    private var chordSchemaStatusRow: NSView?
+    private var chordSchemaRadio: RimeFixedAccentChoiceButton?
     private let appearancePopUp = RimeFixedAccentPopUpButton()
     private let alignToInputBoxCheck = RimeFixedAccentSwitch(frame: .zero)
     private let alignToInputBoxStatusLabel = NSTextField(wrappingLabelWithString: "")
@@ -2746,14 +2746,12 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
                     caption("从方案管理切换包或恢复内置方案；各方案包的学习词库独立保存。"), importButton,
                     inputHabitsView(schema: MacRimeSchemeLibrary.shared.runtimeSelection?.schemaID ?? "")])
             }
-            let chordStatus = chordSchemaStatusView()
             let recovery = caption(ChordKeymapActivationCoordinator.shared.recoveryMessage ?? "")
             recovery.textColor = .systemRed
             recovery.isHidden = ChordKeymapActivationCoordinator.shared.recoveryMessage == nil
             return contentColumn([
                 dictionaryWarning,
                 importButton,
-                chordStatus,
                 recovery,
                 inputEncodingSelectionView(),
                 inputHabitsView(schema: InputConfigurationStore.shared.selectedSchemaID),
@@ -3246,6 +3244,23 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
                 symbolName: symbol
             )
         }
+        // With the optional chord extension on, its scheme is one more card, styled
+        // like the others (the Windows settings do the same).
+        chordSchemaRadio = nil
+        if ChordExtensionStore.shared.isEnabled {
+            let button = RimeFixedAccentChoiceButton.radio(
+                title: ChordKeymapStore.shared.activeProfile.name, target: self,
+                action: #selector(chordInputSchemaSelected(_:))
+            )
+            button.font = .systemFont(ofSize: 13, weight: .medium)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.state = ChordExtensionStore.isChordSchema(InputConfigurationStore.shared.selectedSchemaID) ? .on : .off
+            chordSchemaRadio = button
+            cards.append(SettingsChoiceCardView(
+                choice: button, title: ChordKeymapStore.shared.activeProfile.name,
+                detail: "由并击扩展提供 · 同拍组合与左右分开击键", symbolName: "hands.sparkles"
+            ))
+        }
         externalSchemaRadios.removeAll()
         let external = InputSchemaCatalog.options.filter {
             InputSchemaCatalog.isExternalOrdinaryID($0.id)
@@ -3267,27 +3282,6 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             ))
         }
         return choiceGrid(cards)
-    }
-
-    private func chordSchemaStatusView() -> NSView {
-        let implementation = ChordExtensionStore.shared.implementationName
-        let badge = NSTextField(labelWithString: "并击")
-        badge.font = .systemFont(ofSize: 10, weight: .semibold)
-        badge.textColor = themeStatusColor
-        badge.setContentHuggingPriority(.required, for: .horizontal)
-        let row = settingsRow(
-            title: "当前使用并击扩展",
-            detail: "正在使用\(implementation)；选择下方任一方案即可切回普通输入。",
-            symbolName: "hands.sparkles",
-            control: badge
-        )
-        row.identifier = NSUserInterfaceItemIdentifier(
-            "settings.input-scheme.chord-status"
-        )
-        row.isHidden = InputConfigurationStore.shared.selectedSchemaID
-            != ChordExtensionStore.schemaID
-        chordSchemaStatusRow = row
-        return row
     }
 
     private func choiceGrid(_ cards: [NSView]) -> NSView {
@@ -5060,8 +5054,7 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
 
     private func refreshInputConfigurationSelection() {
         let selectedSchemaID = InputConfigurationStore.shared.selectedSchemaID
-        chordSchemaStatusRow?.isHidden = selectedSchemaID
-            != ChordExtensionStore.schemaID
+        chordSchemaRadio?.state = ChordExtensionStore.isChordSchema(selectedSchemaID) ? .on : .off
         for encoding in InputEncoding.allCases {
             let ordinarySchemaID = InputConfigurationResolver.profiles.first {
                 $0.configuration.encoding == encoding
@@ -6017,6 +6010,15 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         _ = InputConfigurationStore.shared.select(
             encoding: InputEncoding.allCases[sender.tag]
         )
+        RIMESController.applyStoredInputConfiguration()
+        reload()
+    }
+
+    @objc private func chordInputSchemaSelected(_ sender: RimeFixedAccentChoiceButton) {
+        guard InputConfigurationStore.shared.select(schemaID: ChordExtensionStore.schemaID) else {
+            sender.state = .off
+            return
+        }
         RIMESController.applyStoredInputConfiguration()
         reload()
     }
