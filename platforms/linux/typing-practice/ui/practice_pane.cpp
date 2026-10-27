@@ -535,7 +535,9 @@ struct PracticePane::Impl {
                 auto *scroll = gtk_scrolled_window_new(nullptr, nullptr);
                 gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER,
                                                GTK_POLICY_AUTOMATIC);
-                gtk_widget_set_size_request(scroll, -1, height - 19);
+                // The enclosing panel owns the height. Let GTK allocate the
+                // remaining space after measuring its caption with the actual
+                // fallback font; a fixed child minimum can grow the whole panel.
                 gtk_container_add(GTK_CONTAINER(scroll), text);
                 Add(box, scroll, true);
                 Put(box, 26, top, 646, height, key);

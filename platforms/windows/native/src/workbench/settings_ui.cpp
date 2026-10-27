@@ -157,6 +157,12 @@ void SettingsUiHost::SyncDraftFromConfig(const Settings& config) {
 
 void SettingsUiHost::OpenPage(HWND owner, ui::SettingsPage page, int subpage, bool visible) {
   Open(owner, visible);
+  // Practice history moved out of Statistics. Resolve old callers before
+  // Relayout clamps subpages to the new two-tab statistics navigation.
+  if (page == ui::SettingsPage::kStatistics && subpage == 2) {
+    page = ui::SettingsPage::kTyping;
+    subpage = 1;
+  }
   draft_.page = page;
   draft_.subpage = subpage;
   draft_.focus = static_cast<int>(page);

@@ -133,7 +133,9 @@ int main(int argc, char **argv) {
                         if (std::string(phase) != "history")
                             Check(frame.at("target").at("height") == 342 &&
                                       frame.at("editor").at("height") == 342,
-                                  "two-track native editor bounds differ");
+                                  "two-track native editor bounds differ: " + name +
+                                      " target=" + frame.at("target").dump() +
+                                      " editor=" + frame.at("editor").dump());
                     }
                     gtk_widget_destroy(window);
                 }
