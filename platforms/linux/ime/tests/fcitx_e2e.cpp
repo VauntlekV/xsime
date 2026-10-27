@@ -114,7 +114,10 @@ void RunTypingSuite(fcitx::Instance& instance,
     }
     frontend->call<fcitx::ITestFrontend::keyEvent>(uuid, fcitx::Key("Escape"), false);
     frontend->call<fcitx::ITestFrontend::keyEvent>(uuid, fcitx::Key("Escape"), true);
-    std::cout << "ok: testfrontend paging\n";
+    // First Escape collapses the paging matrix; a second cancels composition.
+    frontend->call<fcitx::ITestFrontend::keyEvent>(uuid, fcitx::Key("Escape"), false);
+    frontend->call<fcitx::ITestFrontend::keyEvent>(uuid, fcitx::Key("Escape"), true);
+    std::cout << "ok: testfrontend paging matrix and cancellation\n";
 
     Type(frontend, uuid, "nihao");
     frontend->call<fcitx::ITestFrontend::keyEvent>(uuid, fcitx::Key("Escape"), false);
@@ -127,9 +130,10 @@ void RunTypingSuite(fcitx::Instance& instance,
     };
     Type(frontend, uuid, "shi");
     const auto original = ic->inputPanel().candidateList()->candidate(0).text().toStringForCommit();
-    key("Page_Down");
+    key("Page_Down"); // Open three rows while keeping the first row active.
+    key("Page_Down"); // Move to the second row.
     const auto later = ic->inputPanel().candidateList()->candidate(0).text().toStringForCommit();
-    key("Page_Up");
+    key("Escape"); // Restore the opening page before reopening.
     key("Down");
     if (std::getenv("RIMES_REQUIRE_MATRIX_WINDOW") && !ic->inputPanel().customInputPanelCallback())
         Die("native matrix popup did not replace the compact Fcitx panel");

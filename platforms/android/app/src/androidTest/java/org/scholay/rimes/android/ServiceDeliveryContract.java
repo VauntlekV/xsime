@@ -729,7 +729,7 @@ final class ServiceDeliveryContract {
             bind(connection);
             check(service.getCurrentInputConnection()==connection,"public framework bind installs the exact fake connection");
             set(service,"target",connection); set(service,"selection",7); set(service,"selectionStart",7);
-            set(service,"preferences",preferences); set(service,"settings",settings); set(service,"pluginExecutor",executor);
+            set(service,"preferences",preferences); set(service,"settings",settings); set(service,"assistants",new AssistantSettings(preferences)); set(service,"pluginExecutor",executor);
             set(service,"schemeStore",new RimeSchemeStore(new java.io.File(pluginContext.getFilesDir(),"scheme-library")));
             set(service,"cometSettings",new OpenAiSettings(preferences));
             preferences.registerOnSharedPreferenceChangeListener((SharedPreferences.OnSharedPreferenceChangeListener)get(service,"preferenceListener"));

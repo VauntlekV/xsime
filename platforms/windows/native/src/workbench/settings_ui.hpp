@@ -129,6 +129,7 @@ class SettingsUiHost {
   HWND clipboard_recording_ = nullptr;
   bool clipboard_recording_enabled_ = true;
   HWND home_action_ = nullptr;
+  std::array<HWND, 5> home_links_{};
   std::vector<PluginView> plugin_rows_;
   HBRUSH edit_brush_ = nullptr;
   unsigned dpi_ = 96;

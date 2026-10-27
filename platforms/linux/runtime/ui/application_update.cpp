@@ -65,8 +65,9 @@ bool SupportedSystem() {
     while (std::getline(stream, line)) {
         if (line == "ID=ubuntu" || line == "ID=\"ubuntu\"") id = "ubuntu";
         if (line == "VERSION_ID=\"24.04\"" || line == "VERSION_ID=24.04") version = "24.04";
+        if (line == "VERSION_ID=\"26.04\"" || line == "VERSION_ID=26.04") version = "26.04";
     }
-    return id == "ubuntu" && version == "24.04";
+    return id == "ubuntu" && (version == "24.04" || version == "26.04");
 }
 std::string Run(std::vector<std::string> arguments) {
     std::vector<char*> argv; for (auto& arg : arguments) argv.push_back(arg.data()); argv.push_back(nullptr);
@@ -97,7 +98,7 @@ void Start(const std::shared_ptr<State>& state, unsigned action) {
     }
     std::thread([state, action] {
         try {
-            if (!SupportedSystem()) throw std::runtime_error("自动更新目前支持 Ubuntu 24.04 amd64。其他发行版请使用相应的软件包或源码安装。 / This package targets Ubuntu 24.04 amd64.");
+            if (!SupportedSystem()) throw std::runtime_error("自动更新目前支持 Ubuntu 24.04 / 26.04 amd64。其他发行版请使用相应的软件包或源码安装。 / This package targets Ubuntu 24.04 / 26.04 amd64.");
             PrivateDirectory directory(UserRoot() / "application-updates");
             auto lock = directory.Lock();
             const auto package = directory.Path() / "update.deb";

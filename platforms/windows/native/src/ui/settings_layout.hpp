@@ -63,10 +63,10 @@ inline const wchar_t* const kSettingsSubpageLabels[][6] = {
     {L"Capsule"},
     {L"工作区", L"说明"},
     {L"文章跟打", L"成绩"},
-    {L"每日", L"历史", L"测速成绩"},
-    {rimes::branding::Name(), L"官网", L"邮箱", L"开源项目", L"README", L"License"},
+    {L"每日", L"热力图"},
+    {rimes::branding::Name()},
 };
-inline int SettingsTabCount(SettingsPage page) { return page == SettingsPage::kCapsule ? 1 : page == SettingsPage::kHome ? 6 : page == SettingsPage::kPlugins ? 5 : page == SettingsPage::kStatistics || page == SettingsPage::kBuffer ? 3 : 2; }
+inline int SettingsTabCount(SettingsPage page) { return page == SettingsPage::kCapsule || page == SettingsPage::kHome ? 1 : page == SettingsPage::kPlugins ? 5 : page == SettingsPage::kBuffer ? 3 : 2; }
 
 struct SettingsHomeLink {
   const wchar_t* title;
@@ -175,6 +175,7 @@ struct SettingsLayout {
   DipRect theme_popover{};
   std::array<DipRect, 6> subpage_tabs{};
   DipRect home_hero{}, home_action{};
+  std::array<DipRect, 5> home_links{};
   DipRect font_edit{};
   DipRect candidate_count_edit{};
   DipRect check_vertical{};
@@ -256,7 +257,13 @@ struct SettingsLayout {
   const float gap = static_cast<float>(m.choice_gap_dip);
   if (draft.page == SettingsPage::kHome) {
     layout.home_hero = {layout.body.left, layout.body.top, layout.body.right, layout.body.top + 168};
-    if (draft.subpage == 0) layout.home_action = {layout.body.left, layout.body.top + 220, layout.body.left + 160, layout.body.top + 254};
+    if (draft.subpage == 0) {
+      layout.home_action = {layout.body.left, layout.body.top + 212, layout.body.left + 160, layout.body.top + 246};
+      for (std::size_t i = 0; i < layout.home_links.size(); ++i) {
+        const float y = layout.body.top + 258 + static_cast<float>(i) * 38;
+        layout.home_links[i] = {layout.body.left, y, layout.body.right, y + 30};
+      }
+    }
     if (HomeLink(draft.subpage))
       layout.home_action = {layout.body.left, layout.body.top + 106, layout.body.left + 160, layout.body.top + 140};
   }

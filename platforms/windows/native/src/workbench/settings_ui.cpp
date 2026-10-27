@@ -382,6 +382,8 @@ bool SettingsUiHost::HandleDialogMessage(MSG* message) {
         if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
       for (const auto control : {plugin_filter_, plugin_previous_, plugin_next_, clipboard_recording_, peripheral_open_, home_action_})
         if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
+      for (const auto control : home_links_)
+        if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
       for (std::size_t i = 0; i < plugin_labels_.size(); ++i)
         for (const auto control : {plugin_install_[i], plugin_enable_[i], plugin_remove_[i]})
           if (control && IsWindowVisible(control) && IsWindowEnabled(control)) controls.push_back(control);
@@ -473,6 +475,8 @@ void SettingsUiHost::CreateOrUpdateChildren() {
   EnableWindow(input_habits_, static_cast<bool>(callbacks_.input_options));
   make_button(peripheral_open_, L"打开独立窗口…", 416);
   make_button(home_action_, L"", 417);
+  for (std::size_t i = 0; i < home_links_.size(); ++i)
+    make_button(home_links_[i], ui::kSettingsHomeLinks[i].title, 6200 + static_cast<int>(i));
   EnableWindow(schemes_button_, static_cast<bool>(callbacks_.open_schemes));
   if (!imported_label_) imported_label_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | SS_LEFT,
       0, 0, 1, 1, hwnd_, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -807,6 +811,10 @@ void SettingsUiHost::Relayout() {
   if (draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0) SetWindowTextW(home_action_, L"检查更新…");
   if (home_link) SetWindowTextW(home_action_, home_link->action);
   SendMessageW(home_action_, WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  for (std::size_t i = 0; i < home_links_.size(); ++i) {
+    Place(home_links_[i], layout_.home_links[i], dpi_, draft_.page == ui::SettingsPage::kHome && draft_.subpage == 0);
+    SendMessageW(home_links_[i], WM_SETFONT, reinterpret_cast<WPARAM>(fonts_.body), TRUE);
+  }
   if (parity_) parity_->Layout(draft_.page, draft_.subpage, layout_.body, dpi_, fonts_.body);
   if (extensions_) extensions_->Layout(draft_.page, draft_.subpage, layout_.body, dpi_, draft_.preview_theme);
   // WS_CLIPCHILDREN excludes native labels/controls from the shell repaint.
@@ -1160,6 +1168,13 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
           self->clipboard_recording_enabled_ = enabled;
         else if (!error.empty()) self->SaveError(Wide(error));
         InvalidateRect(self->clipboard_recording_, nullptr, FALSE);
+        return 0;
+      }
+      if (LOWORD(wparam) >= 6200 && LOWORD(wparam) < 6205 && HIWORD(wparam) == BN_CLICKED && self->draft_.page == ui::SettingsPage::kHome) {
+        const auto& link = ui::kSettingsHomeLinks[LOWORD(wparam) - 6200];
+        const bool opened = self->callbacks_.open_brand_link ? self->callbacks_.open_brand_link(link.destination)
+            : reinterpret_cast<INT_PTR>(ShellExecuteW(hwnd, L"open", link.destination, nullptr, nullptr, SW_SHOWNORMAL)) > 32;
+        if (!opened) MessageBoxW(hwnd, link.destination, L"请使用浏览器或邮件应用访问", MB_OK | MB_ICONINFORMATION);
         return 0;
       }
       if (LOWORD(wparam) == 417 && HIWORD(wparam) == BN_CLICKED) {
@@ -1578,6 +1593,7 @@ LRESULT CALLBACK SettingsUiHost::Procedure(HWND hwnd, UINT message,
       self->schemes_button_ = self->imported_label_ = self->input_habits_ = nullptr;
       self->lexicon_button_ = nullptr;
       self->peripheral_open_ = self->home_action_ = nullptr;
+      self->home_links_ = {};
       self->clipboard_recording_ = nullptr;
       self->plugin_filter_ = self->plugin_previous_ = self->plugin_next_ = self->plugin_page_ = nullptr;
       self->edit_font_ = self->edit_candidate_count_ = self->edit_hotkey_ = self->edit_base_ = nullptr;

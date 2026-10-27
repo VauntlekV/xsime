@@ -448,7 +448,9 @@ void RimesState::selectCandidate(int index) {
 
 void RimesState::page(bool next) {
     FlushChord(); chord_.BreakPairing();
-    if (navigation_.expanded()) { MoveMatrixRow(next ? 1 : -1); return; }
+    // PageDown opens the multi-row selector, matching the desktop candidate
+    // contract. A short engine page stays visible beside its neighbours.
+    if (navigation_.expanded() || (next && !navigation_.empty())) { MoveMatrixRow(next ? 1 : -1); return; }
     const auto session = EnsureSession();
     if (session == 0) {
         return;

@@ -39,7 +39,7 @@ struct Settings {
   Json saved = config.Load();
   Json routes = [] { auto value = Visuals().at("routes"); value.push_back(rimes::chord::Contract().at("route"));
     value.push_back({{"id", "extension.statistics"}, {"title", "统计"}, {"icon", "chart.bar.xaxis"}, {"group", "extensions"},
-                    {"subpages", Json::array({{"daily", "每日"}, {"history", "历史"}, {"test-results", "测速成绩"}})}});
+                    {"subpages", Json::array({{"daily", "每日"}, {"history", "热力图"}})}});
     value.push_back({{"id", "extension.typing-speed"}, {"title", "打字测速"}, {"icon", "speedometer"}, {"group", "extensions"},
                     {"subpages", Json::array({{"overview", "文章跟打"}, {"history", "成绩"}})}}); return value; }();
   std::unique_ptr<ChordPane> chord_pane;
@@ -240,7 +240,7 @@ struct Settings {
         return r;
     throw std::runtime_error("Unknown route");
   }
-  void Select(std::string next, const std::string &page = "") {
+  void Select(std::string next, std::string page = "") {
     if (chord_pane && !chord_pane->CanLeave()) return;
     if (practice_pane && !practice_pane->CanLeave()) return;
     chord_pane.reset();
@@ -252,6 +252,7 @@ struct Settings {
 #endif
     ++page_revision;
     shortcut_buttons.clear(); shortcut_status = nullptr;
+    if (next == "extension.statistics" && page == "test-results") { next = "extension.typing-speed"; page = "history"; }
     route = std::move(next);
     const auto &r = Route();
     subpage = page.empty() ? r.at("subpages")[0][0].get<std::string>() : page;
@@ -336,9 +337,21 @@ struct Settings {
       Add(body, Label("导入方案和移除方案均保留学习记录。", "caption"));
       if (subpage == "encoding") InputHabits(body);
     } else if (route == "core.rimes") {
-      Add(body, Label("XSIME", "heading"));
-      Add(body, Label(std::string("版本 ") + RIMES_PRODUCT_VERSION, "caption"));
-      Add(body, Label("学术海 · 原生中文输入与文本工作台", "section"));
+      auto* hero = Class(Row(20), "settings-hero");
+      auto* logo = gtk_image_new_from_icon_name("rimes", GTK_ICON_SIZE_DIALOG);
+      gtk_image_set_pixel_size(GTK_IMAGE(logo), 88); Add(hero, logo);
+      auto* identity = Column(6);
+      Add(identity, Label("XSIME", "heading"));
+      Add(identity, Label("世界对智者太过挑剔\n好奇的人需要朋友", "section"));
+      Add(identity, Label("The world is too hard on the wise.\nCurious minds need friends.", "caption"));
+      Add(hero, identity, true); Add(body, hero);
+      Add(body, Label(std::string("版本 ") + RIMES_PRODUCT_VERSION + " · 学术海 · librime", "caption"));
+      for (const auto& link : std::vector<std::pair<const char*, const char*>>{
+            {"官网 · xsime.com", "https://xsime.com"}, {"邮箱 · pm@scholay.com", "mailto:pm@scholay.com"},
+            {"开源项目 · scholay / xsime", "https://github.com/scholay/xsime"},
+            {"README", "https://github.com/scholay/xsime/blob/main/README.md"},
+            {"Apache License 2.0", "https://github.com/scholay/xsime/blob/main/LICENSE"}})
+        Add(body, gtk_link_button_new_with_label(link.second, link.first));
       Add(body, Button("检查更新…", [this] { ShowApplicationUpdate(GTK_WINDOW(window)); }));
     } else if (route == "core.maintenance" && subpage == "logs-data") {
       Add(body, Label("用户词库、学习记录和工作台数据", "section"));

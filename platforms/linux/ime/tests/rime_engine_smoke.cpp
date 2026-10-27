@@ -212,6 +212,26 @@ int main(int argc, char** argv) {
     }
     std::cout << "ok: paging\n";
 
+    // Reported "du" middle page: inspect the actual engine, retain every
+    // candidate, and prove repeated paging restores the authoritative page.
+    if (!engine.ClearComposition(session, &snapshot, &error)) Die(error);
+    TypeAscii(engine, session, "du", &snapshot);
+    const auto du_first = snapshot.candidates;
+    const auto du_page = snapshot.page_no;
+    for (int page = 0; page < 3; ++page) {
+        std::cout << "du page " << snapshot.page_no << ": " << snapshot.candidates.size()
+                  << "/" << snapshot.page_size << " last=" << snapshot.is_last_page << '\n';
+        if (snapshot.candidates.empty() || snapshot.candidates.size() > static_cast<std::size_t>(snapshot.page_size))
+            Die("du page has inconsistent candidate metadata");
+        if (page != 2 && !engine.ProcessKey(session, rimes::linuxime::kPageDown, 0, &snapshot, &error)) Die(error);
+    }
+    for (int page = 0; page < 2; ++page)
+        if (!engine.ProcessKey(session, rimes::linuxime::kPageUp, 0, &snapshot, &error)) Die(error);
+    if (snapshot.page_no != du_page || snapshot.candidates.size() != du_first.size()) Die("du paging lost its opening page");
+    for (std::size_t i = 0; i < du_first.size(); ++i)
+        if (snapshot.candidates[i].text != du_first[i].text) Die("du paging changed candidate order");
+    if (!engine.ClearComposition(session, &snapshot, &error)) Die(error);
+
     // Escape cancels.
     TypeAscii(engine, session, "nihao", &snapshot);
     if (!engine.ProcessKey(session, rimes::linuxime::kEscape, 0, &snapshot, &error) &&

@@ -603,6 +603,9 @@ private:
             }
         }
 
+        std::string select_keys;
+        if (ok && context.menu.select_keys != nullptr)
+            ok = CopyBoundedUtf8(context.menu.select_keys, kMaxCandidateCount, &select_keys, error);
         for (int index = 0; ok && index < count; ++index) {
             EngineCandidate& candidate = output->candidates[static_cast<std::size_t>(index)];
             ok = CopyBoundedUtf8(context.menu.candidates[index].text, kMaxTextBytes,
@@ -617,9 +620,8 @@ private:
                 context.select_labels[index] != nullptr) {
                 ok = CopyBoundedUtf8(context.select_labels[index], 16, &candidate.label,
                                      error);
-            } else if (context.menu.select_keys != nullptr &&
-                       context.menu.select_keys[index] != '\0') {
-                candidate.label.assign(1, context.menu.select_keys[index]);
+            } else if (static_cast<std::size_t>(index) < select_keys.size()) {
+                candidate.label.assign(1, select_keys[static_cast<std::size_t>(index)]);
             } else {
                 candidate.label = DefaultLabel(index);
             }

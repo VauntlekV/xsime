@@ -87,6 +87,24 @@ jobs:
             platforms/linux/ime/tests/deb_lifecycle.sh "${packages[0]}"
           fi
 
+      - name: Install the same private-runtime deb on Ubuntu 26.04
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/amd64 \
+            -e DEBIAN_FRONTEND=noninteractive -e TZ=Etc/UTC \
+            -v "$RUNNER_TEMP/rimes-deb:/packages:ro" \
+            -v "$RUNNER_TEMP/wanxiang-original.zip:/fixtures/wanxiang.zip:ro" \
+            ubuntu:26.04 bash -ceu '
+              apt-get update
+              apt-get install -y /packages/*.deb
+              if ldd /usr/bin/rimes-schemes | grep -q "not found"; then exit 1; fi
+              /usr/bin/rimes-schemes --import /tmp/portable-import /fixtures/wanxiang.zip wanxiang
+              /usr/bin/rimes-schemes --verify /tmp/portable-import nihao 你好
+              printf "preserve\n" > /tmp/portable-import/keep-user-data
+              apt-get remove -y fcitx5-rimes
+              test -f /tmp/portable-import/keep-user-data
+            '
+
       - name: Name the immutable package artifact
         id: artifact
         run: echo "name=rimes-linux-deb-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
