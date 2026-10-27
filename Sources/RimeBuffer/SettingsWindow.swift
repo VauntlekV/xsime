@@ -2452,8 +2452,10 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
         ])
 
         let bodyHost: NSView
-        if body is NSScrollView {
-            // Page-owned plugin controllers may preserve their own scroll positions;
+        if body is NSScrollView || body is SettingsSelfScrollingPage {
+            // Page-owned plugin controllers may preserve their own scroll positions (or
+            // scroll only part of the page); a view that is not itself a scroll view
+            // marks that with SettingsSelfScrollingPage.
             // do not nest them in another scroll view with zero intrinsic height.
             bodyHost = body
         } else {
@@ -6577,3 +6579,8 @@ final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWindowDel
             .runModalAlertIfRIMESActive(alert) != nil
     }
 }
+
+/// A plugin page that arranges its own scrolling and fills the space it is given
+/// (for example a fixed sidebar beside a scrolling main area). The settings shell
+/// hosts it directly instead of wrapping it in another scroll view.
+protocol SettingsSelfScrollingPage: NSView {}

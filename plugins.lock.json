@@ -62,7 +62,7 @@
     "native/macos/StreamInputPlugin.swift": "a6f1035e43b92d8db21599525fa6d4e2d022432f4d598f6dc5060f8198c73872",
     "native/macos/Translation/AppleTranslationAvailabilityGate.swift": "6d97c9a17082fb885e8fa862d606b0aaee02cfc5d7e94fed4e1f785187820de8",
     "native/macos/Translation/AppleTranslationSessionBridge.swift": "a8bec450633056e880f7756807c7f5b8083dd157bbf53746fa0f2ed83a994eb6",
-    "native/macos/TypingSpeedSettingsViewController.swift": "14a5625e3f5b189631e762cdfa49adf7b3daf25db8a98393e05880573037480c",
+    "native/macos/TypingSpeedSettingsViewController.swift": "6108b60a6ed7571c1b036d4328bc6f88412c1e3613b90e2d78a935b525e1e386",
     "native/macos/TypingSpeedStore.swift": "df84c25cfbb82c9e0fcd58ebcafa78939dc69913e073ab3de70d668a1679359b",
     "native/macos/TypingTestArticles.swift": "ce9a9418cae25d6c77952595ba7467ee0dab8964e3c77f3fd3ded355b7ffcf9c",
     "native/macos/TypingTestHistoryStore.swift": "b1381a010bee67b368dfcf08dd43a3b088ea722f3b9969291ffb87e3ba1a37d5",
@@ -120,6 +120,6 @@
     "source-map.json": "ad2085500c2268ad2b80904989a02c6f9e9f70a2918aac2d568b003108635898"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "9679c53ffd9c33183de49a8901b306efb11dd7fc",
+  "revision": "10ad14b11ffe9b2e7203188deff8c2823b2f7fb1",
   "schemaVersion": 1
 }
