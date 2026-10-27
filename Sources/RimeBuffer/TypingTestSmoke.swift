@@ -87,8 +87,8 @@ func runTypingTestSmokeTest() -> Bool {
     let unicode = TypingTestSession(article: article("你👨‍👩‍👧‍👦e\u{301}\n好"), context: context)
     unicode.start(at: 0)
     _ = unicode.reconcileCommittedText("你👨‍👩‍👧‍👦é\r\n好", at: 1)
-    guard unicode.snapshot(at: 2).metrics.correctCharacterCount == 5,
-          unicode.snapshot(at: 2).canComplete else { return fail("graphemes, canonical equivalence, line endings") }
+    guard unicode.snapshot(at: 2).metrics.correctCharacterCount == 4,
+          unicode.snapshot(at: 2).canComplete else { return fail("graphemes, canonical equivalence, line breaks are layout only") }
 
     let incomplete = TypingTestSession(article: article("abcde"), context: context)
     incomplete.start(at: 0)

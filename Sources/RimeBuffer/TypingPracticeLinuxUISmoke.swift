@@ -25,7 +25,7 @@ func runTypingPracticeLinuxUISmoke(_ output: URL) -> Bool {
                     for number in 0..<4 {
                         let sample = TypingTestSession(article: article, context: context)
                         sample.start(at: 10); sample.recordKey(at: 11)
-                        _ = sample.reconcileCommittedText(article.text, at: 130 - Double(number) * 10)
+                        _ = sample.reconcileCommittedText(article.scoredText, at: 130 - Double(number) * 10)
                         if number == 2 { sample.markPractice(reason: .focusLost) }
                         guard let result = sample.finish(at: 130 - Double(number) * 10, completedAt: Date(timeIntervalSince1970: 1_780_000_000 + Double(number) * 500)), store.add(result) else { return false }
                     }
@@ -48,7 +48,7 @@ func runTypingPracticeLinuxUISmoke(_ output: URL) -> Bool {
                             controller.practiceKey(event, isComposing: false)
                         }
                         clock = phase == "live" ? 20 : 130
-                        controller.smokeEditor.insertText(String(article.text.prefix(length)), replacementRange: NSRange(location: NSNotFound, length: 0))
+                        controller.smokeEditor.insertText(String(article.scoredText.prefix(length)), replacementRange: NSRange(location: NSNotFound, length: 0))
                         if phase == "complete" && controller.smokeIsArmed { return false }
                     }
                     let height: CGFloat = 760

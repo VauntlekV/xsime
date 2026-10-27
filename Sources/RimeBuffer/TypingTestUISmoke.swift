@@ -138,6 +138,7 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
                 guard store.add(result) else { return fail("seed isolated result") }
             }
         }
+        if let problem = typingTestTrackSmoke() { return fail(problem) }
         if let outputDirectory { try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true) }
         // Content areas the settings window can give a plugin page: the default
         // 980x680 window, its 860x600 minimum, and a large display.
@@ -167,24 +168,33 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
                 guard let scroll = controller.smokePageScroll, let document = scroll.documentView else {
                     return fail("\(page)/\(sizeName): page must be one scroll view")
                 }
-                func dump() -> String { "doc=\(document.frame) clip=\(scroll.contentView.bounds) editorScroll=\(String(describing: controller.smokeEditor.enclosingScrollView?.frame))" }
+                if ProcessInfo.processInfo.environment["TT_DEBUG"] != nil { print("DBG \(page)/\(sizeName): window=\(window.frame.size) backdrop=\(backdrop.frame.size) pane=\(pane.frame.size) scroll=\(scroll.frame.size) doc=\(document.frame.size) clip=\(scroll.contentView.frame.size)") }
+                func dump() -> String { "doc=\(document.frame) clip=\(scroll.contentView.bounds)" }
                 guard document.frame.width >= scroll.contentView.bounds.width - 0.5 else { return fail("\(page)/\(sizeName): document narrower than viewport \(dump())") }
-                // Short windows may scroll once; tall ones must fill with no outer scroll.
-                if sizeName == "large" {
-                    guard document.frame.height <= scroll.contentView.bounds.height + 0.5 else {
-                        return fail("\(page)/\(sizeName): content must fill a tall window without scrolling \(dump())")
-                    }
-                }
                 guard controller.smokeMaterialRowCount == TypingTestArticles.all.count else { return fail("material column must list the built-in articles as cards") }
                 if page == "overview" {
-                    guard controller.smokeTargetString == article.text,
-                          let editorScroll = controller.smokeEditor.enclosingScrollView,
-                          let targetScroll = controller.smokeTargetScroll else { return fail("\(page)/\(sizeName): panels missing") }
-                    let editorHeight = editorScroll.frame.height, targetHeight = targetScroll.frame.height
-                    guard controller.smokeEditor.bounds.width > 300, editorHeight >= 60, targetHeight >= 80 else {
-                        return fail("\(page)/\(sizeName): text panels collapsed editor=\(editorHeight) target=\(targetHeight) \(dump())")
+                    let editor = controller.smokeEditor
+                    guard controller.smokeTargetString == article.scoredText else { return fail("\(page)/\(sizeName): source text missing") }
+                    // No scroll view of its own: the text is as tall as all its rows and the page scrolls.
+                    let rows = controller.smokeTrack.smokeRows.count
+                    guard editor.enclosingScrollView === scroll, editor.bounds.width > 250,
+                          editor.frame.height >= CGFloat(rows) * 70 else {
+                        return fail("\(page)/\(sizeName): text must show every row inside the page scroll: rows \(rows) height \(editor.frame.height) \(dump())")
                     }
-                    if sizeName == "large" { guard targetHeight > 200 else { return fail("target panel must grow with the window: \(targetHeight)") } }
+                    let bottom = editor.convert(editor.bounds, to: document).maxY
+                    guard document.frame.height >= bottom - 0.5 else { return fail("\(page)/\(sizeName): document ends above the text \(dump()) bottom \(bottom)") }
+                    scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.frame.height - scroll.contentView.bounds.height)))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                    guard scroll.contentView.bounds.maxY >= bottom - 0.5 else {
+                        return fail("\(page)/\(sizeName): scrolling cannot reach the last row \(dump()) bottom \(bottom)")
+                    }
+                    scroll.contentView.scroll(to: .zero)
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                    // Readings and the speed curve are cards of one band, at the same height.
+                    guard let chart = controller.smokeChartFrame, let reading = controller.smokeReadingFrame,
+                          abs(chart.minY - reading.minY) < 1, abs(chart.maxY - reading.maxY) < 1 else {
+                        return fail("\(page)/\(sizeName): the speed curve must sit level with the reading cards")
+                    }
                 }
                 pane.displayIfNeeded()
                 window.displayIfNeeded()
@@ -214,20 +224,37 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
             backdrop.addSubview(pane)
             pane.frame = backdrop.bounds
             pane.autoresizingMask = [.width, .height]
-            controller.prepareForSmoke(articleID: article.id, committedText: String(article.text.prefix(78)))
+            controller.prepareForSmoke(articleID: article.id, committedText: String(article.text.prefix(300)))
             pane.layoutSubtreeIfNeeded()
-            guard let targetScroll = controller.smokeTargetScroll else { return fail("fold: target panel missing") }
-            let before = targetScroll.frame.height, widthBefore = controller.smokeMaterials.smokeWidth
-            guard widthBefore > 100 else { return fail("fold: material column should start open, width \(widthBefore)") }
+            // Typing deep into the text scrolls the page so the row being typed stays in view.
+            controller.smokeTrack.scrollCaretIntoView()
+            if let scroll = controller.smokePageScroll, let document = scroll.documentView {
+                let top = controller.smokeTrack.convert(NSPoint(x: 0, y: controller.smokeTrack.smokeCaretRowTop), to: document).y
+                let clip = scroll.contentView.bounds
+                guard clip.minY > 100, top >= clip.minY - 1, top + 70 <= clip.maxY + 1 else {
+                    return fail("scroll: the row being typed must be in view: row top \(top), visible \(clip.minY)...\(clip.maxY)")
+                }
+            } else { return fail("scroll: page scroll missing") }
+            let before = controller.smokeEditor.frame.width, widthBefore = controller.smokeMaterials.smokeWidth
+            guard widthBefore > 100, !controller.smokeMaterialsButtonShown else { return fail("fold: material column should start open, width \(widthBefore)") }
             controller.smokeToggleMaterials()
             controller.smokeToggleCells()
             pane.layoutSubtreeIfNeeded()
-            guard controller.smokeCellsHidden, controller.smokeMaterials.smokeWidth < 60 else {
+            // Hidden means hidden: no rail, no divider; the header offers the way back.
+            guard controller.smokeCellsHidden, controller.smokeMaterials.smokeWidth < 1, controller.smokeMaterials.isHidden,
+                  !controller.smokeMaterialsDividerShown, controller.smokeMaterialsButtonShown else {
                 return fail("fold: column width \(controller.smokeMaterials.smokeWidth), cellsHidden \(controller.smokeCellsHidden)")
             }
-            guard targetScroll.frame.height > before + 60, targetScroll.frame.width > 450 else {
-                return fail("fold: text panel should grow once cells and column fold: \(before) -> \(targetScroll.frame.height), width \(targetScroll.frame.width)")
+            guard controller.smokeEditor.frame.width > before + 150 else {
+                return fail("fold: text should take the sidebar's room: \(before) -> \(controller.smokeEditor.frame.width)")
             }
+            controller.smokeToggleMaterials()
+            pane.layoutSubtreeIfNeeded()
+            guard controller.smokeMaterials.smokeWidth > 100, !controller.smokeMaterialsButtonShown, controller.smokeMaterialsDividerShown else {
+                return fail("fold: the sidebar must come back")
+            }
+            controller.smokeToggleMaterials()
+            pane.layoutSubtreeIfNeeded()
             if let outputDirectory, let bitmap = backdrop.bitmapImageRepForCachingDisplay(in: backdrop.bounds) {
                 backdrop.cacheDisplay(in: backdrop.bounds, to: bitmap)
                 if let png = bitmap.representation(using: .png, properties: [:]) {
@@ -265,7 +292,7 @@ func runTypingTestUISmokeTest(outputDirectory: URL? = nil) -> Bool {
             guard controller.smokeMaterials.smokeTab == 1, controller.smokeMaterials.smokeOpenBookTitle == book.title,
                   controller.smokeMaterialRowCount == 1 + book.passageCount,
                   controller.smokeMaterials.currentArticleID == "epub.\(book.id).1",
-                  controller.smokeTargetString == book.article(number: 1)?.text else {
+                  controller.smokeTargetString == book.article(number: 1)?.scoredText else {
                 return fail("import must open the book on the 书籍 tab and its first piece: rows \(rowsBefore)->\(controller.smokeMaterialRowCount), tab \(controller.smokeMaterials.smokeTab), current=\(String(describing: controller.smokeMaterials.currentArticleID))")
             }
             controller.importFiles([file])
@@ -290,4 +317,50 @@ private final class TypingTestSmokeBackdrop: NSView {
         RimeUI.surface.setFill()
         dirtyRect.fill()
     }
+}
+
+/// The double-track view on its own: paragraph rows indented two cells, the
+/// typed row mirroring them with breaks the view inserts itself, line breaks
+/// never counted, and typed rows landing exactly under their source rows.
+private func typingTestTrackSmoke() -> String? {
+    let paragraphs = ["天地玄黄宇宙洪荒日月盈昃辰宿列张寒来暑往秋收", "冬藏闰余成岁律吕调阳云腾致雨", "露结为霜金生丽水"]
+    let source = paragraphs.joined(separator: "\n")
+    let flat = Array(paragraphs.joined())
+    let view = TypingTestTrackTextView(frame: NSRect(x: 0, y: 0, width: 700, height: 400), textContainer: nil)
+    view.acceptsTestInput = true
+    view.isEditable = true
+    view.setSource(source, states: [], typedCorrectness: [])
+    let columns = view.columns
+    guard columns == 24, view.smokeIndentCells == 2 else { return "track: columns \(columns) indent \(view.smokeIndentCells)" }
+    // 24 columns, indent 2: the first paragraph exactly fills its row, each later one starts a row.
+    let rows = view.smokeRows
+    let first = paragraphs[0].count, second = paragraphs[1].count
+    guard first == 22, rows.count == 3,
+          rows[0] == (0, 22, 2), rows[1] == (22, 36, 2), rows[2] == (36, 44, 2) else { return "track: paragraph rows \(rows)" }
+
+    func type(_ text: String) {
+        for character in text { view.insertText(String(character), replacementRange: NSRange(location: NSNotFound, length: 0)) }
+    }
+    type(String(flat.prefix(first)))
+    guard view.string.hasSuffix("\n"), TypingTestSession.normalized(view.string) == String(flat.prefix(first)),
+          view.string.filter({ $0 == "\n" }).count == 1 else {
+        return "track: no automatic break after the first paragraph: \(view.string.debugDescription)"
+    }
+    view.deleteBackward(nil)
+    guard !view.string.hasSuffix("\n"), TypingTestSession.normalized(view.string).count == first - 1 else {
+        return "track: backspace after a break must take the break and the character: \(view.string.debugDescription)"
+    }
+    type(String(flat[(first - 1)..<first]))
+    guard view.string.hasSuffix("\n") else { return "track: break not restored" }
+    type(String(flat[first..<(first + second)]))
+    guard view.string.filter({ $0 == "\n" }).count == 2 else { return "track: no break after the second paragraph: \(view.string.debugDescription)" }
+    type(String(flat[(first + second)...]))
+    guard TypingTestSession.normalized(view.string) == String(flat), !view.string.hasSuffix("\n"),
+          view.string.filter({ $0 == "\n" }).count == 2 else { return "track: typed text \(view.string.debugDescription)" }
+    let tops = view.smokeTypedLineTops, rowTops = view.smokeTypedRowTops
+    guard tops.count == rowTops.count else { return "track: \(tops.count) typed lines for \(rowTops.count) source rows" }
+    for (index, pair) in zip(tops, rowTops).enumerated() where abs(pair.0 - pair.1) > 1.5 {
+        return "track: typed line \(index) at \(pair.0), its source row expects \(pair.1)"
+    }
+    return nil
 }

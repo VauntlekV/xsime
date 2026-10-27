@@ -11,7 +11,7 @@ func runTypingPracticeLinuxFixtures(_ output: URL) -> Bool {
         func articleValue(_ article: TypingTestArticle) -> [String: Any] {
             ["id": article.id, "version": article.version, "language": article.language.rawValue,
              "title": article.title, "theme": article.theme, "difficulty": article.difficulty,
-             "text": article.text, "characterCount": article.characterCount, "wordCount": article.wordCount]
+             "text": article.scoredText, "characterCount": article.characterCount, "wordCount": article.wordCount]
         }
         func observation(_ session: TypingTestSession, at time: Double) throws -> [String: Any] {
             let value = session.snapshot(at: time)

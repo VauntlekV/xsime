@@ -95,7 +95,7 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
             return fail("pieces should be short: chapter parts \(book.chapters.map(\.passages.count))")
         }
         // A tiny last piece may be merged into its neighbour (up to a sixth over the limit).
-        guard book.chapters[0].passages.allSatisfy({ $0.count <= 940 }), book.chapters[1].passages.allSatisfy({ $0.count <= 1_170 }) else {
+        guard book.chapters[0].passages.allSatisfy({ TypingTestPassageSplitter.typedLength($0) <= 940 }), book.chapters[1].passages.allSatisfy({ TypingTestPassageSplitter.typedLength($0) <= 1_170 }) else {
             return fail("piece length limits")
         }
         // Pieces end on a paragraph or sentence boundary, never mid-sentence.
@@ -103,7 +103,14 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
               book.chapters[1].passages.allSatisfy({ $0.hasSuffix(".") }) else {
             return fail("pieces must end at paragraph/sentence ends: \(book.chapters[1].passages.map { String($0.suffix(6)) })")
         }
-        let first = book.chapters[0].passages.joined()
+        // Chinese paragraphs stay marked with line breaks (the practice view indents them);
+        // they are layout, not text, so the checks below read the text without them.
+        guard book.chapters[0].passages.contains(where: { $0.contains("\n") }),
+              book.chapters[0].passages.allSatisfy({ !$0.hasPrefix("\n") && !$0.hasSuffix("\n") && !$0.contains("\n\n") }) else {
+            return fail("Chinese pieces must keep one line break between paragraphs: \(book.chapters[0].passages)")
+        }
+        guard book.chapters[1].passages.allSatisfy({ !$0.contains("\n") }) else { return fail("English paragraphs are joined by a space") }
+        let first = book.chapters[0].passages.joined().replacingOccurrences(of: "\n", with: "")
         guard first.hasPrefix("第1段：清晨的街道很安静，老板把热气腾腾的豆浆放在柜台上。"), !first.contains("SCRIPTTEXT"),
               !first.contains("hidden comment"), !first.contains("han"), !first.contains("ignored head"), !first.contains("\n"),
               first.contains("汉字&一 —结束。") else { return fail("markup clean-up: prefix=\(first.hasPrefix("第1段：清晨的街道很安静，老板把热气腾腾的豆浆放在柜台上。")) script=\(first.contains("SCRIPTTEXT")) comment=\(first.contains("hidden comment")) han=\(first.contains("han")) head=\(first.contains("ignored head")) nl=\(first.contains("\n")) tail=\(Array(first.suffix(9).unicodeScalars.map { String($0.value, radix: 16) }))") }
@@ -176,7 +183,7 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
             let started = Date()
             do {
                 let real = try TypingTestLibraryStore.parseFile(at: url)
-                let longest = real.chapters.flatMap(\.passages).map(\.count).max() ?? 0
+                let longest = real.chapters.flatMap(\.passages).map(TypingTestPassageSplitter.typedLength).max() ?? 0
                 print("probe \(url.lastPathComponent): \"\(real.title)\" / \(real.author) — \(real.chapters.count) chapters, \(real.passageCount) passages, \(real.characterCount) chars, longest \(longest), \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
                 guard TypingTestLibraryStore.valid(real) else { return fail("probe \(url.lastPathComponent) produced an invalid book") }
             } catch { print("probe \(url.lastPathComponent): \(error.localizedDescription)") }
