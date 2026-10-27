@@ -84,6 +84,8 @@
     "native/shared/openai/chat_codec_tests.cpp": "7d0970676a1bcb5112b8b3fa05aa557d2697e0075e9ba7cd4c2089ef54c6a1b4",
     "native/shared/statistics/metrics_core.cpp": "7bbd13728140f2f8f460eec3d013004332ee576c9e5e3ae59a1b23da6a2b5b95",
     "native/shared/statistics/metrics_core.hpp": "cbf3111f7ec501e4d98fa3964b4ed7c0a5a55e4f9466c546c6413ef9a6276c0a",
+    "native/shared/typing-practice/material_library.cpp": "2cbdbf931397fc82345ba711a918d5d5333560a61089b6d021ffd4194cc3671f",
+    "native/shared/typing-practice/material_library.hpp": "e8a690771255648b96f27bc05d553076dcd5a7688bd4cad6e480e7569c0de668",
     "native/shared/typing-practice/typing_practice_core.cpp": "324a032a1d16ba4b800f24684e5dc5fb408fe319c16ffcf64239bd15db1246b8",
     "native/shared/typing-practice/typing_practice_core.hpp": "bb402aea22e7bc9e5a4762b04953ee957f9b971b7bc2ed4b2ab65a9bf06b6ed1",
     "native/windows/metrics.cpp": "ae864ba1f168dff8bcc18be71537aec21ea93045642143ec9ae23b76700fac26",
@@ -117,9 +119,9 @@
     "plugins/statistics/plugin.json": "fd0a6abeb4628bbaa2b6c66ad8e99c1c428e4013394e29ead20ac5219572757a",
     "plugins/stream-input/plugin.json": "b0fb6462ad6323345de726d0d3e9525bac08fe5aa88ad71bc3e5d2b2afaae5fc",
     "plugins/typing-speed/plugin.json": "cd28899b92f385c1e5ba296d164ab8b129c27efd580af51492ab365df7ef2594",
-    "source-map.json": "ad2085500c2268ad2b80904989a02c6f9e9f70a2918aac2d568b003108635898"
+    "source-map.json": "c483efee9942ef060edf5271cf4b64e22ae5a9ec1ef8ce87fac96594663e91b1"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "e0bf005ed4daf1293e4d721bebc54053f08b2835",
+  "revision": "a5f5935faffa0ca8298412d580e3664631813d4f",
   "schemaVersion": 1
 }

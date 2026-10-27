@@ -323,7 +323,7 @@ target_link_libraries(RimesStatisticsUI PUBLIC RimesDesktopUI RimesStatisticsCor
 target_compile_options(RimesStatisticsUI PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_library(RimesPracticeUI STATIC ../typing-practice/ui/practice_editor.cpp ../typing-practice/ui/practice_pane.cpp ../typing-practice/ui/practice_telemetry.cpp)
 target_include_directories(RimesPracticeUI PUBLIC ../typing-practice/ui PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(RimesPracticeUI PUBLIC RimesStatisticsUI RimesPracticeCore)
+target_link_libraries(RimesPracticeUI PUBLIC RimesStatisticsUI RimesPracticeCore RimesTypingMaterials)
 target_compile_options(RimesPracticeUI PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_executable(rimes-settings ui/settings.cpp ui/application_update.cpp)
 target_link_libraries(rimes-settings PRIVATE PkgConfig::RuntimeCurl RimesDesktopUI RimesCodex RimesClaude RimesChordUI RimesStatisticsUI RimesPracticeUI RimesSchemeImport yaml-cpp::yaml-cpp)

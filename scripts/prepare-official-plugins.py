@@ -71,7 +71,7 @@ def prepare(root, source, update_lock=False):
     input_names = {"VERSION", "source-map.json", "LICENSE", "NOTICE", "LICENSES/MIT-legacy.txt", "LICENSES/Swift-Apache-2.0.txt", "THIRD_PARTY_NOTICES.md"}
     for entry in source_map["files"]:
         origin, destination = entry["source"], entry["destination"]
-        if not origin.startswith("native/") or not destination.startswith(("Sources/", "Shared/Sources/", "platforms/")):
+        if not origin.startswith("native/") or not destination.startswith(("Sources/", "Shared/Sources/", "Shared/TypingPractice/", "platforms/")):
             raise ValueError("Plugin import is outside an allowed native source directory")
         if destination in imports:
             raise ValueError("Duplicate plugin import destination")
@@ -158,7 +158,7 @@ def prepare(root, source, update_lock=False):
                 raise ValueError(f"Preserved local edit in {name}; move the change to OfficialPlugins first")
     removed = set(previous) - set(imports)
     for name in removed:
-        if not name.startswith(("Sources/", "Shared/Sources/", "platforms/")):
+        if not name.startswith(("Sources/", "Shared/Sources/", "Shared/TypingPractice/", "platforms/")):
             raise ValueError("Invalid retired import path in receipt")
         path = safe_path(root, name)
         if path.exists() and digest(path.read_bytes()) != previous[name]:
