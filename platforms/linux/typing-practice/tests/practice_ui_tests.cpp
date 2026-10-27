@@ -115,11 +115,11 @@ int main(int argc, char **argv) {
                         gtk_container_add(GTK_CONTAINER(window), pane.Widget());
                         gtk_widget_show_all(window);
                         Settle();
-                        const auto frame = pane.Geometry();
                         const auto name =
                             std::string(language) + "-" + phase + "-" + theme + ".png";
+                        Check(Render(window, (output / name).string()), "render failed");
+                        const auto frame = pane.Geometry();
                         if (!output.empty()) {
-                            Check(Render(window, (output / name).string()), "render failed");
                             std::ofstream(output / (name + ".geometry.json"))
                                 << frame.dump(2) << '\n';
                         }
