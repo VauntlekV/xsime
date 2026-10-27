@@ -188,6 +188,10 @@ int main(int argc, char** argv) {
                     main([&] { Check(ic->inputPanel().clientPreedit().toStringForCommit() == composing, "settings selection must not discard pending composition"); });
                     expect("你");
                     Check(Call({{"op", "status"}}).at("selectedSchema") == "wubi86", "settings schema selection persists after the old composition commits");
+                    // The following chord-disable scenario exercises its original
+                    // Pinyin fallback. Restore that explicit ordinary choice after
+                    // proving the settings-driven Wubi switch retained composition.
+                    Call({{"op", "selectBuiltin"}, {"schema", "rime_ice"}});
                     Call({{"op", "makeCurrent"}});
                     batch("dv");
                     batch("i");

@@ -128,7 +128,7 @@ def main():
                                for line in state.with_suffix(".txt.events").read_text().splitlines()), "GTK did not expose preedit"
                 # A second native commit must pass through Buffer's capture and
                 # Return delivery, without leaking the staged text to the host.
-                run("xdotool", "key", "ctrl+shift+b")
+                run("xdotool", "key", "alt+shift+b")
                 time.sleep(0.15)
                 type_chinese()
                 time.sleep(0.15)
@@ -198,14 +198,14 @@ document.addEventListener('compositionend',()=>{composing=false;record()});docum
 
                     type_chinese()
                     wait(lambda: browser_state()["text"] == "你好" and not browser_state()["composing"], "Firefox DOM native commit")
-                    run("xdotool", "key", "ctrl+shift+b")
+                    run("xdotool", "key", "alt+shift+b")
                     time.sleep(0.15)
                     type_chinese()
                     time.sleep(0.15)
                     assert browser_state()["text"] == "你好", browser_state()
                     run("xdotool", "key", "Return")
                     wait(lambda: browser_state()["text"] == "你好你好", "Firefox Buffer DOM commit")
-                    run("xdotool", "key", "Tab", "ctrl+shift+b")
+                    run("xdotool", "key", "Tab", "alt+shift+b")
                     run("xdotool", "type", "--clearmodifiers", "--delay", 80, "public123")
                     wait(lambda: browser_state()["secret"] == "public123", "Firefox disabled-IME password bypass")
                     assert browser_state()["text"] == "你好你好", browser_state()
