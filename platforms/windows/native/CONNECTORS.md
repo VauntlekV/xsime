@@ -40,7 +40,7 @@ Only an explicit Copy action retrieves/generates the local gateway token.
 Clipboard exclusion prevents copied credentials from entering Capsule collection
 or Windows clipboard history. Client configuration files are never overwritten.
 
-`Alt+Shift+B`, `Alt+Shift+V` and `Alt+Shift+M` toggle Buffer, Capsule and Mailbox.
+`Alt+Shift+B`, `Alt+Shift+C` and `Alt+Shift+M` toggle Buffer, Capsule and Mailbox.
 A visible component closes even if it no longer owns input capture. Normal close
 behavior, including saving Mailbox drafts and protecting Capsule edits, remains.
 

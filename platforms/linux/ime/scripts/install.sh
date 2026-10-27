@@ -94,6 +94,6 @@ Installed the RIMES Fcitx5 addon, Buffer, Capsule and Mailbox workspaces.
   receipt: $PREFIX/share/rimes/ime-install-manifest.json
 Uninstall with: $SCRIPT_DIR/uninstall.sh --prefix "$PREFIX"
 Restart Fcitx5 (fcitx5 -r) and add "RIMES" in the input method list.
-Toggle Buffer with Ctrl+Shift+B and Capsule with Ctrl+Shift+V while RIMES is current.
+Toggle Buffer with Alt+Shift+B and Capsule with Alt+Shift+C while RIMES is current.
 User schema/state lives in \$XDG_DATA_HOME/rimes, isolated from fcitx5-rime.
 EOF
