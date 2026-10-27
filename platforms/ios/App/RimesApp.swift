@@ -70,8 +70,8 @@ struct HomeView: View {
                     Text("\(ProductBrand.name) " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0")).font(.caption).foregroundStyle(.secondary)
                 } footer: {
                     VStack(spacing: 0) {
-                        Link("pm.scholay.com", destination: URL(string: "https://pm.scholay.com")!)
-                            .accessibilityLabel(L("官网，pm.scholay.com", "Website, pm.scholay.com"))
+                        Link("xsime.com", destination: URL(string: "https://xsime.com")!)
+                            .accessibilityLabel(L("官网，xsime.com", "Website, xsime.com"))
                             .accessibilityIdentifier("settings.home.website")
                             .frame(minHeight: 44)
                         Link("pm@scholay.com", destination: URL(string: "mailto:pm@scholay.com")!)
