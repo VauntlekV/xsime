@@ -66,8 +66,8 @@
     "native/macos/TypingSpeedStore.swift": "df84c25cfbb82c9e0fcd58ebcafa78939dc69913e073ab3de70d668a1679359b",
     "native/macos/TypingTestArticles.swift": "6767c66059be140f46c2b114321b0943340049cc75f97c97858bb7bb83d4fba6",
     "native/macos/TypingTestHistoryStore.swift": "b1381a010bee67b368dfcf08dd43a3b088ea722f3b9969291ffb87e3ba1a37d5",
-    "native/macos/TypingTestLibrary.swift": "0b6c5b92e77e57defa46a83613649a5dd9680a3d4647752a89fc8613fb1dbed0",
-    "native/macos/TypingTestMaterialColumn.swift": "823c10bf9b3bfe373f16c1432f2777f0a01811ba1069068690e055a5b219b75c",
+    "native/macos/TypingTestLibrary.swift": "409bb569402701b03e8ca42ac568e09b76319c3b5e3319d49144ea3e5610d2cf",
+    "native/macos/TypingTestMaterialColumn.swift": "3a3615804dfdb0a7e13c392ad5a1861e62691068e5573308397ff4c3881bb67a",
     "native/macos/TypingTestSession.swift": "c8be4b4b6276ed59f3a52e000f64b27ca49ed0af204eab378cb40c3c04536ae3",
     "native/macos/TypingTestTextView.swift": "178dcbb834a7dc2238068c7eebfe401f81d60b24df3a37f2489d3f331f12f7c8",
     "native/macos/YearHistoryHeatmapView.swift": "516de52a2376cec08dc532f7834b6c72de9411b049ff2107038ebb816558a1f0",
@@ -119,6 +119,6 @@
     "source-map.json": "5c899a49343b47dae02dfbdc17a8a9c0e08414fb6b0466871299d90fcb7799e8"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "ad7ed9d31bb738c81ba756e694a9d4fa4ed1ecf7",
+  "revision": "ebf05e631dcba9ea2a9cc374f4848282ada6a3df",
   "schemaVersion": 1
 }

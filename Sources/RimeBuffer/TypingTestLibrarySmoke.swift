@@ -85,10 +85,14 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
         let book = try TypingTestEPUBImporter.parse(data: epub, importedAt: 1)
         guard book.title == "测试之书", book.author == "某作者" else { return fail("metadata \(book.title)/\(book.author)") }
         guard book.chapters.count == 2 else { return fail("cover and non-linear note must be skipped, got \(book.chapters.map(\.title))") }
-        guard book.chapters[0].title == "第一章清晨", book.chapters[1].title == "Chapter Two" else { return fail("chapter titles \(book.chapters.map(\.title))") }
+        guard book.chapters[0].title == "01 · 第一章清晨", book.chapters[1].title == "02 · Chapter Two" else { return fail("chapter titles \(book.chapters.map(\.title))") }
         let all = book.chapters.flatMap(\.passages)
-        guard all.allSatisfy({ $0.count <= 900 && $0.count > 0 && $0 == $0.trimmingCharacters(in: .whitespacesAndNewlines) }) else { return fail("passage size/trim") }
-        guard book.chapters[0].passages.count >= 3, book.chapters[1].passages.count >= 2 else { return fail("passages should be cut") }
+        guard all.allSatisfy({ $0.count <= TypingTestPassageSplitter.pieceLimit && $0.count > 0 && $0 == $0.trimmingCharacters(in: .whitespacesAndNewlines) }) else { return fail("passage size/trim") }
+        guard book.chapters[0].passages.count == 1, book.chapters[1].passages.count == 2 else {
+            return fail("a short chapter is one piece, a long one splits evenly: \(book.chapters.map(\.passages.count))")
+        }
+        let halves = book.chapters[1].passages.map(\.count)
+        guard abs(halves[0] - halves[1]) < 200 else { return fail("parts must be balanced: \(halves)") }
         let first = book.chapters[0].passages.joined()
         guard first.hasPrefix("第1段：清晨的街道很安静，老板把热气腾腾的豆浆放在柜台上。"), !first.contains("SCRIPTTEXT"),
               !first.contains("hidden comment"), !first.contains("han"), !first.contains("ignored head"), !first.contains("\n"),
@@ -97,7 +101,8 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
               book.chapters[1].passages.allSatisfy({ TypingTestPassageSplitter.language(of: $0) == .english }) else { return fail("language detection") }
         guard book.chapters[1].passages[0].contains("Dr. Smith waved"), book.chapters[1].passages[0].contains("smiled & nodded.") else { return fail("english text") }
         let article = book.article(number: 2)!
-        guard article.id == "epub.\(book.id).2", book.article(number: book.passageCount + 1) == nil,
+        guard article.id == "epub.\(book.id).2", book.passageCount == 3, book.article(number: book.passageCount + 1) == nil,
+              article.title.hasSuffix("02 · Chapter Two · 1/2"), book.article(number: 1)?.title.hasSuffix("01 · 第一章清晨") == true,
               let scored = Optional(TypingTestSession(article: article, context: TypingTestContext(schemaID: "smoke"))) else { return fail("article ids") }
         scored.start(at: 1)
         guard scored.reconcileCommittedText(article.text, at: 11), scored.snapshot(at: 11).canComplete else { return fail("imported passage must be scorable") }
@@ -137,14 +142,13 @@ func runTypingTestLibrarySmokeTest(probing files: [URL] = []) -> Bool {
 
         // Splitter limits for one huge unbroken sentence.
         let huge = TypingTestPassageSplitter.passages(from: [String(repeating: "字", count: 5_000)])
-        guard huge.count >= 7, huge.allSatisfy({ $0.count <= 640 }) else { return fail("unbroken text must be hard-cut under the limit") }
+        guard huge.count == 3, huge.allSatisfy({ $0.count <= TypingTestPassageSplitter.pieceLimit }) else { return fail("unbroken text must be hard-cut under the limit") }
         for url in files {
             let started = Date()
             do {
                 let real = try TypingTestLibraryStore.parseFile(at: url)
                 let longest = real.chapters.flatMap(\.passages).map(\.count).max() ?? 0
                 print("probe \(url.lastPathComponent): \"\(real.title)\" / \(real.author) — \(real.chapters.count) chapters, \(real.passageCount) passages, \(real.characterCount) chars, longest \(longest), \(String(format: "%.2f", Date().timeIntervalSince(started)))s")
-                if let sample = real.chapters.first?.passages.first { print("  first: \(sample.prefix(70))") }
                 guard TypingTestLibraryStore.valid(real) else { return fail("probe \(url.lastPathComponent) produced an invalid book") }
             } catch { print("probe \(url.lastPathComponent): \(error.localizedDescription)") }
         }
