@@ -1,6 +1,7 @@
 #include "practice_editor.hpp"
 #include "typing_practice_core.hpp"
 #include <cstring>
+#include <algorithm>
 
 namespace rimes::desktop {
 void ConfigurePracticeInput() {
@@ -25,6 +26,15 @@ PracticeEditor::PracticeEditor()
         static_cast<GtkInputHints>(GTK_INPUT_HINT_NO_SPELLCHECK | GTK_INPUT_HINT_NO_EMOJI));
     atk_object_set_name(gtk_widget_get_accessible(view_), "跟打输入，首键计时，组字不判错");
     Enable(false);
+    g_signal_connect(view_, "size-allocate", G_CALLBACK(+[](GtkWidget* widget, GtkAllocation* allocation, gpointer data) {
+        auto* self = static_cast<PracticeEditor*>(data);
+        const auto columns = std::max(4, (allocation->width - 38) / 28);
+        if (self->track_ && columns != self->columns_) { self->columns_ = columns; self->LayoutTrack(); }
+        (void)widget;
+    }), this);
+    g_signal_connect_after(view_, "draw", G_CALLBACK(+[](GtkWidget*, cairo_t* cr, gpointer data) -> gboolean {
+        static_cast<PracticeEditor*>(data)->DrawTrack(cr); return FALSE;
+    }), this);
     g_signal_connect(view_, "drag-motion",
                      G_CALLBACK(+[](GtkWidget *, GdkDragContext *drag, gint, gint, guint time,
                                     gpointer) -> gboolean {
@@ -247,10 +257,126 @@ void PracticeEditor::Reset(const std::string &text) {
     gtk_text_buffer_set_text(buffer_, text.c_str(), text.size());
     suppressed_ = false;
     dirty_ = composing_ = false;
+    LayoutTrack();
     insertion_.reset();
     down_.clear();
     seen_.clear();
     depth_ = 0;
+}
+void PracticeEditor::Source(const std::string& text, const Json& states, bool chinese) {
+    track_ = true;
+    const bool changed = source_ != text || chinese_ != chinese;
+    source_ = text; states_ = states; chinese_ = chinese;
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view_), GTK_WRAP_NONE);
+    gtk_text_view_set_pixels_above_lines(GTK_TEXT_VIEW(view_), 32);
+    gtk_text_view_set_pixels_below_lines(GTK_TEXT_VIEW(view_), 14);
+    if (changed) LayoutTrack();
+    gtk_widget_queue_draw(view_);
+}
+void PracticeEditor::LayoutTrack() {
+    if (!track_ || composing_ || formatting_) return;
+    namespace mat = rimes::practice::materials;
+    formatting_ = true;
+    const bool old_suppressed = suppressed_;
+    try {
+        rows_ = mat::TrackRows(source_, columns_, chinese_ ? 2 : 0);
+        const auto before = Text();
+        const auto typed = mat::Characters(mat::ScoredText(before));
+        GtkTextIter insert, bound;
+        gtk_text_buffer_get_iter_at_mark(buffer_, &insert, gtk_text_buffer_get_insert(buffer_));
+        gtk_text_buffer_get_iter_at_mark(buffer_, &bound, gtk_text_buffer_get_selection_bound(buffer_));
+        auto logical = [&](GtkTextIter at) {
+            GtkTextIter begin; gtk_text_buffer_get_start_iter(buffer_, &begin);
+            auto* prefix = gtk_text_buffer_get_text(buffer_, &begin, &at, FALSE);
+            const auto count = mat::Characters(mat::ScoredText(prefix)).size(); g_free(prefix); return count;
+        };
+        const auto caret = logical(insert), selection = logical(bound);
+        std::string formatted; std::size_t offset = 0, row = 0;
+        std::vector<int> indents;
+        do {
+            const auto count = row < rows_.size() ? rows_[row].length : static_cast<std::size_t>(columns_);
+            indents.push_back(row < rows_.size() ? rows_[row].indent : 0);
+            const auto take = std::min(count, typed.size() - offset);
+            for (std::size_t i = 0; i < take; ++i) formatted += typed[offset + i];
+            offset += take; ++row;
+            if (offset < typed.size() || (offset == typed.size() && take == count && row < rows_.size())) formatted += '\n';
+            else break;
+        } while (row < 20000);
+        suppressed_ = true;
+        if (formatted != before) gtk_text_buffer_set_text(buffer_, formatted.c_str(), static_cast<gint>(formatted.size()));
+        auto* table = gtk_text_buffer_get_tag_table(buffer_);
+        auto* font = gtk_text_tag_table_lookup(table, "track-font");
+        if (!font) font = gtk_text_buffer_create_tag(buffer_, "track-font", "font", "Noto Sans CJK SC 16.5", nullptr);
+        GtkTextIter begin, end; gtk_text_buffer_get_bounds(buffer_, &begin, &end);
+        gtk_text_buffer_apply_tag(buffer_, font, &begin, &end);
+        int character = 0; std::size_t line = 0;
+        auto* layout = gtk_widget_create_pango_layout(view_, "");
+        auto* description = pango_font_description_from_string("Noto Sans CJK SC 16.5");
+        pango_layout_set_font_description(layout, description); pango_font_description_free(description);
+        for (const auto& c : mat::Characters(formatted)) {
+            const int count = static_cast<int>(g_utf8_strlen(c.c_str(), c.size()));
+            GtkTextIter a, b; gtk_text_buffer_get_iter_at_offset(buffer_, &a, character); gtk_text_buffer_get_iter_at_offset(buffer_, &b, character + count);
+            const auto indent = indents[std::min(line, indents.size() - 1)];
+            const auto name = std::string("track-indent-") + std::to_string(indent);
+            auto* tag = gtk_text_tag_table_lookup(table, name.c_str());
+            if (!tag) tag = gtk_text_buffer_create_tag(buffer_, name.c_str(), "left-margin", 19 + indent * 28, nullptr);
+            gtk_text_buffer_apply_tag(buffer_, tag, &a, &b);
+            if (c == "\n") ++line;
+            else {
+                pango_layout_set_text(layout, c.c_str(), static_cast<int>(c.size())); int width = 0;
+                pango_layout_get_pixel_size(layout, &width, nullptr);
+                const auto spacing = std::clamp((28 - width) * PANGO_SCALE, -32000, 32000);
+                const auto key = std::string("track-spacing-") + std::to_string(spacing);
+                auto* spacing_tag = gtk_text_tag_table_lookup(table, key.c_str());
+                if (!spacing_tag) spacing_tag = gtk_text_buffer_create_tag(buffer_, key.c_str(), "letter-spacing", spacing, nullptr);
+                gtk_text_buffer_apply_tag(buffer_, spacing_tag, &a, &b);
+            }
+            character += count;
+        }
+        g_object_unref(layout);
+        auto physical = [&](std::size_t wanted) {
+            int result = 0; std::size_t seen = 0;
+            for (const auto& c : mat::Characters(formatted)) {
+                if (c != "\n" && seen == wanted) break;
+                result += static_cast<int>(g_utf8_strlen(c.c_str(), c.size())); if (c != "\n") ++seen;
+            }
+            return result;
+        };
+        gtk_text_buffer_get_iter_at_offset(buffer_, &insert, physical(caret));
+        gtk_text_buffer_get_iter_at_offset(buffer_, &bound, physical(selection));
+        gtk_text_buffer_select_range(buffer_, &insert, &bound);
+        suppressed_ = old_suppressed;
+    } catch (const std::exception& error) { g_warning("Typing track: %s", error.what()); }
+    suppressed_ = old_suppressed;
+    formatting_ = false;
+    gtk_widget_queue_draw(view_);
+}
+void PracticeEditor::DrawTrack(cairo_t* cr) {
+    if (!track_) return;
+    auto* view = GTK_TEXT_VIEW(view_);
+    int x = 0, top = 0;
+    gtk_text_view_buffer_to_window_coords(view, GTK_TEXT_WINDOW_WIDGET, 0, 0, &x, &top);
+    auto* layout = gtk_widget_create_pango_layout(view_, "");
+    auto* font = pango_font_description_from_string("Noto Sans CJK SC 16.5");
+    pango_layout_set_font_description(layout, font); pango_font_description_free(font);
+    const auto height = gtk_widget_get_allocated_height(view_);
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        const auto y = top + 12 + static_cast<int>(row) * 78;
+        if (y + 28 < 0 || y > height) continue;
+        const auto& source = rows_[row]; const auto chars = rimes::practice::materials::Characters(source.text);
+        for (std::size_t i = 0; i < chars.size(); ++i) {
+            const auto index = source.start + i;
+            const auto state = index < states_.size() ? states_[index].get<int>() : 0;
+            GdkRGBA color{}; gtk_style_context_get_color(gtk_widget_get_style_context(view_), GTK_STATE_FLAG_NORMAL, &color);
+            if (state == 1) gdk_rgba_parse(&color, "#24945b"); else if (state >= 2) gdk_rgba_parse(&color, "#d45151"); else color.alpha *= .65;
+            gdk_cairo_set_source_rgba(cr, &color);
+            pango_layout_set_text(layout, chars[i].c_str(), static_cast<int>(chars[i].size())); int width = 0;
+            pango_layout_get_pixel_size(layout, &width, nullptr);
+            cairo_move_to(cr, x + 19 + (source.indent + static_cast<int>(i)) * 28 + (28 - width) / 2., y);
+            pango_cairo_show_layout(cr, layout);
+        }
+    }
+    g_object_unref(layout);
 }
 void PracticeEditor::Reject() {
     if (enabled_ && assistance)
@@ -264,5 +390,6 @@ void PracticeEditor::Publish() {
     dirty_ = false;
     if (commit)
         commit(Text(), range);
+    LayoutTrack();
 }
 } // namespace rimes::desktop

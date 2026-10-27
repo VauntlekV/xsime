@@ -84,14 +84,14 @@
     "native/shared/openai/chat_codec_tests.cpp": "7d0970676a1bcb5112b8b3fa05aa557d2697e0075e9ba7cd4c2089ef54c6a1b4",
     "native/shared/statistics/metrics_core.cpp": "7bbd13728140f2f8f460eec3d013004332ee576c9e5e3ae59a1b23da6a2b5b95",
     "native/shared/statistics/metrics_core.hpp": "cbf3111f7ec501e4d98fa3964b4ed7c0a5a55e4f9466c546c6413ef9a6276c0a",
-    "native/shared/typing-practice/material_library.cpp": "2cbdbf931397fc82345ba711a918d5d5333560a61089b6d021ffd4194cc3671f",
+    "native/shared/typing-practice/material_library.cpp": "64848c5b889d754432e3907991cded640c8f56350a34fba5a83393d3a22ae6bd",
     "native/shared/typing-practice/material_library.hpp": "e8a690771255648b96f27bc05d553076dcd5a7688bd4cad6e480e7569c0de668",
-    "native/shared/typing-practice/typing_practice_core.cpp": "324a032a1d16ba4b800f24684e5dc5fb408fe319c16ffcf64239bd15db1246b8",
+    "native/shared/typing-practice/typing_practice_core.cpp": "7b0bca10ce716c21d7ca802aa2f45b783f7a088b9b0bbddac361611cb58359bf",
     "native/shared/typing-practice/typing_practice_core.hpp": "bb402aea22e7bc9e5a4762b04953ee957f9b971b7bc2ed4b2ab65a9bf06b6ed1",
-    "native/windows/metrics.cpp": "ae864ba1f168dff8bcc18be71537aec21ea93045642143ec9ae23b76700fac26",
-    "native/windows/metrics.hpp": "ff954fc6dee803acb36cab8912e233e8045f23cd4f08ee33b27e350fe47136a2",
+    "native/windows/metrics.cpp": "0a22b85680a1880fb7a026f18d428f8232c6339dab2d8486624c42b02e840aea",
+    "native/windows/metrics.hpp": "0ffdb55c55df43cbdac22eb4d999fe5fda441ce10eef93328f1f8ea3c98bd389",
     "native/windows/metrics_articles.cpp": "6a29c93bcac4199cf98bf6033ab57a4ab289b5ca7dcad4aa44b70fad1e259cde",
-    "native/windows/metrics_ui.cpp": "0f6be9ce054df765cc4d5a17cfd080ebab746d22fdae8fd3aae5cdf2aae68b0a",
+    "native/windows/metrics_ui.cpp": "711b4ac0b05fb600d4e339c9b9b7c08f4851519d0cdb519e862ca6ffb6bfb330",
     "native/windows/metrics_ui.hpp": "6347001fa5333fb55e71443b881cc495b6a92baad73e59f609ecdfdd03d1cd9a",
     "native/windows/my_combo.schema.yaml": "d2937f55ac93fe746bf2e854aa523d8488d426392e0e6d8b63f96966c8ec6bc9",
     "native/windows/official_features.hpp": "6f8dca1211437bfa9d7eb0a22aff5bfbc01cb5e187c297649756990d9de80459",
@@ -122,6 +122,6 @@
     "source-map.json": "c483efee9942ef060edf5271cf4b64e22ae5a9ec1ef8ce87fac96594663e91b1"
   },
   "repository": "https://github.com/scholay/rimes-plugins",
-  "revision": "a5f5935faffa0ca8298412d580e3664631813d4f",
+  "revision": "adb4e2d4b924a2199d00bfbd8eb0420ea5038ce3",
   "schemaVersion": 1
 }

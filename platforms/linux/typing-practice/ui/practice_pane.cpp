@@ -9,11 +9,13 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <thread>
+#include "material_library.hpp"
 
 namespace rimes::desktop {
 namespace pt = rimes::practice;
 namespace {
-const Json &Articles() {
+const Json &BuiltInArticles() {
     static const Json value = Json::parse(pt::kNativeArticles);
     return value;
 }
@@ -132,7 +134,11 @@ struct PracticePane::Impl {
     PracticeTelemetry telemetry;
     pt::HistoryWorker worker{runtime::UserRoot()};
     std::unique_ptr<pt::Session> session;
-    Json article = Articles().front(), results = Json::array(), snapshot = Json::object(),
+    Json articles = BuiltInArticles();
+    Json books = Json::array();
+    GtkWidget *materials = nullptr, *material_list = nullptr, *material_notice = nullptr;
+    bool material_books = false, material_loading = false, material_visible = false;
+    Json article = articles.front(), results = Json::array(), snapshot = Json::object(),
          result = Json::object(), rendered_states = Json(), frozen = Json::object();
     int chords = 0;
     std::map<std::pair<guint32, guint16>, bool> backspaces;
@@ -155,7 +161,7 @@ struct PracticePane::Impl {
         if (!fixture.empty()) {
             if (fixture.value("purpose", "") != "public-typing-practice-dashboard")
                 throw std::runtime_error("无效的公开跟打样例");
-            for (const auto &a : Articles())
+            for (const auto &a : articles)
                 if (a.at("id") == fixture.at("articleID"))
                     article = a;
             results = pt::HistoryStore::NormalizeFile(
@@ -185,8 +191,10 @@ struct PracticePane::Impl {
                     ShowResult(results.front());
             }
         }
-        if (!rendering)
+        if (!rendering) {
             Request({{"op", "status"}});
+            LoadMaterials();
+        }
     }
     ~Impl() {
         // A compositor can destroy the window while a final telemetry read is
@@ -203,11 +211,90 @@ struct PracticePane::Impl {
         cards.clear();
         result_cards.clear();
         chart.reset();
+        if (target) { gtk_widget_destroy(target); g_object_unref(target); target = nullptr; }
         gtk_widget_destroy(root);
         g_object_unref(root);
         // HistoryWorker drains queued aggregate writes after UI teardown.
     }
     double Now() const { return clock(); }
+    void PopulateMaterials() {
+        if (!material_list) return;
+        const bool previous = updating; updating = true;
+        Clear(material_list);
+        for (const auto& a : articles) {
+            const auto id = a.at("id").get<std::string>();
+            if ((id.rfind("epub.", 0) == 0) != material_books) continue;
+            auto* row = gtk_list_box_row_new();
+            g_object_set_data_full(G_OBJECT(row), "article-id", g_strdup(id.c_str()), g_free);
+            auto* label = Label(a.at("title").get<std::string>());
+            gtk_widget_set_size_request(label, 214, -1);
+            gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+            gtk_label_set_max_width_chars(GTK_LABEL(label), 17);
+            gtk_widget_set_margin_top(label, 8); gtk_widget_set_margin_bottom(label, 8);
+            gtk_container_add(GTK_CONTAINER(row), label);
+            gtk_container_add(GTK_CONTAINER(material_list), row);
+            if (a.at("id") == article.at("id")) gtk_list_box_select_row(GTK_LIST_BOX(material_list), GTK_LIST_BOX_ROW(row));
+        }
+        gtk_widget_show_all(material_list); updating = previous;
+    }
+    void LoadMaterials(const std::filesystem::path& file = {}, const std::string& remove = {}) {
+        if (material_loading || armed || starting || stopping) { Notice("请先结束跟打，再管理书籍。"); return; }
+        material_loading = true; LabelText(material_notice, "正在读取本机文库…");
+        const auto storage = runtime::UserRoot(); auto flag = alive;
+        std::thread([this, flag, storage, file, remove] {
+            Json next = BuiltInArticles(), library_books = Json::array(); std::string error;
+            try {
+                rimes::practice::materials::Library library(storage);
+                if (!file.empty()) library.Import(file);
+                if (!remove.empty()) library.Remove(remove);
+                library_books = library.Books();
+                for (auto& a : library.Articles()) next.push_back(std::move(a));
+            } catch (const std::exception& e) { error = e.what(); }
+            Main([this, flag, next = std::move(next), library_books = std::move(library_books), error] {
+                if (!flag->load()) return;
+                material_loading = false;
+                if (!error.empty()) { Notice(error); LabelText(material_notice, "文库读取失败，原文件和成绩已保留。"); return; }
+                // An input lease may have started while the library was read.
+                // Preserve that exact article/session; add the new inventory for later selection.
+                articles = next; books = library_books;
+                const auto id = article.at("id").get<std::string>();
+                updating = true; gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(article_picker));
+                bool retained = false;
+                for (const auto& a : articles) {
+                    const auto key = a.at("id").get<std::string>();
+                    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(article_picker), key.c_str(), a.at("title").get_ref<const std::string&>().c_str());
+                    retained = retained || key == id;
+                }
+                if (!retained && !armed) article = articles.front();
+                gtk_combo_box_set_active_id(GTK_COMBO_BOX(article_picker), article.at("id").get_ref<const std::string&>().c_str());
+                updating = false; PopulateMaterials();
+                LabelText(material_notice, "已载入 " + std::to_string(books.size()) + " 本书 · 移除素材保留成绩");
+                if (!retained && !armed && !history) Reset();
+            });
+        }).detach();
+    }
+    void ChooseBook() {
+        if (armed || starting || stopping || material_loading) { Notice("请先结束跟打，再导入书籍。"); return; }
+        auto* chooser = gtk_file_chooser_dialog_new("导入跟打书籍", parent, GTK_FILE_CHOOSER_ACTION_OPEN, "取消", GTK_RESPONSE_CANCEL, "导入", GTK_RESPONSE_ACCEPT, nullptr);
+        auto* filter = gtk_file_filter_new(); gtk_file_filter_set_name(filter, "EPUB 电子书");
+        gtk_file_filter_add_pattern(filter, "*.epub"); gtk_file_filter_add_pattern(filter, "*.EPUB");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
+        std::filesystem::path file;
+        if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
+            auto* name = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+            if (name) file = name;
+            g_free(name);
+        }
+        gtk_widget_destroy(chooser);
+        if (!file.empty()) LoadMaterials(file);
+    }
+    void RemoveBook() {
+        const auto id = article.at("id").get<std::string>();
+        if (id.rfind("epub.", 0) != 0 || armed || starting || stopping || material_loading) { Notice("请先选择一本书的文章，并结束跟打。"); return; }
+        auto* dialog = gtk_message_dialog_new(parent, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO, "%s", "移除本书的跟打素材？已保存的成绩会保留。");
+        const auto reply = gtk_dialog_run(GTK_DIALOG(dialog)); gtk_widget_destroy(dialog);
+        if (reply == GTK_RESPONSE_YES) LoadMaterials({}, id.substr(5, 16));
+    }
     void Put(GtkWidget *value, int x, int y, int width, int height, const std::string &name = {}) {
         gtk_widget_set_size_request(value, width, height);
         gtk_fixed_put(GTK_FIXED(canvas), value, x, y);
@@ -223,14 +310,49 @@ struct PracticePane::Impl {
         gtk_widget_set_visible(warning, !text.empty());
     }
     void Build() {
-        Add(root, canvas);
+        auto* horizontal = Row(12);
+        Add(horizontal, canvas, true);
+        materials = Class(Column(8), "practice-materials");
+        gtk_widget_set_size_request(materials, 230, -1);
+        gtk_widget_set_no_show_all(materials, TRUE);
+        Add(horizontal, materials);
+        Add(root, horizontal, true);
+        auto* tabs = Row(6);
+        Add(tabs, Button("文章", [this] { material_books = false; PopulateMaterials(); }));
+        Add(tabs, Button("书籍", [this] { material_books = true; PopulateMaterials(); }));
+        Add(materials, tabs);
+        material_list = gtk_list_box_new();
+        gtk_list_box_set_selection_mode(GTK_LIST_BOX(material_list), GTK_SELECTION_SINGLE);
+        g_signal_connect(material_list, "row-selected", G_CALLBACK(+[](GtkListBox*, GtkListBoxRow* row, gpointer data) {
+            auto* self = static_cast<Impl*>(data);
+            if (!row || self->updating) return;
+            auto* id = static_cast<const char*>(g_object_get_data(G_OBJECT(row), "article-id"));
+            if (id) gtk_combo_box_set_active_id(GTK_COMBO_BOX(self->article_picker), id);
+        }), this);
+        auto* material_scroll = gtk_scrolled_window_new(nullptr, nullptr);
+        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(material_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+        gtk_widget_set_size_request(material_scroll, 230, 440);
+        gtk_container_add(GTK_CONTAINER(material_scroll), material_list);
+        Add(materials, material_scroll, true);
+        Add(materials, Button("导入 EPUB…", [this] { ChooseBook(); }));
+        Add(materials, Button("移除当前书籍…", [this] { RemoveBook(); }));
+        material_notice = Label("书籍按章节分篇；移除素材会保留已存成绩。", "caption");
+        gtk_label_set_line_wrap(GTK_LABEL(material_notice), TRUE);
+        gtk_widget_set_size_request(material_notice, 230, -1);
+        Add(materials, material_notice);
+        auto* toggle = Button("素材侧栏", [this] {
+            material_visible = !material_visible;
+            if (material_visible) gtk_widget_show_all(materials); else gtk_widget_hide(materials);
+        });
+        Put(toggle, 310, 24, 108, 24);
+        PopulateMaterials();
         Add(root, warning);
         gtk_widget_set_margin_start(warning, 26);
         gtk_widget_set_margin_end(warning, 26);
         gtk_widget_set_no_show_all(warning, TRUE);
         gtk_widget_hide(warning);
         gtk_label_set_line_wrap(GTK_LABEL(warning), TRUE);
-        for (const auto &a : Articles())
+        for (const auto &a : articles)
             gtk_combo_box_text_append(
                 GTK_COMBO_BOX_TEXT(article_picker), a.at("id").get<std::string>().c_str(),
                 (a.at("title").get<std::string>() + "  ·  " + Length(a)).c_str());
@@ -295,9 +417,9 @@ struct PracticePane::Impl {
                             [this] {
                                 const auto index =
                                     gtk_combo_box_get_active(GTK_COMBO_BOX(article_picker));
-                                const auto offset = g_random_int_range(1, Articles().size());
+                                const auto offset = g_random_int_range(1, articles.size());
                                 gtk_combo_box_set_active(GTK_COMBO_BOX(article_picker),
-                                                         (index + offset) % Articles().size());
+                                                         (index + offset) % articles.size());
                             }),
                      "随机选择另一篇文章");
             auto *shuffle_icon = gtk_drawing_area_new();
@@ -407,8 +529,11 @@ struct PracticePane::Impl {
                 Add(box, scroll, true);
                 Put(box, 26, top, 646, height, key);
             };
-            panel(target, "原文", 253, 189, "target");
-            panel(editor.Widget(), "输入", 456, 139, "editor");
+            // Keep a plain source buffer for accessible text and comparison; the
+            // native input surface draws the two aligned tracks together.
+            g_object_ref_sink(target);
+            panel(editor.Widget(), "上行为原文，下行为输入 · 组字期间不判错", 253, 342, "editor");
+            geometry["target"] = geometry["editor"];
         }
         Height(history ? 477 : 831);
     }
@@ -422,7 +547,7 @@ struct PracticePane::Impl {
                              const char *id = gtk_combo_box_get_active_id(picker);
                              if (!id)
                                  return;
-                             for (const auto &article : Articles())
+                             for (const auto &article : articles)
                                  if (article.at("id") == id)
                                      s->article = article;
                              if (s->history) {
@@ -776,6 +901,7 @@ struct PracticePane::Impl {
         if (rendered_states == states)
             return;
         rendered_states = states;
+        editor.Source(article.value("displayText", article.at("text").get<std::string>()), states, article.at("language") == "chinese");
         auto *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(target));
         const std::string text = article.at("text");
         gtk_text_buffer_set_text(buffer, text.c_str(), text.size());

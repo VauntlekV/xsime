@@ -131,9 +131,9 @@ int main(int argc, char **argv) {
                                   frame.at("trend").at("height") == 165,
                               "native practice metric bounds differ");
                         if (std::string(phase) != "history")
-                            Check(frame.at("target").at("height") == 189 &&
-                                      frame.at("editor").at("height") == 139,
-                                  "native editor bounds differ");
+                            Check(frame.at("target").at("height") == 342 &&
+                                      frame.at("editor").at("height") == 342,
+                                  "two-track native editor bounds differ");
                     }
                     gtk_widget_destroy(window);
                 }
