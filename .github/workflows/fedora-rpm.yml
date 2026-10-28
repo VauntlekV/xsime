@@ -1,0 +1,76 @@
+name: Fedora RPM package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Fedora ${{ matrix.fedora }} x86_64 rpm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: ['43', '44']
+    container: registry.fedoraproject.org/fedora:${{ matrix.fedora }}
+    env:
+      SPEC: platforms/linux/ime/packaging/fedora/fcitx5-rimes.spec
+    steps:
+      - name: Install packaging tools
+        run: dnf -y install git rpm-build rpmdevtools dnf-plugins-core
+
+      - name: Checkout exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prepare sources
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          top="$RUNNER_TEMP/rpmbuild"
+          mkdir -p "$top/SOURCES" "$top/tmp"
+          commit=$(git rev-parse HEAD)
+          commitdate=$(git log -1 --format=%cd --date=format:%Y%m%d)
+          defines=(--define "_topdir $top" --define "commit $commit" --define "commitdate $commitdate")
+          git archive --prefix="xsime-$commit/" -o "$top/SOURCES/xsime-${commit:0:7}.tar.gz" HEAD
+          for n in 1 2 3 4; do spectool "${defines[@]}" -g -s$n -C "$top/SOURCES" "$SPEC"; done
+          dnf -y builddep "${defines[@]}" "$SPEC"
+          {
+            echo "TOP=$top"
+            echo "COMMIT=$commit"
+            echo "COMMITDATE=$commitdate"
+          } >> "$GITHUB_ENV"
+
+      - name: Build rpm
+        run: |
+          TMPDIR="$TOP/tmp" rpmbuild -ba \
+            --define "_topdir $TOP" --define "commit $COMMIT" --define "commitdate $COMMITDATE" \
+            "$SPEC"
+
+      - name: Check installability
+        run: dnf -y install "$TOP"/RPMS/x86_64/fcitx5-rimes-[0-9]*.rpm
+
+      - name: Upload rpm
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fcitx5-rimes-fc${{ matrix.fedora }}
+          path: |
+            ${{ env.TOP }}/RPMS/x86_64/fcitx5-rimes-[0-9]*.rpm
+            ${{ env.TOP }}/SRPMS/*.src.rpm
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dnf -y install gh
+          gh release upload "$GITHUB_REF_NAME" "$TOP"/RPMS/x86_64/fcitx5-rimes-[0-9]*.rpm \
+            --repo "$GITHUB_REPOSITORY" --clobber
